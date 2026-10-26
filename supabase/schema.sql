@@ -326,6 +326,8 @@ drop policy if exists acessos_gravar on acessos;
 create policy acessos_gravar on acessos for insert to authenticated with check (id = auth.uid());
 drop policy if exists acessos_atualizar on acessos;
 create policy acessos_atualizar on acessos for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
+drop policy if exists acessos_apagar on acessos;
+create policy acessos_apagar on acessos for delete to authenticated using (is_admin());
 
 -- escalas: todos leem; criar = admin (ou Louvor para quem pode);
 -- editar = regra pode_editar_escala; excluir = admin.

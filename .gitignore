@@ -7,3 +7,6 @@ dados-exportados/
 node_modules/
 dist/
 .DS_Store
+
+# Capturas dos testes de tela
+teste/capturas/

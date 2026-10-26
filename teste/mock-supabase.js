@@ -1,0 +1,80 @@
+/* Simulador do Supabase para testar a tela no navegador sem internet.
+   Não vai para o site: só é usado pelo teste/testar-site.js. Não aplica as regras de
+   permissão do banco (essas são testadas em supabase/testes/). */
+(() => {
+const D = window.__DADOS;
+const U = { admin:'00000000-0000-0000-0000-00000000000a', betel:'00000000-0000-0000-0000-0000000000b1', flechas:'00000000-0000-0000-0000-0000000000f1',
+  gestao:'00000000-0000-0000-0000-0000000000c0', novo:'00000000-0000-0000-0000-000000000099' };
+const T = {
+  config:[{id:'geral', d:D.config}], config_privada:[{id:'geral', d:{whatsAdm:'5511958800779'}}],
+  pessoas:[
+    {id:U.admin, email:'augusto@x', nome:'Augusto Teste', apelido:'Augusto', whatsapp:'11958800779', conexao:null, papel:'admin', gestao:false, ministro:false, avisos:false},
+    {id:U.betel, email:'betel@x', nome:'Líder Betel', apelido:'', whatsapp:'11911111111', conexao:'betel', papel:'lider', gestao:false, ministro:false, avisos:true},
+    {id:U.flechas, email:'flechas@x', nome:'Org Flechas', apelido:'', whatsapp:'11922222222', conexao:'flechas', papel:'organizacao', gestao:false, ministro:false, avisos:false},
+    {id:U.gestao, email:'gestao@x', nome:'Gestora', apelido:'', whatsapp:'11933333333', conexao:null, papel:'leitura', gestao:true, ministro:false, avisos:false}],
+  cadastros:[{id:'00000000-0000-0000-0000-0000000000d7', email:'pendente@x', nome:'Maria Pendente', apelido:'Mari', whatsapp:'11977777777', conexao:'shalom', papel:'auxiliar', em:'2026-10-26T10:00:00Z'}],
+  acessos:[{id:'00000000-0000-0000-0000-0000000000d7', email:'pendente@x'}],
+  escalas: D.escalas.map(x => { const {id, ...d} = x; return {id, d}; }),
+  avisos: D.avisos.map(x => { const {id, ...d} = x; return {id, d, autor:null, criado_em:d.criadoEm}; }),
+  eventos: D.eventos.map(x => { const {id, ...d} = x; return {id, d, autor:null}; }),
+  checkin_marcas:[], historico:[] };
+window.__TABELAS = T;
+const derivados = (t, r) => { if (t==='escalas' || t==='eventos') r.data = r.d && r.d.data; if (t==='escalas') { r.culto = r.d.culto; r.area = r.d.area; } return r; };
+Object.keys(T).forEach(t => T[t].forEach(r => derivados(t, r)));
+const chaves = {checkin_marcas:['data','culto','chave']};
+const mesma = (t, a, b) => (chaves[t]||['id']).every(k => a[k] === b[k]);
+let sessao = null; const ouvintes = [];
+try { const p = localStorage.getItem('mockPapel'); if (p && U[p]) sessao = {user:{id:U[p], email:p+'@x'}}; } catch(e){}
+const emitir = ev => ouvintes.forEach(cb => setTimeout(() => cb(ev, sessao), 0));
+class Q {
+  constructor(t){ this.t = t; this.f = []; this.op = 'select'; this.ord = null; this.lim = 1e9; this.um = false; this.ret = false; }
+  select(){ if (this.op !== 'select') this.ret = true; return this; }
+  eq(k,v){ this.f.push(r => r[k] === v); return this; }
+  gte(k,v){ this.f.push(r => r[k] >= v); return this; }
+  lte(k,v){ this.f.push(r => r[k] <= v); return this; }
+  order(k, o){ this.ord = [k, !o || o.ascending !== false]; return this; }
+  limit(n){ this.lim = n; return this; }
+  maybeSingle(){ this.um = true; return this; }
+  insert(v){ this.op = 'insert'; this.v = v; return this; }
+  update(v){ this.op = 'update'; this.v = v; return this; }
+  upsert(v){ this.op = 'upsert'; this.v = v; return this; }
+  delete(){ this.op = 'delete'; return this; }
+  exec(){
+    const tab = T[this.t] = T[this.t] || [];
+    const casa = r => this.f.every(f => f(r));
+    const agora = new Date().toISOString();
+    if (this.op === 'insert' || this.op === 'upsert') {
+      const novos = (Array.isArray(this.v) ? this.v : [this.v]).map(x => JSON.parse(JSON.stringify(x)));
+      for (const n of novos) {
+        const i = tab.findIndex(r => mesma(this.t, r, n));
+        if (i >= 0 && this.op === 'insert') return {data:null, error:{code:'23505', message:'duplicate key'}};
+        if (this.t === 'historico') Object.assign(n, {id:tab.length+1, por:sessao && sessao.user.id, em:agora, por_nome:(T.pessoas.find(p => sessao && p.id===sessao.user.id)||{}).apelido || ''});
+        if (['avisos','eventos','escalas'].includes(this.t) && i < 0) { n.autor = sessao && sessao.user.id; n.criado_em = agora; }
+        if (this.t === 'checkin_marcas') { n.por = sessao && sessao.user.id; n.em = agora; }
+        derivados(this.t, n);
+        if (i >= 0) tab[i] = {...tab[i], ...n}; else tab.push(n);
+      }
+      return {data: this.ret ? novos : null, error:null};
+    }
+    if (this.op === 'update') { const l = tab.filter(casa); l.forEach(r => { Object.assign(r, JSON.parse(JSON.stringify(this.v))); derivados(this.t, r); }); return {data: this.ret ? l.map(r => ({id:r.id})) : null, error:null}; }
+    if (this.op === 'delete') { const l = tab.filter(casa); T[this.t] = tab.filter(r => !casa(r)); return {data: this.ret ? l.map(r => ({id:r.id})) : null, error:null}; }
+    let l = tab.filter(casa).map(r => JSON.parse(JSON.stringify(r)));
+    if (this.ord) { const [k, asc] = this.ord; l.sort((a,b) => String(a[k]??'').localeCompare(String(b[k]??'')) * (asc?1:-1)); }
+    l = l.slice(0, this.lim);
+    if (['pessoas','cadastros','config_privada','checkin_marcas','historico','acessos'].includes(this.t) && !sessao) l = [];
+    return {data: this.um ? (l[0] || null) : l, error:null};
+  }
+  then(ok, err){ return new Promise(r => setTimeout(r, 15)).then(() => this.exec()).then(ok, err); }
+}
+window.supabase = { createClient: () => ({
+  from: t => new Q(t),
+  rpc: async n => n === 'pessoas_nomes' ? {data: sessao ? T.pessoas.map(p => ({id:p.id, nome:p.nome, apelido:p.apelido})) : [], error:null} : {data:null, error:null},
+  channel: () => ({ on(){ return this; }, subscribe(){ return this; } }), removeChannel(){},
+  storage: { from: () => ({ upload: async () => ({data:{}, error:null}), getPublicUrl: () => ({data:{publicUrl:'imagens/rede-igPrev.webp'}}) }) },
+  auth: {
+    getSession: async () => ({data:{session:sessao}}),
+    onAuthStateChange: cb => { ouvintes.push(cb); setTimeout(() => cb('INITIAL_SESSION', sessao), 0); return {data:{subscription:{unsubscribe(){}}}}; },
+    signInWithOtp: async ({email}) => { window.__ultimoEmail = email; return {error:null}; },
+    verifyOtp: async ({email, token}) => { if (token !== '123456') return {error:{message:'Token has expired or is invalid'}}; sessao = {user:{id:U.novo, email}}; emitir('SIGNED_IN'); return {data:{session:sessao}, error:null}; },
+    signOut: async () => { sessao = null; emitir('SIGNED_OUT'); return {error:null}; } } }) };
+})();

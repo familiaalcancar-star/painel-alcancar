@@ -18,6 +18,7 @@ insert into escalas(id,d) values
  ('2026-11-01_noite_superkids','{"data":"2026-11-01","culto":"noite","area":"superkids","conexao":"flechas","funcoes":[]}'),
  ('2026-11-01_manha_midia','{"data":"2026-11-01","culto":"manha","area":"midia","funcoes":[]}'),
  ('2026-11-01_manha_louvor','{"data":"2026-11-01","culto":"manha","area":"louvor","funcoes":[]}');
+insert into acessos(id) values ('00000000-0000-0000-0000-0000000000a5');
 insert into avisos(id,d,autor) values ('a1','{"titulo":"x"}','00000000-0000-0000-0000-0000000000d0');
 
 create or replace function t(nome text, quem text, cmd text, espera text) returns text language plpgsql as $$

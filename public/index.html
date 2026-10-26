@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Família Alcançar · Escala</title>
+<meta name="description" content="Escalas, avisos e agenda da Igreja Família Alcançar (Atibaia/SP).">
+<link rel="icon" href="logo.webp" type="image/webp">
+<link rel="apple-touch-icon" href="logo.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top"><button class="help-btn" data-go="ajuda">❓ Como usar</button>
+    <img class="logo" alt="Família Alcançar" src="logo.webp"><h1 class="sr-only" id="churchName">Painel da Igreja</h1><div class="brand-line" aria-hidden="true"><i></i><b></b><i></i></div><small class="role" id="subtitle">Carregando…</small>
+    <div class="who" id="who"></div>
+  </header>
+  <main id="view"><div class="empty">Carregando o painel…</div></main>
+</div>
+<nav class="tabs" id="tabs"></nav>
+<dialog id="dlg"><div class="sheet" id="dlgBody"></div></dialog>
+<script src="vendor/supabase-2.117.3.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

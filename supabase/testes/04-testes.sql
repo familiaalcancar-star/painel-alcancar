@@ -60,3 +60,5 @@ select t('Admin lê histórico','0a','select 1 from historico union all select 1
 select t('Admin altera config','0a',$q$update config set d=d where id='geral'$q$,'ok');
 select t('Admin edita aviso de outro','0a',$q$update avisos set d='{}' where id='a1'$q$,'ok');
 select t('Admin faz check-in','0a',$q$insert into checkin_marcas(data,culto,chave) values ('2026-11-01','manha','k2')$q$,'ok');
+select t('Admin apaga acesso de alguém','0a',$q$delete from acessos where id='00000000-0000-0000-0000-0000000000a5'$q$,'ok');
+select t('Betel NÃO apaga acesso de outro','b1',$q$delete from acessos where id='00000000-0000-0000-0000-0000000000a5'$q$,'bloq');
