@@ -1,7 +1,7 @@
 select t('anon lê escalas','anon','select * from escalas','ok');
 select t('anon lê config','anon','select * from config','ok');
 select t('anon NÃO lê pessoas','anon','select * from pessoas','bloq');
-select t('anon NÃO lê nomes','anon','select * from pessoas_nomes','bloq');
+select t('anon NÃO lê nomes','anon','select * from pessoas_nomes()','bloq');
 select t('anon NÃO lê config_privada','anon','select * from config_privada','bloq');
 select t('anon NÃO edita escala','anon',$q$update escalas set d=d||'{"obs":"x"}' where id='2026-11-01_manha_midia'$q$,'bloq');
 select t('anon NÃO lê check-in','anon','select * from checkin_marcas','bloq');
@@ -18,7 +18,7 @@ select t('Betel NÃO se promove','b1',$q$update pessoas set papel='admin' where 
 select t('Betel NÃO troca a conexão','b1',$q$update pessoas set conexao='flechas' where id=auth.uid()$q$,'bloq');
 select t('Betel lê a própria linha','b1','select * from pessoas where id=auth.uid()','ok');
 select t('Betel NÃO vê WhatsApp dos outros','b1',$q$select * from pessoas where id<>auth.uid()$q$,'bloq');
-select t('Betel vê nomes','b1','select * from pessoas_nomes','ok');
+select t('Betel vê nomes','b1','select * from pessoas_nomes()','ok');
 select t('Betel NÃO vê check-in','b1','select * from checkin_marcas','bloq');
 select t('Betel NÃO cria aviso','b1',$q$insert into avisos(id,d) values ('z','{}')$q$,'bloq');
 select t('Betel NÃO lê histórico','b1','select * from historico','bloq');

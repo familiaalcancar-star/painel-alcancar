@@ -63,7 +63,7 @@ create table if not exists acessos (
 
 -- Lista de conexões de uma escala: "conexoes[]" ou, nos registros antigos, "conexao".
 create or replace function conexoes_de(d jsonb) returns jsonb
-language sql immutable as $$
+language sql immutable set search_path = '' as $$
   select case when jsonb_typeof(d->'conexoes') = 'array' and jsonb_array_length(d->'conexoes') > 0
               then d->'conexoes'
               when d->>'conexao' is not null then to_jsonb(array[d->>'conexao'])
@@ -298,10 +298,11 @@ drop policy if exists pessoas_admin on pessoas;
 create policy pessoas_admin on pessoas for all to authenticated using (is_admin()) with check (is_admin());
 
 -- Nomes (sem WhatsApp) para mostrar autores, para quem está logado.
-create or replace view pessoas_nomes with (security_invoker = false) as
-  select id, nome, apelido from pessoas;
-revoke all on pessoas_nomes from anon, public;
-grant select on pessoas_nomes to authenticated;
+drop view if exists pessoas_nomes;
+create or replace function pessoas_nomes() returns table (id uuid, nome text, apelido text)
+language sql stable security definer set search_path = public as $$
+  select id, nome, apelido from pessoas where auth.uid() is not null
+$$;
 
 -- cadastros: a pessoa cria/edita/apaga o próprio pedido; admin vê e apaga todos.
 drop policy if exists cad_ler on cadastros;
@@ -401,3 +402,23 @@ create policy img_alterar on storage.objects for update to authenticated
 drop policy if exists img_apagar on storage.objects;
 create policy img_apagar on storage.objects for delete to authenticated
   using (bucket_id = 'imagens' and (is_admin() or owner_id = auth.uid()::text));
+
+-- ---------- Quem pode chamar as funções ----------
+-- Funções de gatilho não precisam ser chamadas por ninguém (o gatilho dispara sozinho).
+-- As de permissão só são usadas por quem está logado.
+do $$
+declare f text;
+begin
+  foreach f in array array['escalas_guarda()','autoria_guarda()','checkin_guarda()','historico_guarda()'] loop
+    execute format('revoke execute on function %s from public, anon, authenticated', f);
+  end loop;
+  foreach f in array array['minha_pessoa()','is_admin()','eh_equipe()','minha_conexao()','tem_gestao()','tem_avisos()',
+                           'pode_louvor()','area_por_conexao(text)','pode_editar_escala(text, jsonb)','pessoas_nomes()'] loop
+    execute format('revoke execute on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+  -- Função do próprio Supabase ("Enable automatic RLS"), se existir.
+  if exists (select 1 from pg_proc where proname = 'rls_auto_enable' and pronamespace = 'public'::regnamespace) then
+    revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
+  end if;
+end $$;

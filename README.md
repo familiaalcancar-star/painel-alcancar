@@ -14,7 +14,9 @@ Escalas, avisos, agenda e check-in da igreja. Site estático + Supabase (grátis
 
 - [x] Logo extraída, dados exportados separados (131 escalas, 6 avisos, 4 eventos, 12 imagens)
 - [x] Banco + permissões (RLS) + Storage — 54 testes passando
-- [ ] Contas da igreja (e-mail, GitHub, Supabase, Netlify)
+- [x] GitHub da igreja (privado) e Supabase (projeto znuxdxwnunagvkjekmgc, São Paulo)
+- [x] Dados importados no Supabase (conferidos: idênticos ao original)
+- [ ] Netlify
 - [ ] Site (front-end) ligado ao Supabase
-- [ ] Importação dos dados
+
 - [ ] Publicação no subdomínio e teste com um líder
