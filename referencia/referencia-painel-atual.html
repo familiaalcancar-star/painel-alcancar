@@ -1,0 +1,1100 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Painel da Igreja</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --hero-bg:#0B0B0D; --hero-ink:#F4F4F2;
+  --bg:#000000; --surface:#121214; --ink:#F4F4F2; --muted:#A3A3A8; --line:#2A2A2E;
+  --vine:#4CC24A; --vine-soft:#10291A; --gold:#FFC61A; --gold-soft:#2E2508;
+  --night:#3AA0F5; --night-soft:#0D2134; --danger:#FF7A59; --danger-soft:#38170F;
+  --orange:#F47216; --blue:#1E88E5; --yellow:#FFC61A; --green:#3DAA35;
+  color-scheme:dark;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark}}
+:root[data-theme="dark"]{color-scheme:dark}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 Figtree,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+h1,h2,h3{font-family:"Bricolage Grotesque",Figtree,system-ui,sans-serif;font-weight:700;line-height:1.15;margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.wrap{max-width:760px;margin:0 auto;padding:20px 16px 110px}
+header.top{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+header.top .who{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
+header.top .who img{width:32px;height:32px;border-radius:50%;object-fit:cover}
+.church{font-size:clamp(26px,6vw,34px);letter-spacing:-.01em}
+.church small{display:block;font:500 14px/1.3 Figtree,sans-serif;color:var(--muted);letter-spacing:0;margin-top:4px}
+.bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
+.month{display:flex;align-items:center;gap:4px}
+.month strong{font-family:"Bricolage Grotesque",sans-serif;font-size:20px;min-width:170px;text-align:center}
+.icon-btn{border:1px solid var(--line);background:var(--surface);border-radius:50%;width:38px;height:38px;display:grid;place-items:center;font-size:18px}
+.btn{border:0;background:var(--vine);color:var(--surface);border-radius:999px;padding:10px 18px;font-weight:600}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.small{padding:6px 12px;font-size:14px}
+.btn.danger{background:var(--danger-soft);color:var(--danger)}
+.btn:disabled{opacity:.5;cursor:default}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 14px;font-size:14px;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.day{margin:0 0 22px}
+.day h3{font-size:18px;margin:0 0 8px;display:flex;align-items:baseline;gap:8px}
+.day h3 span{font:500 14px Figtree,sans-serif;color:var(--muted)}
+.culto{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:8px}
+.culto.noite{border-left-color:var(--night)}
+.culto-head{font-weight:600;font-size:14px;color:var(--gold);margin-bottom:4px}
+.culto.noite .culto-head{color:var(--night)}
+.slot{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:8px 0;border-top:1px dashed var(--line)}
+.slot:first-of-type{border-top:0}
+.slot .local{font-weight:600}
+.slot .names{grid-column:1/2;color:var(--ink)}
+.slot .obs{grid-column:1/2;font-size:14px;color:var(--muted)}
+.slot .acts{grid-row:1/4;grid-column:2;display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--vine-soft);color:var(--vine);margin-left:6px;vertical-align:1px}
+.link{background:none;border:0;padding:2px 0;color:var(--muted);font-size:13px;text-decoration:underline}
+.empty{border:1px dashed var(--line);border-radius:var(--radius-lg);padding:28px 20px;text-align:center;color:var(--muted)}
+.notice{background:var(--gold-soft);border-radius:var(--radius-sm);padding:10px 14px;font-size:14px;margin-bottom:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:16px;margin-bottom:12px}
+.card h3{font-size:19px;margin-bottom:4px}
+.meta{font-size:13px;color:var(--muted)}
+.card p{margin:8px 0 0;white-space:pre-wrap}
+.ev{display:grid;grid-template-columns:64px 1fr;gap:12px;align-items:start}
+.ev .date{background:var(--vine-soft);color:var(--vine);border-radius:12px;text-align:center;padding:8px 4px;font-weight:600;line-height:1.1}
+.ev .date b{display:block;font:700 26px "Bricolage Grotesque",sans-serif}
+.log{font-size:14px;border-bottom:1px solid var(--line);padding:10px 0}
+.log b{font-weight:600}
+.log .diff{color:var(--muted);font-size:13px;margin-top:2px}
+.act-criou{color:var(--vine)} .act-editou{color:var(--gold)} .act-excluiu{color:var(--danger)}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px);z-index:5}
+nav.tabs button{flex:1;max-width:130px;min-width:0;background:none;border:0;padding:10px 4px 12px;font-size:12px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px}
+nav.tabs button .ic{font-size:20px;line-height:1}
+nav.tabs button[aria-current="page"]{color:var(--vine)}
+dialog{border:0;border-radius:var(--radius-lg);padding:0;width:min(520px,94vw);background:var(--surface);color:var(--ink)}
+dialog::backdrop{background:rgba(10,20,15,.45)}
+.sheet{padding:20px}
+.sheet h2{font-size:22px;margin-bottom:14px}
+label.f{display:block;font-size:14px;font-weight:600;margin:12px 0 4px}
+.inp{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 12px}
+textarea.inp{min-height:96px;resize:vertical}
+.row{display:flex;gap:10px}
+.row>*{flex:1}
+.sheet .end{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+.hint{font-size:13px;color:var(--muted);margin-top:4px}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;z-index:20;max-width:90vw}
+.tbl-wrap{overflow-x:auto}
+table.lead{border-collapse:collapse;width:100%;font-size:14px}
+table.lead th,table.lead td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;white-space:nowrap}
+.section-title{font-size:20px;margin:22px 0 10px}
+
+.hero{background:var(--hero-bg);color:var(--hero-ink);border-radius:22px;padding:20px 18px 12px;margin-bottom:8px}
+.hero .when{font-size:14px;opacity:.85;margin-bottom:2px}
+.hero h2{font-size:clamp(28px,7vw,38px);letter-spacing:-.015em}
+.hero .culto-nome{font:600 17px Figtree,sans-serif;margin:4px 0 12px;opacity:.95}
+.areas{display:flex;flex-direction:column}
+.area{border-top:1px solid var(--area-line)}
+.area>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:12px 2px;cursor:pointer}
+.area>summary::-webkit-details-marker{display:none}
+.area>summary .an{font-weight:600}
+.area>summary .ac{display:block;font-size:14px;opacity:.8}
+.area>summary .chev{margin-left:auto;transition:transform .15s;opacity:.7}
+.area[open]>summary .chev{transform:rotate(90deg)}
+.area .fx{padding:0 2px 12px}
+.area .fn{margin:0 0 8px}
+.area .fn b{display:block;font-size:13px;font-weight:600;opacity:.75}
+.area .pend{opacity:.6;font-style:italic}
+.hero .area{--area-line:rgba(255,255,255,.18)}
+.hero .link{color:inherit;opacity:.85}
+.hero .culto-t,.mini .culto-t{font-family:"Bricolage Grotesque",Figtree,sans-serif;font-weight:700;color:var(--yellow);margin:14px 0 2px;font-size:22px}
+.hero .culto-t.noite,.mini .culto-t.noite{color:var(--night)}
+.mini .culto-t{font-size:16px;margin:10px 0 0}
+hr.div-culto{border:0;height:1px;background:rgba(255,255,255,.22);margin:12px 0 4px}
+table.esc{border-collapse:separate;border-spacing:0;min-width:1040px;width:100%;font-size:14px}
+table.esc th,table.esc td{padding:6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+table.esc thead th{font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap;padding-bottom:8px}
+table.esc thead th:first-child{position:sticky;left:0;background:var(--bg);z-index:2}
+table.esc tbody th{position:sticky;left:0;background:var(--bg);z-index:1;white-space:nowrap;border-left:3px solid var(--yellow);padding-left:10px}
+table.esc tr.noite th{border-left-color:var(--night)}
+table.esc .dt{display:block;font-weight:700}
+table.esc .ct{display:block;font-size:12px;color:var(--muted)}
+.cell{width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-weight:600;min-height:40px}
+.cell.vazio{color:var(--muted);font-weight:400;font-style:italic;background:transparent;border-style:dashed}
+.cell.dl{color:var(--yellow);text-align:center;white-space:nowrap}
+.help-btn{position:absolute;top:0;left:0;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600;color:var(--ink);z-index:1}
+.tut{padding:0 16px}
+.tut>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;padding:14px 0;font:700 17px "Bricolage Grotesque",Figtree,sans-serif;cursor:pointer}
+.tut>summary::-webkit-details-marker{display:none}
+.tut>summary .chev{transition:transform .15s;opacity:.7}
+.tut[open]>summary .chev{transform:rotate(90deg)}
+.tut ol{margin:0 0 14px;padding-left:20px}
+.tut li{margin:6px 0}
+.tut b{color:var(--yellow);font-weight:600}
+.clamp{display:-webkit-box;-webkit-line-clamp:4;line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.clamp.aberto{display:block;-webkit-line-clamp:unset;line-clamp:unset}
+.lermais{color:var(--yellow);font-weight:600;font-size:14px;text-decoration:none;margin-top:4px}
+.banner{display:block;width:100%;aspect-ratio:16/9;height:auto;object-fit:cover;object-position:center top;border-radius:12px;margin:0 0 12px;background:var(--line)}
+.soon + .banner, .banner + .soon{margin-top:0}
+.horarios{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 4px}
+.horarios div{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+.horarios span{font-size:14px;color:var(--muted)}
+.horarios b{display:block;font:700 24px "Bricolage Grotesque",Figtree,sans-serif;color:var(--yellow)}
+.igreja p{margin:12px 0 0}
+.vemeve{font:700 24px "Bricolage Grotesque",Figtree,sans-serif;text-align:center;letter-spacing:.06em;color:var(--yellow);margin-top:16px!important}
+.redes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.rede-card{display:block;border-radius:18px;overflow:hidden;border:1px solid var(--line);background:var(--surface);text-decoration:none;color:var(--ink)}
+.rede-card .prev{height:150px;background-size:cover;background-position:center;filter:blur(1px) brightness(.92);transform:scale(1.03);position:relative}
+.rede-card .prev.vazio{filter:none;transform:none;display:grid;place-items:center}
+.rede-card.ig .prev.vazio{background:radial-gradient(circle at 30% 110%,#FDD56B 0,#F58529 25%,#DD2A7B 55%,#8134AF 80%,#515BD4 100%)}
+.rede-card.yt .prev.vazio{background:linear-gradient(160deg,#2a0a08,#E62117)}
+.rede-card .marca{color:#fff;opacity:.9;transform:scale(2.6);display:block}
+.rede-info{display:flex;align-items:center;gap:12px;padding:12px 14px}
+.rede-info b{display:block;font-size:15px}.rede-info small{display:block;font-size:12px;color:var(--muted)}
+.rede-card.ig .ic{color:#DD2A7B}.rede-card.yt .ic{color:#E62117}
+.rede-info .cta{margin-left:auto;font-weight:600;font-size:14px;color:var(--yellow)}
+.dest{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);color:var(--ink);text-decoration:none}
+.dest:first-of-type{border-top:0}.dest .ig{color:#DD2A7B}.dest .yt{color:#E62117}
+.btn.insc{display:inline-block;margin-top:10px;text-decoration:none;background:var(--yellow);color:#000}
+.zaps .insc{margin-top:0}
+.zaps{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+.btn.zap{display:inline-block;text-decoration:none;background:#25D366;color:#000}
+.card p a,.soon a:not(.btn){color:var(--night)}
+.fcard h3{font-size:18px}
+.fcard ul{margin:8px 0 0;padding-left:20px}
+.fcard li{margin:3px 0}
+.hero .btn.ghost{color:inherit;border-color:rgba(255,255,255,.45)}
+.mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.mini{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:14px 14px 4px;--area-line:var(--line)}
+.mini h3{font-size:17px}
+.mini .culto-nome{font-size:14px;color:var(--muted);margin-bottom:6px}
+.mini .area>summary{padding:9px 0;font-size:15px}
+.mini .area>summary .ac{color:var(--muted);opacity:1}
+.culto-card{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:var(--radius-sm);padding:12px 14px 4px;margin-bottom:10px;--area-line:var(--line)}
+.culto-card.noite{border-left-color:var(--night)}
+.culto-card .culto-head{font-weight:600;font-size:15px;color:var(--gold);margin-bottom:4px}
+.culto-card.noite .culto-head{color:var(--night)}
+.slotgrid{display:grid;gap:6px}
+fieldset.fs{border:1px solid var(--line);border-radius:12px;padding:10px 12px 12px;margin:12px 0 0}
+fieldset.fs legend{font-weight:600;font-size:14px;padding:0 4px}
+.soon{display:grid;grid-template-columns:56px 1fr;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.soon:first-child{border-top:0}
+.soon .date{background:var(--gold-soft);color:var(--gold);border-radius:12px;text-align:center;padding:6px 2px;font-weight:600;font-size:13px;line-height:1.1}
+.soon .date b{display:block;font:700 22px "Bricolage Grotesque",sans-serif}
+
+header.top{flex-direction:column;align-items:center;gap:6px;margin-bottom:20px;position:relative;text-align:center}
+header.top .who{position:absolute;top:0;right:0;margin:0}
+.logo{width:clamp(150px,42vw,210px);height:auto;display:block;margin:8px auto 0}
+.role{display:block;font:500 14px/1.3 Figtree,sans-serif;color:var(--muted)}
+.brand-line{display:flex;align-items:center;gap:10px;width:min(320px,80%);margin-top:4px}
+.brand-line i{flex:1;height:3px;border-radius:3px}
+.brand-line i:first-child{background:var(--blue)} .brand-line i:last-child{background:var(--green)}
+.brand-line b{width:8px;height:8px;border-radius:50%;background:var(--orange)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.btn{color:#000}
+.btn.ghost{color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--yellow);color:#000;border-color:var(--yellow)}
+nav.tabs button[aria-current="page"]{color:var(--yellow)}
+:focus-visible{outline-color:var(--orange)}
+.hero{border:2px solid transparent;background:linear-gradient(var(--hero-bg),var(--hero-bg)) padding-box,linear-gradient(100deg,var(--blue),var(--yellow) 50%,var(--green)) border-box}
+.hero .when{color:var(--orange);opacity:1;font-weight:600}
+.hero .area{--area-line:rgba(255,255,255,.12)}
+.soon .date{background:var(--gold-soft);color:var(--yellow)}
+.hero h2::first-letter,.mini h3::first-letter,.culto-card .culto-head::first-letter,.month strong::first-letter{text-transform:uppercase}
+@media (prefers-reduced-motion:no-preference){dialog[open]{animation:up .18s ease-out}@keyframes up{from{transform:translateY(12px);opacity:0}}}
+.lst{padding:4px 14px}
+.lst .li{display:grid;grid-template-columns:62px 1fr auto 14px;gap:10px;align-items:center;width:100%;background:none;border:0;border-top:1px solid var(--line);padding:12px 0;text-align:left;color:var(--ink)}
+.lst .li:first-child{border-top:0}
+.lst .ld{display:flex;flex-direction:column;line-height:1.15;font-size:12px;color:var(--muted);text-transform:capitalize}
+.lst .ld b{font:700 17px "Bricolage Grotesque",sans-serif;color:var(--yellow)}
+.lst .lt{font-weight:600;line-height:1.3}
+.lst .lh{font-size:14px;color:var(--muted);white-space:nowrap}
+.lst .la{font-size:22px;color:var(--muted);line-height:1}
+.btn.big{display:block;text-align:center;font-size:17px;padding:14px 20px;margin-top:12px;text-decoration:none}
+.card.flash{box-shadow:0 0 0 3px var(--yellow);transition:box-shadow .3s}
+.ckres{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}.ckres span{background:var(--surface-2,#1b1b1f);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:14px;color:var(--muted)}.ckres b{color:var(--yellow);font-size:16px}
+.ckg h3{margin-bottom:6px}.ckrow{display:grid;grid-template-columns:1fr 58px 58px 64px;gap:6px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.ckhead{border-top:0;padding:2px 0;font-size:11.5px;color:var(--muted);text-align:center}.ckhead span:first-child{text-align:left}
+.ckn{display:flex;flex-direction:column;gap:2px;min-width:0}.ckn b{font-size:15.5px;line-height:1.25}.ckn small{color:var(--muted);font-size:12.5px}.ckin{padding:8px 10px;font-size:14px}
+.ckbox{display:flex;justify-content:center;cursor:pointer}.ckbox input{position:absolute;opacity:0;width:1px;height:1px}
+.ckbox span{width:32px;height:32px;border-radius:9px;border:2px solid #5a5a63;display:grid;place-items:center;transition:background .15s,border-color .15s}
+.ckbox input:checked+span{background:var(--green);border-color:var(--green)}.ckbox input:checked+span::after{content:"";width:9px;height:16px;border:solid #fff;border-width:0 3px 3px 0;transform:rotate(45deg) translate(-1px,-2px)}
+.ckbox input:focus-visible+span{outline:2px solid var(--yellow);outline-offset:2px}.ckrow.feito .ckn b{color:var(--green)}
+nav.tabs button{position:relative}.badge{position:absolute;top:4px;left:50%;margin-left:8px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#FF3B30;color:#fff;font-size:11px;line-height:18px;text-align:center}
+.card.pend{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;border-color:var(--yellow);background:var(--gold-soft);color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top"><button class="help-btn" data-go="ajuda">❓ Como usar</button>
+    <img class="logo" alt="Família Alcançar" src="data:image/webp;base64,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"><h1 class="sr-only" id="churchName">Painel da Igreja</h1><div class="brand-line" aria-hidden="true"><i></i><b></b><i></i></div><small class="role" id="subtitle">Carregando…</small>
+    <div class="who" id="who"></div>
+  </header>
+  <main id="view"><div class="empty">Carregando o painel…</div></main>
+</div>
+<nav class="tabs" id="tabs"></nav>
+<dialog id="dlg"><div class="sheet" id="dlgBody"></div></dialog>
+
+<script>
+(() => {
+const S = { db:null, user:null, dl:null, uid:null, isOwner:false, cfg:null, cfgLoaded:false,
+  prox:[], mesEsc:[], avisos:[], eventos:[], membros:[], names:{}, tab:'inicio', filtro:'todas',
+  mes: new Date().toISOString().slice(0,7), unsubMes:null, readOnlyHit:false };
+const TABS = [
+  {id:'inicio', label:'Início', ic:'🏠'}, {id:'escala', label:'Escala', ic:'📋'}, {id:'avisos', label:'Avisos', ic:'📣'},
+  {id:'agenda', label:'Agenda', ic:'📅'}, {id:'checkin', label:'Check-in', ic:'✅', gestao:true}, {id:'historico', label:'Histórico', ic:'🕘', owner:true},
+  {id:'ajustes', label:'Ajustes', ic:'⚙️', owner:true}, {id:'ajuda', label:'Ajuda', ic:'❓', hidden:true}];
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const slug = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'x';
+const fmtDia = d => new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
+const fmtCurto = d => new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'});
+const fmtQuando = iso => new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const isoLocal = d => { const x=new Date(d); x.setMinutes(x.getMinutes()-x.getTimezoneOffset()); return x.toISOString().slice(0,10); };
+const hoje = () => isoLocal(new Date());
+const somaDias = (iso, n) => { const d=new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n); return isoLocal(d); };
+const nome = id => { const p = (S.cfg && S.cfg.pessoas && S.cfg.pessoas[id]) || {}, c = (S.cadastros || {})[id] || {}; return p.apelido || p.nome || c.apelido || c.nome || S.names[id] || 'Alguém'; };
+const nomeComp = id => { const p = (S.cfg && S.cfg.pessoas && S.cfg.pessoas[id]) || {}, c = (S.cadastros || {})[id] || {}; const n = p.nome || c.nome || S.names[id] || 'Alguém', a = p.apelido || c.apelido; return a && a !== n ? n+' ('+a+')' : n; };
+function confirmar(msg){ return new Promise(ok => {
+  const o = document.createElement('div'); o.setAttribute('role','dialog'); o.setAttribute('aria-modal','true');
+  o.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px';
+  o.innerHTML = '<div style="background:#161616;color:#f2f2f2;border:1px solid #333;border-radius:14px;max-width:420px;width:100%;padding:20px;font:15px/1.45 inherit"><p style="margin:0 0 18px;white-space:pre-line">'+esc(msg)+'</p><div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn ghost" data-r="0">Cancelar</button><button class="btn danger" data-r="1">Confirmar</button></div></div>';
+  o.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (!b && e.target !== o) return; e.stopPropagation(); o.remove(); ok(!!b && b.dataset.r === '1'); });
+  document.body.appendChild(o); o.querySelector('[data-r="1"]').focus();
+}); }
+function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3200); }
+
+/* ---------- configuração ---------- */
+const byNome = (a,b) => a.nome.localeCompare(b.nome,'pt-BR',{sensitivity:'base'});
+const conexoes = () => ((S.cfg && S.cfg.conexoes) || []).slice().sort(byNome);
+const cultos = () => (S.cfg && S.cfg.cultos) || [];
+const ehLouvor = n => /^louvor$/i.test(String(n||'').trim());
+const areas = () => { const l = (S.cfg && S.cfg.areas) || []; return [...l.filter(a => !ehLouvor(a.nome)), ...l.filter(a => ehLouvor(a.nome))]; };
+const semLouvor = rows => rows.filter(r => !ehLouvor(r.area));
+const diasCulto = () => (S.cfg && S.cfg.diasCulto) || [0];
+const conexaoNome = id => (conexoes().find(c=>c.id===id)||{}).nome || '';
+const conexoesDe = x => !x ? [] : (x.conexoes && x.conexoes.length ? x.conexoes : (x.conexao ? [x.conexao] : []));
+const conexoesTxt = x => conexoesDe(x).map(conexaoNome).filter(Boolean).join(' e ');
+const cultoInfo = id => cultos().find(c=>c.id===id) || {id, nome:id, hora:''};
+const areaInfo = id => areas().find(a=>a.id===id) || {id, nome:id, porConexao:false, funcoes:[{nome:'Equipe',vagas:0}]};
+const PAPEIS = {admin:'Administrador', lider:'Líder', auxiliar:'Auxiliar', organizacao:'Organização', leitura:'Só consulta'};
+const pendentes = () => Object.keys(S.cadastros||{}).filter(id => !((S.cfg&&S.cfg.pessoas)||{})[id]);
+const ADM_WPP = () => ((S.cfg&&S.cfg.info&&S.cfg.info.whatsAdm)||'5511958800779').replace(/\D/g,'');
+const ehEquipe = p => !!p && ['lider','auxiliar','organizacao'].includes(p.papel);
+const pessoaDe = id => (S.cfg && S.cfg.pessoas && S.cfg.pessoas[id]) || null;
+const isAdm = () => S.isOwner || (pessoaDe(S.uid)||{}).papel === 'admin';
+const minhas = () => { const p = pessoaDe(S.uid); return p && ehEquipe(p) && p.conexao ? [p.conexao] : []; };
+const podeConexao = cid => isAdm() || minhas().includes(cid);
+const LOUVOR_CON = ['flechas','forasteiros','herois'];
+const semAcento = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+const podeLouvor = () => { const p = pessoaDe(S.uid); return ehEquipe(p) && LOUVOR_CON.includes(semAcento(conexaoNome(p.conexao))); };
+const temGestao = () => isAdm() || !!(pessoaDe(S.uid)||{}).gestao;
+const temMinistro = () => !!(pessoaDe(S.uid)||{}).ministro;
+const podeArea = (a, x) => isAdm() || (ehLouvor(a.nome) && (podeLouvor() || temMinistro())) || (a.porConexao && !!x && conexoesDe(x).some(c => minhas().includes(c)));
+const eLider = () => isAdm() || minhas().length > 0;
+const temAvisos = () => isAdm() || !!(pessoaDe(S.uid)||{}).avisos;
+const papelTexto = () => { if (isAdm()) return 'Administrador'; const p = pessoaDe(S.uid);
+  if (ehEquipe(p)) return PAPEIS[p.papel]+' · Conexão '+conexaoNome(p.conexao);
+  if (!p && S.meuCad) return 'Cadastro aguardando aprovação'; return 'Modo leitura'; };
+
+/* ---------- gravação com histórico ---------- */
+async function logar(acao, tipo, resumo, antes, depois){
+  const limpa = o => { if (!o) return null; const {img, ...r} = o; return r; };
+  try { await S.db.collection('log/'+S.uid+'/e').add({acao, tipo, resumo, antes:limpa(antes), depois:limpa(depois), em:new Date().toISOString(), por:S.uid}); }
+  catch(e){ console.warn('log', e); }
+}
+async function salvar(ref, data, ctx){
+  try { await ref.set(data); await logar(ctx.acao, ctx.tipo, ctx.resumo, ctx.antes, data); return true; }
+  catch(e){ falhaEscrita(e); return false; }
+}
+async function excluir(ref, antes, tipo, resumo){
+  try { await ref.delete(); await logar('excluiu', tipo, resumo, antes, null); return true; }
+  catch(e){ falhaEscrita(e); return false; }
+}
+function falhaEscrita(e){
+  if (e && e.code === 'invalid_argument') { S.readOnlyHit = true; toast('Sem permissão para salvar. Peça ao administrador para te convidar como Editor.'); render(); }
+  else if (e && e.code === 'quota_exceeded') toast('O espaço do painel está cheio. Avise o administrador.');
+  else toast('Não foi possível salvar agora. Tente de novo em instantes.');
+}
+const semId = o => { const {id, ...r} = o; return r; };
+
+/* ---------- inicialização ---------- */
+async function init(){
+  const h = location.hash.slice(1); if (TABS.some(t=>t.id===h)) S.tab = h;
+  renderTabs();
+  const [user, db, dl] = await Promise.all([claude.use('user'), claude.use('db'), claude.use('downloads')]);
+  S.user = user; S.db = db; S.dl = dl;
+  if (!db || !user) { $('#subtitle').textContent=''; $('#view').innerHTML = '<div class="empty">Entre com sua conta do Claude e abra este painel pelo link compartilhado para ver e editar.</div>'; return; }
+  const me = await user.me();
+  S.uid = me.id; S.isOwner = me.isOwner;
+  try { if (!localStorage.getItem('tutorialVisto')) { if (!location.hash) S.tab = 'ajuda'; localStorage.setItem('tutorialVisto', '1'); } } catch(e){}
+  if (me.name) S.names[me.id] = me.name;
+  $('#who').innerHTML = (me.avatarUrl ? '<img alt="" src="'+esc(me.avatarUrl)+'">' : '') + '<span>'+esc(me.name || 'Você')+'</span>';
+  renderTabs();
+  if (S.uid) { try { await db.doc('membros/'+S.uid).set({visto:new Date().toISOString()}); } catch(e){} }
+  db.doc('config/geral').onSnapshot(s => { S.cfg = s.exists ? s.data() : null; S.cfgLoaded = true;
+    $('#churchName').firstChild.textContent = (S.cfg && S.cfg.igreja) || 'Painel da Igreja'; renderTabs(); render(); }, e=>console.warn(e));
+  db.collection('cadastros').onSnapshot(s => { S.cadastros = {}; s.docs.forEach(d => S.cadastros[d.id] = d.data()); S.meuCad = S.cadastros[S.uid] || null; resolverNomes(Object.keys(S.cadastros)); renderTabs(); render(); }, e=>console.warn(e));
+  db.collection('escalas').where('data','>=',hoje()).orderBy('data','asc').limit(400).onSnapshot(s => { S.prox = s.docs.map(d=>({id:d.id,...d.data()})); render(); }, e=>console.warn(e));
+  db.collection('avisos').orderBy('criadoEm','desc').limit(60).onSnapshot(s => { S.avisos = s.docs.map(d=>({id:d.id,...d.data()})); resolverNomes(S.avisos.map(a=>a.autor)); render(); }, e=>console.warn(e));
+  db.collection('eventos').orderBy('data','asc').limit(300).onSnapshot(s => { S.eventos = s.docs.map(d=>({id:d.id,...d.data()})); render(); }, e=>console.warn(e));
+  db.collection('membros').onSnapshot(s => { S.membros = s.docs.map(d=>d.id); resolverNomes(S.membros); render(); }, e=>console.warn(e));
+  assinarMes();
+}
+function assinarMes(){
+  if (S.unsubMes) S.unsubMes();
+  S.unsubMes = S.db.collection('escalas').where('data','>=',S.mes+'-01').where('data','<=',S.mes+'-31').orderBy('data','asc')
+    .onSnapshot(s => { S.mesEsc = s.docs.map(d=>({id:d.id,...d.data()})); render(); }, e=>console.warn(e));
+}
+async function resolverNomes(ids){
+  const falta = [...new Set(ids.filter(Boolean))].filter(id => !S.names[id]);
+  if (!falta.length || !S.user) return;
+  try { const ps = await S.user.profiles(falta); for (const id of falta) if (ps[id] && ps[id].name) S.names[id] = ps[id].name; render(); } catch(e){}
+}
+
+/* ---------- cultos ---------- */
+function horaPassou(dataIso, hora){
+  if (dataIso !== hoje() || !hora) return false;
+  const m = String(hora).match(/(\d{1,2})(?:\s*[:h]\s*(\d{2}))?/); if (!m) return false;
+  const fim = new Date(); fim.setHours(Number(m[1])+2, Number(m[2]||0), 0, 0);
+  return new Date() > fim;
+}
+function listaCultos(ini, fim, escalas){
+  const set = new Map();
+  for (let d = ini; d <= fim; d = somaDias(d,1)) {
+    if (diasCulto().includes(new Date(d+'T12:00:00').getDay())) cultos().forEach(c => set.set(d+'_'+c.id, {data:d, culto:c.id}));
+  }
+  escalas.forEach(x => { if (x.data>=ini && x.data<=fim) set.set(x.data+'_'+x.culto, {data:x.data, culto:x.culto}); });
+  const ord = id => { const i = cultos().findIndex(c=>c.id===id); return i<0?99:i; };
+  return [...set.values()].sort((a,b) => a.data===b.data ? ord(a.culto)-ord(b.culto) : a.data.localeCompare(b.data));
+}
+const escalaDe = (lista, data, culto, area) => lista.find(x => x.data===data && x.culto===culto && x.area===area);
+const docId = (data, culto, area) => data+'_'+culto+'_'+area;
+
+function blocoArea(lista, c, a){
+  const x = escalaDe(lista, c.data, c.culto, a.id);
+  const pode = podeArea(a, x);
+  let resumo;
+  if (a.porConexao) resumo = conexoesDe(x).length ? (conexoesDe(x).length>1?'Conexões ':'Conexão ')+esc(conexoesTxt(x)) : '<span class="pend">A definir</span>';
+  else { const n = x ? (x.funcoes||[]).reduce((s,f)=>s+(f.pessoas||[]).length,0) : 0; resumo = n ? (a.funcoes.length===1 && n<=2 ? esc((x.funcoes[0].pessoas||[]).join(' e ')) : 'Ver equipe ('+n+')') : (x && x.obs ? esc(x.obs) : '<span class="pend">A definir</span>'); }
+  const fx = a.funcoes.map(f => {
+    const salvo = x ? ((x.funcoes||[]).find(g=>g.nome===f.nome)||{}).pessoas || [] : [];
+    const total = f.vagas ? Math.max(f.vagas, salvo.length) : salvo.length;
+    if (!total) return '';
+    const nomes = total ? Array.from({length:total}, (_,i) => salvo[i] ? esc(salvo[i]) : '<span class="pend">vaga aberta</span>').join(', ') : '<span class="pend">ninguém escalado</span>';
+    return '<p class="fn"><b>'+esc(f.nome)+(f.vagas?' · '+f.vagas+(f.vagas>1?' pessoas':' pessoa'):'')+'</b>'+nomes+'</p>';
+  }).join('') + (x && x.obs ? '<p class="fn"><b>Observação</b>'+esc(x.obs)+'</p>' : '')
+    + (pode ? '<button class="link" data-esc="'+esc(docId(c.data,c.culto,a.id))+'" data-d="'+c.data+'" data-c="'+esc(c.culto)+'" data-a="'+esc(a.id)+'">'+(x?'Editar escala':'Preencher escala')+'</button>' : '');
+  return '<details class="area"><summary><span><span class="an">'+esc(a.nome)+'</span><span class="ac">'+resumo+'</span></span><span class="chev" aria-hidden="true">›</span></summary><div class="fx">'+fx+'</div></details>';
+}
+const blocosCulto = (lista, c) => '<div class="areas">'+areas().map(a => blocoArea(lista, c, a)).join('')+'</div>';
+const cultoTitulo = c => { const i = cultoInfo(c.culto); return 'Culto da '+i.nome.toLowerCase()+(i.hora?' · '+i.hora:''); };
+
+/* ---------- navegação ---------- */
+function renderTabs(){
+  $('#tabs').innerHTML = TABS.filter(t=>!t.hidden && (!t.owner || isAdm()) && (!t.gestao || temGestao())).map(t =>
+    '<button data-tab="'+t.id+'"'+(S.tab===t.id?' aria-current="page"':'')+'><span class="ic" aria-hidden="true">'+t.ic+'</span>'+t.label+(t.id==='ajustes' && isAdm() && pendentes().length ? '<span class="badge">'+pendentes().length+'</span>' : '')+'</button>').join('');
+}
+$('#tabs').addEventListener('click', e => { const b=e.target.closest('button[data-tab]'); if(!b) return; S.tab=b.dataset.tab; S.det=null; history.replaceState(null,'','#'+S.tab); renderTabs(); render(); window.scrollTo(0,0); });
+
+function render(){
+  if (!S.db) return;
+  if (document.querySelector('#dlg[open]')) return;
+  const abertos = [...document.querySelectorAll('details.area[open]')].map(d => d.dataset.k);
+  $('#subtitle').textContent = papelTexto() + (!isAdm() && pessoaDe(S.uid) ? [pessoaDe(S.uid).gestao?' · Gestão':'', pessoaDe(S.uid).ministro?' · Ministro':'', pessoaDe(S.uid).avisos?' · Avisos/Eventos':''].join('') : '');
+  { const w = document.querySelector('#who span'); if (w && S.uid) w.textContent = nome(S.uid); }
+  const v = $('#view');
+  if (!S.cfgLoaded) { v.innerHTML='<div class="empty">Carregando o painel…</div>'; return; }
+  if (!S.cfg && S.tab!=='ajustes') { v.innerHTML = isAdm() ? '<div class="empty">O painel ainda não está configurado.<br><br><button class="btn" data-go="ajustes">Configurar agora</button></div>' : '<div class="empty">O painel ainda está sendo configurado pelo administrador.</div>'; return; }
+  const fns = {inicio:viewInicio, escala:viewEscala, checkin:viewCheckin, avisos:viewAvisos, agenda:viewAgenda, historico:viewHistorico, ajustes:viewAjustes, ajuda:viewAjuda};
+  v.innerHTML = (S.readOnlyHit ? '<div class="notice">Sua conta ainda não tem permissão para salvar. O administrador precisa te convidar como Editor no compartilhamento.</div>' : '') + bannerCadastro() + fns[S.tab]();
+  let k = 0; document.querySelectorAll('details.area').forEach(d => { d.dataset.k = S.tab+(k++); if (abertos.includes(d.dataset.k)) d.open = true; });
+  if (S.tab==='historico' && isAdm()) carregarHistorico();
+}
+document.addEventListener('click', e => { const g = e.target.closest('[data-ir]'); if (!g) return; const [tab, alvo] = g.dataset.ir.split('|');
+  S.tab = tab; history.replaceState(null,'','#'+tab); renderTabs(); render();
+  requestAnimationFrame(() => { const el = document.getElementById(alvo); if (el) { el.scrollIntoView({behavior:'smooth', block:'start'}); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1800); } }); });
+document.addEventListener('click', e => { const g=e.target.closest('[data-go]'); if(g){ S.tab=g.dataset.go; history.replaceState(null,'','#'+S.tab); renderTabs(); render(); }});
+
+/* ---------- INÍCIO ---------- */
+const imgTag = (src, cls) => src && /^data:image\//.test(src) ? '<img class="'+cls+'" src="'+esc(src)+'" alt="" loading="lazy">' : '';
+async function arquivoParaImg(file){
+  const bmp = await createImageBitmap(file); const w = Math.min(720, bmp.width), h = Math.round(bmp.height*w/bmp.width);
+  const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(bmp, 0, 0, w, h);
+  let q = 0.72, d = c.toDataURL('image/webp', q); if (!/^data:image\/webp/.test(d)) d = c.toDataURL('image/jpeg', q);
+  while (d.length > 150000 && q > 0.35) { q -= 0.1; d = c.toDataURL(d.startsWith('data:image/webp') ? 'image/webp' : 'image/jpeg', q); }
+  return d;
+}
+const campoImg = x => '<label class="f" for="fImg">Imagem (opcional)</label><input class="inp" id="fImg" name="img" type="file" accept="image/*">'+(x&&x.img?'<label class="hint" style="display:block"><input type="checkbox" name="semimg"> Remover a imagem atual</label>':'');
+async function lerImg(fd, x){ const f = fd.get('img'); if (fd.get('semimg')) return ''; if (f && f.size) { try { return await arquivoParaImg(f); } catch(e){ toast('Não consegui ler essa imagem.'); } } return (x && x.img) || ''; }
+const txtLongo = t => '<p class="clamp">'+linkify(t)+'</p>'+(String(t||'').length > 160 || String(t||'').split('\n').length > 4 ? '<button class="link lermais" data-lermais>Ler mais</button>' : '');
+document.addEventListener('click', e => { const b = e.target.closest('[data-lermais]'); if (!b) return; const p = b.previousElementSibling; p.classList.toggle('aberto'); b.textContent = p.classList.contains('aberto') ? 'Ler menos' : 'Ler mais'; });
+const urlOk = u => /^https?:\/\/\S+$/i.test(String(u||'').trim());
+const btnLink = u => urlOk(u) ? '<a class="btn small insc" href="'+esc(u)+'" target="_blank" rel="noopener">Fazer inscrição ›</a>' : '';
+const btnLinks = bs => { const l = (bs||[]).filter(b => b && urlOk(b.link)); return l.length ? '<div class="zaps">'+l.map(b => '<a class="btn small insc" href="'+esc(b.link)+'" target="_blank" rel="noopener">'+esc(b.rotulo||'Abrir')+' ›</a>').join('')+'</div>' : ''; };
+const btnZap = cs => { const l = (cs||[]).filter(c => c && String(c.tel||'').replace(/\D/g,'').length >= 10); return l.length ? '<div class="zaps"><span class="meta">Fale com:</span>'+l.map(c => '<a class="btn small zap" href="https://wa.me/'+String(c.tel).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp · '+esc(c.nome)+'</a>').join('')+'</div>' : ''; };
+const linkify = t => esc(t).replace(/https?:\/\/[^\s<]+/g, m => '<a href="'+m+'" target="_blank" rel="noopener">'+m+'</a>');
+const dataBR = d => d.split('-').reverse().join('/');
+function celula(lista, c, a){
+  const x = escalaDe(lista, c.data, c.culto, a.id);
+  let txt;
+  if (a.porConexao) txt = conexoesTxt(x);
+  else { const ps = x ? (x.funcoes||[]).flatMap(f => f.pessoas||[]) : []; txt = ps.length ? (a.funcoes.length===1 && ps.length<=2 ? ps.join(' e ') : 'Equipe ('+ps.length+')') : ''; }
+  if (!txt && x && x.obs) txt = x.obs;
+  return '<td><button class="cell'+(txt?'':' vazio')+'" data-det="'+c.data+'|'+esc(c.culto)+'|'+esc(a.id)+'">'+(txt?esc(txt):'A definir')+'</button></td>';
+}
+function tabelaEscala(lista){
+  return '<div class="tbl-wrap"><table class="esc"><thead><tr><th>Data</th>'+areas().map(a=>'<th>'+esc(a.nome)+'</th>').join('')+(temGestao()?'<th>Check-in PDF</th><th>Check-in Excel</th>':'')+'</tr></thead><tbody>'
+    + lista.map(c => { const ci = cultoInfo(c.culto); return '<tr class="'+(/noite/i.test(ci.nome)?'noite':'manha')+'"><th scope="row"><span class="dt">'+dataBR(c.data)+'</span><span class="ct">'+esc(ci.nome)+(ci.hora?' · '+esc(ci.hora):'')+'</span></th>'+areas().map(a => celula(S.mesEsc, c, a)).join('')+(temGestao()?'<td><button class="cell dl" data-ck-pdf="'+c.data+'|'+esc(c.culto)+'">Baixar PDF</button></td><td><button class="cell dl" data-ck-xls="'+c.data+'|'+esc(c.culto)+'">Baixar Excel</button></td>':'')+'</tr>'; }).join('')
+    + '</tbody></table></div><p class="hint">Toque no nome para ver quem está escalado em cada função.</p>';
+}
+function viewDetalhe(){
+  const {data, culto, area} = S.det; const a = areaInfo(area); const ci = cultoInfo(culto);
+  const x = escalaDe(todasEscalas(), data, culto, area);
+  const pode = podeArea(a, x);
+  let h = '<button class="btn ghost small" data-voltar>‹ Voltar para a escala</button>'
+    + '<h2 class="section-title" style="margin-top:16px">'+esc(a.nome)+'</h2><div class="meta" style="font-size:15px">'+esc(fmtDia(data))+' · Culto da '+esc(ci.nome.toLowerCase())+(ci.hora?' · '+esc(ci.hora):'')+'</div>';
+  if (a.porConexao) h += '<p style="margin:10px 0 0"><span class="tag" style="margin:0;font-size:14px;padding:3px 12px">'+esc(conexoesTxt(x) || 'Conexão a definir')+'</span></p>';
+  h += '<div style="margin-top:14px">' + a.funcoes.map(f => {
+    const salvo = x ? ((x.funcoes||[]).find(g => g.nome===f.nome)||{}).pessoas || [] : [];
+    const total = f.vagas ? Math.max(f.vagas, salvo.length) : salvo.length;
+    const itens = total ? Array.from({length:total}, (_,i) => '<li>'+(salvo[i] ? esc(salvo[i]) : '<span class="pend">vaga aberta</span>')+'</li>').join('') : '<li><span class="pend">ninguém escalado</span></li>';
+    return '<section class="card fcard"><h3>'+esc(f.nome)+(f.vagas?' <span class="meta">· '+f.vagas+(f.vagas>1?' vagas':' vaga')+'</span>':'')+'</h3><ul>'+itens+'</ul></section>';
+  }).join('') + '</div>' + (x && x.obs ? '<div class="notice">'+esc(x.obs)+'</div>' : '')
+    + (pode ? '<button class="btn" data-esc="1" data-d="'+data+'" data-c="'+esc(culto)+'" data-a="'+esc(area)+'">'+(x?'Editar escala':'Preencher escala')+'</button>' : '');
+  return h;
+}
+const botoesDia = d => '<div class="bar" style="margin:6px 0 12px">'+(temGestao()?'<button class="btn ghost small" data-dia-ficha="'+d+'">Check-in do dia</button>':'')+'<button class="btn ghost small" data-dia-csv="'+d+'">Planilha do dia</button></div>';
+const bannerCadastro = () => (S.tab==='inicio' || S.tab==='ajuda' || isAdm() || !S.cfg || pessoaDe(S.uid) || S.meuCad) ? '' : '<div class="notice"><b>É líder, auxiliar ou da organização da conexão?</b> Faça seu cadastro para poder preencher a escala da sua conexão.<div style="margin-top:8px"><button class="btn small" data-go="inicio">Fazer meu cadastro</button></div></div>';
+function cardCadastro(){
+  if (isAdm() || pessoaDe(S.uid) || !S.cfg) return '';
+  if (S.meuCad) { const msg = 'Olá! Acabei de fazer meu cadastro no painel da Família Alcançar: '+(S.meuCad.nome||'')+' · '+(PAPEIS[S.meuCad.papel]||'')+' da conexão '+conexaoNome(S.meuCad.conexao)+'. Pode aprovar, por favor?';
+    return '<div class="notice">Cadastro enviado: '+esc(S.meuCad.nome||'')+' · '+esc(PAPEIS[S.meuCad.papel]||'')+' da conexão '+esc(conexaoNome(S.meuCad.conexao))+'. Agora é só aguardar a aprovação de um administrador. Para agilizar, avise pelo WhatsApp:<a class="btn" style="display:block;text-align:center;margin-top:12px;text-decoration:none;background:#25D366;color:#fff" href="https://wa.me/'+ADM_WPP()+'?text='+encodeURIComponent(msg)+'" target="_blank" rel="noopener">Avisar o administrador pelo WhatsApp</a></div>'; }
+  return '<section class="card"><h3>É líder, auxiliar ou da organização da conexão?</h3><p class="meta" style="margin:4px 0 0">Faça seu cadastro para poder preencher a escala da sua conexão. Quem só vai consultar não precisa se cadastrar.</p><form id="cadForm">'
+    + '<label class="f" for="kN">Nome completo</label><input class="inp" id="kN" name="nome" required autocomplete="name" value="'+esc(S.names[S.uid]||'')+'">'
+    + '<label class="f" for="kA">Me chamar: (apelido)</label><input class="inp" id="kA" name="apelido" placeholder="Como você prefere ser chamado">'
+    + '<label class="f" for="kW">WhatsApp (com DDD)</label><input class="inp" id="kW" name="whatsapp" type="tel" required inputmode="tel" placeholder="(11) 99999-9999">'
+    + '<label class="f" for="kC">Conexão</label><select class="inp" id="kC" name="conexao" required><option value="">Escolha…</option>'+opts(conexoes(), '')+'</select>'
+    + '<label class="f" for="kP">Função</label><select class="inp" id="kP" name="papel" required>'+opts([{id:'lider',nome:'Líder'},{id:'auxiliar',nome:'Auxiliar'},{id:'organizacao',nome:'Organização'}], 'lider')+'</select>'
+    + '<p class="hint">Depois de enviado, a conexão só pode ser alterada por um administrador.</p>'
+    + '<div class="end"><button type="submit" class="btn">Enviar cadastro</button></div></form></section>';
+}
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'cadForm') return; e.preventDefault();
+  if (S.meuCad) { toast('Seu cadastro já foi enviado.'); return; }
+  const fd = new FormData(e.target); const data = {nome:String(fd.get('nome')||'').trim(), apelido:String(fd.get('apelido')||'').trim(), whatsapp:String(fd.get('whatsapp')||'').trim(), conexao:fd.get('conexao'), papel:fd.get('papel'), em:new Date().toISOString()};
+  if (String(data.whatsapp).replace(/\D/g,'').length < 10) { toast('Coloque o WhatsApp com DDD.'); return; }
+  try { await S.db.doc('cadastros/'+S.uid).set(data); await logar('criou','config','Pedido de cadastro: '+(PAPEIS[data.papel]||'')+' · '+conexaoNome(data.conexao), null, data); toast('Cadastro enviado'); }
+  catch(err){ falhaEscrita(err); }
+});
+function viewInicio(){
+  const lista = listaCultos(hoje(), somaDias(hoje(), 120), S.prox).filter(c => !horaPassou(c.data, cultoInfo(c.culto).hora));
+  const datas = [...new Set(lista.map(c=>c.data))].slice(0, 2);
+  const blocoDia = d => lista.filter(c=>c.data===d).map((c,i) => (i?'<hr class="div-culto">':'')+'<div class="culto-sec"><h3 class="culto-t'+(/noite/i.test(cultoInfo(c.culto).nome)?' noite':'')+'">'+esc(cultoTitulo(c))+'</h3>'+blocosCulto(S.prox, c)+'</div>').join('');
+  let html = cardCadastro();
+  if (isAdm() && pendentes().length) { const n = pendentes().length; html = '<button class="card pend" data-go="ajustes"><span>🔔 <b>'+n+' cadastro'+(n>1?'s':'')+' aguardando aprovação</b></span><span class="meta">Revisar ›</span></button>' + html; }
+  if (!datas.length) html += '<div class="empty">Nenhum culto programado. Confira os dias de culto em Ajustes.</div>';
+  else {
+    const [p, ...resto] = datas;
+    html += '<section class="hero" aria-label="Próximo culto"><div class="when">'+(p===hoje()?'Hoje':'Próximo culto')+'</div><h2>'+esc(fmtDia(p))+'</h2>'+blocoDia(p)+botoesDia(p)+'</section>';
+    if (resto.length) html += '<h2 class="section-title">Em seguida</h2><div class="mini-grid">' + resto.map(d =>
+      '<section class="mini"><h3>'+esc(fmtDia(d))+'</h3>'+blocoDia(d)+botoesDia(d)+'</section>').join('') + '</div>';
+  }
+  const evs = S.eventos.filter(e => (e.dataFim || e.data) >= hoje());
+  const avs = S.avisos.filter(a => !a.fixoFim);
+  const fixos = [...S.avisos].filter(a => a.fixoFim).sort((x, y) => x.fixoFim - y.fixoFim);
+  const dLin = d => { const x = new Date(d+'T12:00:00'); return '<span class="ld"><b>'+String(x.getDate()).padStart(2,'0')+'/'+String(x.getMonth()+1).padStart(2,'0')+'</b>'+esc(x.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.',''))+'</span>'; };
+  html += '<h2 class="section-title">Agenda</h2>';
+  html += evs.length ? '<div class="card lst">' + evs.map(ev => '<button class="li" data-ir="agenda|ev-'+esc(ev.id)+'">'+dLin(ev.data)+'<span class="lt">'+esc(ev.titulo)+'</span><span class="lh">'+esc(ev.hora||'')+'</span><span class="la" aria-hidden="true">›</span></button>').join('') + '</div>'
+    : '<div class="empty">Nenhum evento marcado daqui para frente.</div>';
+  if (avs.length) html += '<h2 class="section-title">Avisos</h2><div class="card lst">' + avs.map(a => '<button class="li" data-ir="avisos|av-'+esc(a.id)+'">'+dLin(String(a.criadoEm||'').slice(0,10))+'<span class="lt">'+esc(a.titulo)+'</span><span class="lh"></span><span class="la" aria-hidden="true">›</span></button>').join('') + '</div>';
+  if (fixos.length) html += '<h2 class="section-title">Para você</h2>' + fixos.map(a => { const b = (a.botoes||[]).find(x => x && urlOk(x.link)) || (urlOk(a.link) ? {rotulo:'Abrir', link:a.link} : null);
+    return '<article class="card">'+imgTag(a.img,'banner')+'<h3>'+esc(a.titulo)+'</h3>'+(b?'<a class="btn big" href="'+esc(b.link)+'" target="_blank" rel="noopener">'+esc(b.rotulo||'Abrir')+'</a>':'')+'</article>'; }).join('');
+  html += blocoRedes();
+  html += blocoSobre();
+  html += blocoIgreja();
+  return html;
+}
+const IC_IG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.3" fill="currentColor"/></svg>';
+const IC_YT = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="4" fill="currentColor"/><path d="M10 9v6l5-3z" fill="#000"/></svg>';
+const handle = u => { const m = String(u||'').match(/(?:instagram\.com\/|youtube\.com\/)(@?[A-Za-z0-9._-]+)/); return m ? (m[1].startsWith('@') ? m[1] : '@'+m[1]) : ''; };
+function blocoIgreja(){
+  const i = S.cfg && S.cfg.info; if (!i || !i.endereco) return '';
+  const mapa = 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(i.endereco);
+  const ic = c => /noite/i.test(c.nome) ? '🌙' : '☀️';
+  return '<h2 class="section-title">Onde estamos</h2><section class="card igreja"><h3>❤️ '+esc(i.nome||'Igreja')+'</h3>'
+    + '<p class="meta" style="font-size:15px;margin:8px 0 0">📍 '+esc(i.endereco)+(i.complemento?'<br>'+esc(i.complemento):'')+'</p>'
+    + '<a class="btn small insc" href="'+esc(mapa)+'" target="_blank" rel="noopener">Como chegar ›</a>'
+    + '<div class="meta" style="margin-top:16px">⛪ Nossos cultos, todos os domingos</div><div class="horarios">'+cultos().map(c => '<div><span>'+ic(c)+' '+esc(c.nome)+'</span><b>'+esc(c.hora||'—')+'</b></div>').join('')+'</div>'
+    + (i.convite?'<p>'+esc(i.convite)+'</p>':'') + (i.chamada?'<p class="vemeve">'+esc(i.chamada)+'</p>':'') + '</section>';
+}
+function blocoRedes(){
+  const r = (S.cfg && S.cfg.redes) || {}; const ds = (S.cfg && S.cfg.destaques) || [];
+  if (!r.instagram && !r.youtube && !ds.length) return '';
+  const card = (cls, url, ic, rede, prev, cta) => '<a class="rede-card '+cls+'" href="'+esc(url)+'" target="_blank" rel="noopener"><div class="prev'+(prev?'':' vazio')+'"'+(prev?' style="background-image:url(\''+esc(prev)+'\')"':'')+'>'+(prev?'':'<span class="marca">'+ic+'</span>')+'</div><div class="rede-info"><span class="ic">'+ic+'</span><span><b>'+rede+'</b><small>'+esc(handle(url))+'</small></span><span class="cta">'+cta+' ›</span></div></a>';
+  let h = '<h2 class="section-title">Redes sociais</h2><div class="redes">';
+  if (urlOk(r.instagram)) h += card('ig', r.instagram, IC_IG, 'Instagram', r.igPrev, 'Ver perfil');
+  if (urlOk(r.youtube)) h += card('yt', r.youtube, IC_YT, 'YouTube', r.ytPrev, 'Ver vídeos');
+  h += '</div>';
+  const site = r.site || SITE_IGREJA;
+  if (urlOk(site)) h += '<div class="card" style="margin-top:10px;padding:6px 16px"><a class="dest" href="'+esc(site)+'" target="_blank" rel="noopener"><span class="ig" aria-hidden="true">🌐</span><span><b>Site da igreja</b><br><small class="meta">comunidadealcancar.com.br</small></span><span aria-hidden="true">›</span></a></div>';
+  if (ds.length) h += '<div class="card" style="margin-top:10px"><div class="meta" style="margin-bottom:4px">Postagens em destaque</div>' + ds.filter(d => urlOk(d.link)).map(d => { const yt = /youtu/.test(d.link);
+    return '<a class="dest" href="'+esc(d.link)+'" target="_blank" rel="noopener"><span class="'+(yt?'yt':'ig')+'">'+(yt?IC_YT:IC_IG)+'</span><span>'+esc(d.titulo)+'</span><span aria-hidden="true">›</span></a>'; }).join('') + '</div>';
+  return h;
+}
+const SITE_IGREJA = 'https://www.comunidadealcancar.com.br/#programacao';
+const SOBRE = { missao: 'Fazer com excelência as coisas concernentes ao reino de Deus, lutando pela unidade e buscando o seu crescimento. Trazendo a todas as pessoas que quiserem, a solução para as suas necessidades mediante o conhecimento da Palavra de Deus.', visao: 'Ser uma igreja que alcança, ama, discipula, treina e envia. Que leva o Evangelho para o homem todo. Que luta contra o pecado e a cultura anticristã. Uma igreja que ensina a amar e conhecer o Deus da Bíblia.' };
+function blocoSobre(){
+  const s = {...SOBRE, ...((S.cfg && S.cfg.sobre) || {})};
+  return '<h2 class="section-title">Sobre nós</h2><div class="card sobre"><h3>Missão</h3><p>'+esc(s.missao)+'</p><h3 style="margin-top:16px">Visão</h3><p>'+esc(s.visao)+'</p></div>';
+}
+
+/* ---------- ESCALA (mês) ---------- */
+function mesLabel(){ return new Date(S.mes+'-15T12:00:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'}); }
+function viewEscala(){
+  if (S.det) return viewDetalhe();
+  const bar = '<div class="bar"><div class="month"><button class="icon-btn" data-mes="-1" aria-label="Mês anterior">‹</button><strong>'+esc(mesLabel())+'</strong><button class="icon-btn" data-mes="1" aria-label="Próximo mês">›</button></div>'
+    + '<span style="flex:1"></span>' + (isAdm() ? '<button class="btn" data-esc-novo>+ Culto extra</button>' : '') + '</div>';
+  const chips = '<div class="chips" role="group" aria-label="Filtrar exportação por conexão">' + [{id:'todas',nome:'Todas'}, ...conexoes()].map(c =>
+    '<button class="chip" data-filtro="'+esc(c.id)+'" aria-pressed="'+(S.filtro===c.id)+'">'+esc(c.nome)+'</button>').join('') + '</div>';
+  if (!S.perDe) { const [yy,mm] = S.mes.split('-').map(Number); S.perDe = S.mes+'-01'; S.perAte = isoLocal(new Date(yy, mm+2, 0)); }
+  const exp = '<h2 class="section-title">Exportar</h2><div class="card"><div class="meta">Deste mês</div><div class="bar" style="margin:8px 0 0"><button class="btn ghost small" data-exp="csv">Planilha do mês</button>'+(temGestao()?'<button class="btn ghost small" data-exp="ficha">Check-in do mês</button>':'')+'</div>'
+    + '<div class="meta" style="margin-top:18px">Planilha personalizada</div><div class="row"><div><label class="f" for="xDe">De</label><input class="inp" id="xDe" type="date" value="'+esc(S.perDe)+'"></div><div><label class="f" for="xAte">Até</label><input class="inp" id="xAte" type="date" value="'+esc(S.perAte)+'"></div></div>'
+    + '<label class="f" for="xTipo">O que exportar</label><select class="inp" id="xTipo">'+opts(temGestao() ? [{id:'escala',nome:'Planilha da escala'},{id:'checkin',nome:'Check-in (com assinaturas)'}] : [{id:'escala',nome:'Planilha da escala'}], temGestao() ? (S.perTipo||'escala') : 'escala')+'</select>'
+    + '<div class="bar" style="margin:12px 0 0"><button class="btn small" data-per="xlsx">Baixar Excel</button><button class="btn ghost small" data-per="pdf">Baixar PDF</button></div><p class="hint">Escolha qualquer período, por exemplo de novembro a março. O filtro de conexão lá de cima também vale aqui.</p></div>';
+  const lista = listaCultos(S.mes+'-01', S.mes+'-31', S.mesEsc).filter(c => c.data.slice(0,7)===S.mes);
+  const visiveis = S.filtro==='todas' ? lista : lista.filter(c => S.mesEsc.some(x => x.data===c.data && x.culto===c.culto && conexoesDe(x).includes(S.filtro)));
+  if (!visiveis.length) return bar + chips + '<div class="empty">Nenhum culto em '+esc(mesLabel())+(S.filtro!=='todas'?' com a conexão '+esc(conexaoNome(S.filtro)):'')+'.</div>' + exp;
+  return bar + chips + tabelaEscala(visiveis) + exp;
+}
+document.addEventListener('click', async e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.filtro) { S.filtro = t.dataset.filtro; render(); }
+  if (t.dataset.det) { const [d,c,a] = t.dataset.det.split('|'); S.det = {data:d, culto:c, area:a}; render(); window.scrollTo(0,0); }
+  if ('voltar' in t.dataset) { S.det = null; render(); }
+  if (t.dataset.ckPdf) { const [d,c] = t.dataset.ckPdf.split('|'); checkinPDF(d, c, t); }
+  if (t.dataset.ckXls) { const [d,c] = t.dataset.ckXls.split('|'); checkinXLSX(d, c, t); }
+  if (t.dataset.mes) { const [y,m] = S.mes.split('-').map(Number); const d = new Date(y, m-1+Number(t.dataset.mes), 1); S.mes = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); assinarMes(); render(); }
+  if ('escNovo' in t.dataset) formEscala({data:hoje(), culto:(cultos()[0]||{}).id, area:(areas()[0]||{}).id, livre:true});
+  if (t.dataset.esc) formEscala({data:t.dataset.d, culto:t.dataset.c, area:t.dataset.a});
+  if (t.dataset.exp === 'csv') exportarCSV();
+  if (t.dataset.exp === 'ficha') exportarFicha();
+  if (t.dataset.exp === 'tudo') { try { const s = await S.db.collection('escalas').orderBy('data','asc').limit(1000).get(); exportarCSV(linhasDe(s.docs.map(d=>({id:d.id,...d.data()}))), 'escala-completa.csv'); } catch(err){ toast('Não foi possível carregar a escala completa.'); } }
+  if (t.dataset.diaCsv || t.dataset.diaFicha) { const d = t.dataset.diaCsv || t.dataset.diaFicha; const rows = linhasDe(todasEscalas().filter(x => x.data === d));
+    if (t.dataset.diaCsv) exportarCSV(rows, 'escala-'+d+'.csv'); else checkinDiaPDF(d, t); }
+});
+const todasEscalas = () => { const m = new Map(); [...S.prox, ...S.mesEsc, ...(S.ckDocs||[])].forEach(x => m.set(x.id, x)); return [...m.values()]; };
+const resumoEscala = x => fmtCurto(x.data)+' · '+cultoInfo(x.culto).nome+' · '+areaInfo(x.area).nome+(conexoesDe(x).length?' ('+conexoesTxt(x)+')':'');
+function opts(list, sel){ return list.map(o => '<option value="'+esc(o.id)+'"'+(o.id===sel?' selected':'')+'>'+esc(o.nome)+'</option>').join(''); }
+function abrir(html, onSubmit, onReady){
+  $('#dlgBody').innerHTML = html; const d = $('#dlg'); d.showModal();
+  d.onclose = () => render();
+  $('#dlgBody').querySelector('[data-cancel]').onclick = () => d.close();
+  $('#dlgBody').querySelector('form').onsubmit = async ev => { ev.preventDefault(); const b = ev.target.querySelector('[type=submit]'); b.disabled = true; const ok = await onSubmit(new FormData(ev.target), ev.submitter); b.disabled = false; if (ok) d.close(); };
+  if (onReady) onReady($('#dlgBody'));
+}
+function camposArea(a, x){
+  const minhasCon = conexoes();
+  let h = '';
+  if (a.porConexao && !isAdm()) h += '<p class="notice" style="margin-top:12px">Conexão: '+esc(conexoesTxt(x) || '—')+'</p>';
+  else if (a.porConexao) h += '<label class="f">Conexões responsáveis</label><div class="chips" style="flex-wrap:wrap">'+minhasCon.map(c => '<label class="chip"><input type="checkbox" name="conexoes" value="'+esc(c.id)+'"'+(conexoesDe(x).includes(c.id)?' checked':'')+'> '+esc(c.nome)+'</label>').join('')+'</div><div class="hint">Marque mais de uma quando servirem juntas.</div>';
+  a.funcoes.forEach((f, i) => {
+    const salvo = x ? ((x.funcoes||[]).find(g=>g.nome===f.nome)||{}).pessoas || [] : [];
+    h += '<fieldset class="fs"><legend>'+esc(f.nome)+(f.vagas?' · '+f.vagas+(f.vagas>1?' pessoas':' pessoa'):'')+'</legend>';
+    if (f.vagas) h += '<div class="slotgrid">'+Array.from({length:Math.max(f.vagas, salvo.length)}, (_,j) => '<input class="inp" name="f'+i+'_'+j+'" aria-label="'+esc(f.nome)+' '+(j+1)+'" placeholder="Nome '+(j+1)+'" value="'+esc(salvo[j]||'')+'">').join('')+'</div>';
+    else h += '<textarea class="inp" name="f'+i+'" aria-label="'+esc(f.nome)+'" placeholder="Um nome por linha">'+esc(salvo.join('\n'))+'</textarea>';
+    h += '</fieldset>';
+  });
+  h += '<label class="f" for="fObs">Observação (opcional)</label><input class="inp" id="fObs" name="obs" value="'+esc(x?x.obs||'':'')+'">';
+  return h;
+}
+function formEscala(ctx){
+  const editaveis = isAdm() ? areas() : areas().filter(a => podeArea(a, todasEscalas().find(x => x.id === docId(ctx.data, ctx.culto, a.id))));
+  const atual = () => { const f = $('#dlgBody form'); return {data:f.data.value, culto:f.culto.value, area:f.area.value}; };
+  const existente = c => todasEscalas().find(x => x.id === docId(c.data, c.culto, c.area));
+  const x0 = existente(ctx);
+  const fixo = !isAdm();
+  abrir('<form><h2>Escala</h2>'
+    + (fixo
+      ? '<div class="notice" style="margin:0"><b>'+esc(areaInfo(ctx.area).nome)+'</b><br>'+esc(fmtDia(ctx.data))+' · Culto da '+esc(cultoInfo(ctx.culto).nome.toLowerCase())+(cultoInfo(ctx.culto).hora?' · '+esc(cultoInfo(ctx.culto).hora):'')+'</div>'
+        + '<input type="hidden" id="fData" name="data" value="'+esc(ctx.data)+'"><input type="hidden" id="fCulto" name="culto" value="'+esc(ctx.culto)+'"><input type="hidden" id="fArea" name="area" value="'+esc(ctx.area)+'">'
+      : '<div class="row"><div><label class="f" for="fData">Data</label><input class="inp" id="fData" name="data" type="date" required value="'+esc(ctx.data)+'"'+(ctx.livre?'':' readonly')+'></div>'
+    + '<div><label class="f" for="fCulto">Culto</label><select class="inp" id="fCulto" name="culto" required>'+opts(cultos(), ctx.culto)+'</select></div></div>'
+    + '<label class="f" for="fArea">Área</label><select class="inp" id="fArea" name="area" required>'+opts(editaveis, ctx.area)+'</select>')
+    + '<div id="campos">'+camposArea(areaInfo(ctx.area), x0)+'</div>'
+    + '<div class="end">'+(x0?'<button type="submit" class="btn danger" data-limpar style="margin-right:auto">Limpar</button>':'')+'<button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Salvar escala</button></div></form>',
+  async (fd, sub) => {
+    const c = atual(); const a = areaInfo(c.area); const x = existente(c);
+    const ref = S.db.doc('escalas/'+docId(c.data, c.culto, c.area));
+    if (sub && 'limpar' in sub.dataset) { if (!x || !await confirmar('Apagar a escala de '+a.nome+' deste culto?')) return false; const ok = await excluir(ref, semId(x), 'escala', resumoEscala(x)); if (ok) toast('Escala apagada'); return ok; }
+    const cs = a.porConexao ? (isAdm() ? fd.getAll('conexoes') : conexoesDe(x)) : [];
+    const data = { data:c.data, culto:c.culto, area:c.area, conexoes: cs, conexao: cs[0]||null,
+      funcoes: a.funcoes.map((f,i) => ({nome:f.nome, pessoas: f.vagas
+        ? [...$('#dlgBody form').querySelectorAll('[name^="f'+i+'_"]')].map(el=>el.value.trim()).filter(Boolean)
+        : String(fd.get('f'+i)||'').split('\n').map(s=>s.trim()).filter(Boolean)})),
+      obs: String(fd.get('obs')||'').trim(), autor: x ? x.autor : S.uid, atualizadoPor:S.uid, atualizadoEm:new Date().toISOString() };
+    if (a.porConexao && !cs.length) { toast('Marque pelo menos uma conexão.'); return false; }
+    if (!podeArea(a, x)) { toast('Você só pode preencher a escala dos dias da sua conexão.'); return false; }
+    const ok = await salvar(ref, data, {acao:x?'editou':'criou', tipo:'escala', resumo:resumoEscala(data), antes:x?semId(x):null});
+    if (ok) toast(x?'Escala atualizada':'Escala salva');
+    return ok;
+  },
+  body => {
+    const refazer = () => { const c = atual(); body.querySelector('#campos').innerHTML = camposArea(areaInfo(c.area), existente(c)); };
+    if (!fixo) ['fData','fCulto','fArea'].forEach(id => body.querySelector('#'+id).addEventListener('change', refazer));
+  });
+}
+
+/* ---------- exportação ---------- */
+function linhasMes(){ return linhasDe(S.mesEsc.filter(x => S.filtro==='todas' || conexoesDe(x).includes(S.filtro))); }
+function linhasDe(lista){
+  const rows = [];
+  lista.slice()
+    .sort((a,b)=>(a.data+cultos().findIndex(c=>c.id===a.culto)+areas().findIndex(r=>r.id===a.area)).localeCompare(b.data+cultos().findIndex(c=>c.id===b.culto)+areas().findIndex(r=>r.id===b.area)))
+    .forEach(x => { const c = cultoInfo(x.culto);
+      (x.funcoes||[]).forEach(f => (f.pessoas||[]).forEach(p => rows.push({data:x.data, dia:new Date(x.data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long'}), culto:c.nome, hora:c.hora||'', area:areaInfo(x.area).nome, conexao:conexoesTxt(x), funcao:f.nome, pessoa:p, obs:x.obs||''})));
+    });
+  return rows;
+}
+function imprimirAqui(doc){
+  const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;width:0;height:0;border:0'; f.srcdoc = doc; document.body.appendChild(f);
+  f.onload = () => { try { f.contentWindow.print(); } catch(e){ toast('Não foi possível imprimir por aqui.'); } setTimeout(() => f.remove(), 60000); };
+}
+async function baixar(filename, data){
+  if (!S.dl) { toast('Abra o painel pelo app ou site do Claude para baixar arquivos.'); return; }
+  try { await S.dl.save({filename, data}); }
+  catch(e){ if (e && e.code !== 'declined') toast('Não foi possível baixar o arquivo agora.'); }
+}
+function exportarCSV(rows = linhasMes(), arquivo){
+  if (!rows.length) { toast('Não há escala preenchida para exportar.'); return; }
+  const q = v => '"'+String(v).replace(/"/g,'""')+'"';
+  const head = ['Área','Função','Nome','Check-in','Assinatura retirada (equipamento / crachá)','Assinatura devolução (equipamento / crachá)'];
+  const body = []; let grupo = '';
+  rows.forEach(r => { const g = fmtDia(r.data)+' · Culto da '+r.culto.toLowerCase()+(r.hora?' · '+r.hora:'');
+    if (g !== grupo) { if (grupo) body.push(''); body.push(q(g.charAt(0).toUpperCase()+g.slice(1))); body.push(head.map(q).join(';')); grupo = g; }
+    body.push([r.area, r.funcao, r.pessoa, '', '', ''].map(q).join(';')); });
+  baixar(arquivo || ('escala-'+S.mes+(S.filtro!=='todas'?'-'+S.filtro:'')+'.csv'), '\uFEFF'+body.join('\r\n'));
+}
+function exportarFicha(rows = linhasMes(), arquivo, tituloX){
+  if (!temGestao()) { toast('Só administradores e a Gestão podem imprimir o check-in.'); return; }
+  rows = semLouvor(rows);
+  if (!rows.length) { toast('Não há escala preenchida para exportar.'); return; }
+  const grupos = {}; rows.forEach(r => { const k = r.data+'|'+r.culto+'|'+r.hora; (grupos[k] ||= []).push(r); });
+  const titulo = ((S.cfg&&S.cfg.igreja)||'Igreja')+' · Check-in '+(tituloX || mesLabel()+(S.filtro!=='todas'?' · '+conexaoNome(S.filtro):''));
+  const paginas = Object.keys(grupos).map(k => { const [d,c,h] = k.split('|');
+    return '<section><h2>'+esc(fmtDia(d))+' · '+esc(c)+(h?' · '+esc(h):'')+'</h2><table><thead><tr><th>Nome</th><th>Área</th><th>Função</th><th>Conexão</th><th>Chegada</th><th>✓</th><th>Assinatura</th></tr></thead><tbody>'
+      + grupos[k].map(r => '<tr><td>'+esc(r.pessoa)+'</td><td>'+esc(r.area)+'</td><td>'+esc(r.funcao)+'</td><td>'+esc(r.conexao)+'</td><td></td><td class="ck">☐</td><td class="sig"></td></tr>').join('')
+      + '</tbody></table></section>'; }).join('');
+  const doc = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>'+esc(titulo)+'</title><style>body{font:13px/1.4 Arial,sans-serif;color:#111;margin:24px}h1{font-size:20px;margin:0 0 4px}p.i{color:#555;margin:0 0 18px}section{page-break-inside:avoid;margin-bottom:26px}h2{font-size:16px;margin:0 0 6px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #888;padding:7px 5px;text-align:left}th{background:#eee}td.ck{text-align:center;width:28px;font-size:18px}td.sig{width:24%}button{padding:10px 18px;font-size:15px;margin-bottom:16px}@media print{button{display:none}section{page-break-after:always}}</style></head><body><button onclick="window.print()">Imprimir</button><h1>'+esc(titulo)+'</h1><p class="i">Gerado em '+esc(fmtQuando(new Date().toISOString()))+'</p>'+paginas+'</body></html>';
+  const nomeArq = arquivo || ('ficha-checkin-'+S.mes+(S.filtro!=='todas'?'-'+S.filtro:'')+'.html');
+  if (S.dl) baixar(nomeArq, doc); else imprimirAqui(doc);
+}
+
+/* ---------- check-in em PDF e Excel ---------- */
+const LIBS = {};
+function carregar(src){ return LIBS[src] ||= new Promise((ok, err) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => { delete LIBS[src]; err(new Error('lib')); }; document.head.appendChild(s); }); }
+const JSPDF = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+const AUTOTABLE = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+const EXCELJS = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+const CK_HEAD = ['Área','Função','Nome','Check-in','Assinatura retirada (equipamento / crachá)','Assinatura devolução (equipamento / crachá)'];
+function dadosCheckin(d, c){
+  const ci = cultoInfo(c); const sub = fmtDia(d)+' · Culto da '+ci.nome.toLowerCase()+(ci.hora?' · '+ci.hora:'');
+  return { rows: semLouvor(linhasDe(todasEscalas().filter(x => x.data===d && x.culto===c))), titulo: ((S.cfg&&S.cfg.igreja)||'Igreja')+' · Check-in', sub: sub.charAt(0).toUpperCase()+sub.slice(1), arq: 'checkin-'+d+'-'+c };
+}
+function blocosCheckin(d, c){
+  const ci = cultoInfo(c), docs = todasEscalas().filter(x => x.data===d && x.culto===c);
+  const grupos = areas().filter(a => !ehLouvor(a.nome)).map(a => {
+    const x = docs.find(y => y.area===a.id); const rows = [];
+    (a.funcoes||[]).forEach((f, fi) => {
+      const nomes = x ? (((x.funcoes||[]).find(g => g.nome===f.nome)||{}).pessoas||[]).map(n => String(n).trim()).filter(Boolean) : [];
+      const n = nomes.length;
+      for (let k = 0; k < n; k++) rows.push({funcao: k===0 ? f.nome : '', fn: f.nome, nome: nomes[k]||'', k: a.id+'_'+fi+'_'+k});
+    });
+    const con = x ? conexoesTxt(x) : '';
+    return {id:a.id, area:a.nome, conexao:con, obs:(x&&x.obs)||'', rows};
+  }).filter(g => g.rows.length);
+  const nm = ci.nome || c; const cap = nm.charAt(0).toUpperCase()+nm.slice(1);
+  return { culto:c, rotulo:'Culto da '+nm.toLowerCase()+(ci.hora?' \u00b7 '+ci.hora:''), noite:/noite/i.test(nm), grupos, temDados:grupos.length > 0, cap };
+}
+const CK_COLS = ['Fun\u00e7\u00e3o','Nome','Check-in','Assinatura \u2014 retirada\n(equipamento / crach\u00e1)','Assinatura \u2014 devolu\u00e7\u00e3o\n(equipamento / crach\u00e1)'];
+const tituloDia = d => { const t = fmtDia(d); return t.charAt(0).toUpperCase()+t.slice(1); };
+async function gerarCheckinPDF(d, cs, btn, arq){
+  if (!temGestao()) { toast('S\u00f3 administradores e a Gest\u00e3o podem imprimir o check-in.'); return; }
+  const bs = cs.map(c => blocosCheckin(d, c)).filter(b => b.temDados);
+  if (!bs.length) { toast('N\u00e3o h\u00e1 escala preenchida '+(cs.length>1?'neste dia.':'neste culto.')); return; }
+  const txt = btn.textContent; btn.textContent = 'Gerando\u2026'; btn.disabled = true;
+  try {
+    await carregar(JSPDF); await carregar(AUTOTABLE);
+    const doc = new window.jspdf.jsPDF({orientation:'landscape', unit:'mm', format:'a4'});
+    const W = doc.internal.pageSize.getWidth(), M = 12, igreja = (S.cfg&&S.cfg.igreja)||'Fam\u00edlia Alcan\u00e7ar';
+    const cab = () => { doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(20); doc.text(igreja+' \u00b7 Check-in', M, 14);
+      doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(70); doc.text(tituloDia(d), W-M, 14, {align:'right'}); doc.setDrawColor(200); doc.setLineWidth(0.3); doc.line(M, 17.5, W-M, 17.5); };
+    cab(); let y = 23;
+    bs.forEach((b, bi) => {
+      if (bi && y > doc.internal.pageSize.getHeight() - 45) { doc.addPage(); cab(); y = 23; }
+      const cor = b.noite ? [30,136,229] : [255,198,26];
+      doc.setFillColor(...cor); doc.roundedRect(M, y, W-2*M, 9, 1.5, 1.5, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(b.noite?255:20); doc.text(b.rotulo, M+4, y+6.2); doc.setTextColor(20);
+      const body = [];
+      b.grupos.forEach(g => {
+        body.push([{content: g.area.toUpperCase() + (g.conexao ? '   \u00b7   '+(g.conexao.includes(' e ')?'Conex\u00f5es ':'Conex\u00e3o ')+g.conexao : '') + (g.obs ? '   \u00b7   '+g.obs : ''), colSpan:5, styles:{fillColor:[236,236,236], fontStyle:'bold', fontSize:9.5, textColor:[30,30,30], minCellHeight:7, cellPadding:{top:1.8,bottom:1.8,left:3,right:3}}}]);
+        g.rows.forEach(r => body.push([r.funcao, r.nome, '', '', '']));
+      });
+      doc.autoTable({ startY: y+11, margin:{left:M, right:M, top:23, bottom:14}, theme:'grid', head:[CK_COLS], body, showHead:'everyPage', rowPageBreak:'avoid',
+        styles:{font:'helvetica', fontSize:10, cellPadding:{top:2.2,bottom:2.2,left:3,right:3}, minCellHeight:10, valign:'middle', lineColor:[150,150,150], lineWidth:0.2, textColor:[20,20,20], overflow:'linebreak'},
+        headStyles:{fillColor:[25,25,25], textColor:255, fontStyle:'bold', fontSize:9, halign:'center', minCellHeight:11},
+        columnStyles:{0:{cellWidth:58, fontSize:9, textColor:[70,70,70]}, 1:{cellWidth:64, fontStyle:'bold'}, 2:{cellWidth:24}, 3:{cellWidth:'auto'}, 4:{cellWidth:'auto'}},
+        didDrawPage: () => cab() });
+      y = doc.lastAutoTable.finalY + 10;
+    });
+    const n = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(120); doc.text('P\u00e1gina '+i+' de '+n, W-M, doc.internal.pageSize.getHeight()-6, {align:'right'}); }
+    await baixar(arq, doc.output('arraybuffer'));
+  } catch(e) { console.warn(e); toast('N\u00e3o foi poss\u00edvel gerar o PDF agora.'); }
+  finally { btn.textContent = txt; btn.disabled = false; }
+}
+function checkinDiaPDF(d, btn){ return gerarCheckinPDF(d, cultos().map(c => c.id), btn, 'checkin-'+d+'.pdf'); }
+function checkinPDF(d, c, btn){ return gerarCheckinPDF(d, [c], btn, 'checkin-'+d+'-'+c+'.pdf'); }
+async function checkinXLSX(d, c, btn){
+  if (!temGestao()) { toast('S\u00f3 administradores e a Gest\u00e3o podem imprimir o check-in.'); return; }
+  const b = blocosCheckin(d, c); if (!b.temDados) { toast('N\u00e3o h\u00e1 escala preenchida neste culto.'); return; }
+  const txt = btn.textContent; btn.textContent = 'Gerando\u2026'; btn.disabled = true;
+  try {
+    await carregar(EXCELJS);
+    const wb = new window.ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Check-in', {pageSetup:{orientation:'landscape', paperSize:9, fitToPage:true, fitToWidth:1, fitToHeight:0, margins:{left:0.4,right:0.4,top:0.5,bottom:0.5,header:0.2,footer:0.2}}});
+    ws.columns = [{width:30},{width:32},{width:12},{width:38},{width:38}];
+    ws.mergeCells('A1:E1'); ws.getCell('A1').value = ((S.cfg&&S.cfg.igreja)||'Fam\u00edlia Alcan\u00e7ar')+' \u00b7 Check-in'; ws.getCell('A1').font = {bold:true, size:14};
+    ws.mergeCells('A2:E2'); ws.getCell('A2').value = tituloDia(d)+' \u00b7 '+b.rotulo; ws.getCell('A2').font = {bold:true, size:12};
+    ws.getCell('A2').fill = {type:'pattern', pattern:'solid', fgColor:{argb: b.noite?'FF1E88E5':'FFFFC61A'}}; if (b.noite) ws.getCell('A2').font = {bold:true, size:12, color:{argb:'FFFFFFFF'}};
+    const borda = {style:'thin', color:{argb:'FF999999'}}; const bordas = {top:borda, left:borda, bottom:borda, right:borda};
+    const h = ws.getRow(4); h.values = CK_COLS.map(t => t.replace('\n',' ')); h.height = 34;
+    h.eachCell(cell => { cell.font = {bold:true, color:{argb:'FFFFFFFF'}}; cell.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF191919'}}; cell.border = bordas; cell.alignment = {vertical:'middle', horizontal:'center', wrapText:true}; });
+    let r = 5;
+    b.grupos.forEach(g => {
+      ws.mergeCells('A'+r+':E'+r); const gc = ws.getCell('A'+r);
+      gc.value = g.area.toUpperCase() + (g.conexao ? '  \u00b7  '+(g.conexao.includes(' e ')?'Conex\u00f5es ':'Conex\u00e3o ')+g.conexao : '') + (g.obs ? '  \u00b7  '+g.obs : '');
+      gc.font = {bold:true}; gc.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FFECECEC'}}; gc.border = bordas; ws.getRow(r).height = 20; r++;
+      g.rows.forEach(x => { const row = ws.getRow(r++); row.values = [x.funcao, x.nome, '', '', '']; row.height = 26;
+        for (let col = 1; col <= 5; col++) { const cell = row.getCell(col); cell.border = bordas; cell.alignment = {vertical:'middle', wrapText:true}; }
+        row.getCell(2).font = {bold:true}; row.getCell(1).font = {color:{argb:'FF555555'}}; });
+    });
+    ws.pageSetup.printTitlesRow = '4:4';
+    await baixar('checkin-'+d+'-'+c+'.xlsx', await wb.xlsx.writeBuffer());
+  } catch(e) { console.warn(e); toast('N\u00e3o foi poss\u00edvel gerar o Excel agora.'); }
+  finally { btn.textContent = txt; btn.disabled = false; }
+}
+
+/* ---------- CHECK-IN (marcação ao vivo) ---------- */
+function proxCulto(){ let d = hoje(); for (let i = 0; i < 14; i++) { if (diasCulto().includes(new Date(d+'T12:00:00').getDay())) return d; d = somaDias(d, 1); } return hoje(); }
+function ckAbrir(){
+  if (!S.ckD) S.ckD = proxCulto();
+  if (!S.ckC || !cultos().some(c => c.id===S.ckC)) S.ckC = (cultos()[0]||{}).id;
+  const chave = S.ckD+'_'+S.ckC; if (S.ckChave === chave) return; S.ckChave = chave;
+  if (S.ckUnsub) { try { S.ckUnsub(); } catch(e){} } S.ckMarks = {}; S.ckOk = false;
+  S.db.collection('escalas').where('data','==',S.ckD).get().then(q => { S.ckDocs = q.docs.map(x => ({id:x.id, ...x.data()})); S.ckOk = true; if (S.tab==='checkin') render(); }).catch(e => { console.warn(e); S.ckOk = true; if (S.tab==='checkin') render(); });
+  S.ckUnsub = S.db.collection('checkin/'+chave+'/m').onSnapshot(q => { const m = {}; q.docs.forEach(x => m[x.id] = {...x.data(), _v:1}); S.ckMarks = m; if (S.tab==='checkin') render(); }, e => console.warn(e));
+}
+function viewCheckin(){
+  if (!temGestao()) return '<div class="empty">Só administradores e a Gestão acessam o check-in.</div>';
+  ckAbrir();
+  let h = '<div class="bar"><h2 style="font-size:22px">Check-in</h2></div>'
+    + '<div class="card"><label class="f" for="ckD" style="margin-top:0">Data do culto</label><input class="inp" type="date" id="ckD" value="'+esc(S.ckD)+'">'
+    + '<div class="chips" style="margin-top:10px">'+cultos().map(c => '<button class="chip" aria-pressed="'+(c.id===S.ckC)+'" data-ck-culto="'+esc(c.id)+'">'+esc(c.nome)+(c.hora?' · '+esc(c.hora):'')+'</button>').join('')+'</div></div>';
+  if (!S.ckOk) return h + '<div class="empty">Carregando…</div>';
+  const b = blocosCheckin(S.ckD, S.ckC);
+  if (!b.temDados) return h + '<div class="empty">Não há escala preenchida para este culto.</div>';
+  const M = S.ckMarks || {}; let tot = 0, ci = 0, ret = 0, dev = 0;
+  b.grupos.forEach(g => g.rows.forEach(r => { const m = M[r.k]||{}; if (r.nome || m.nome) tot++; if (m.ci) ci++; if (m.ret) ret++; if (m.dev) dev++; }));
+  h += '<div class="ckres"><span><b>'+ci+'</b>/'+tot+' check-in</span><span><b>'+ret+'</b> retiraram</span><span><b>'+dev+'</b> devolveram</span></div>';
+  b.grupos.forEach(g => {
+    h += '<div class="card ckg"><h3>'+esc(g.area)+(g.conexao?' <small class="meta">· '+esc(g.conexao)+'</small>':'')+'</h3>'
+      + '<div class="ckrow ckhead"><span></span><span>Check-in</span><span>Retirou</span><span>Devolveu</span></div>';
+    g.rows.forEach(r => { const m = M[r.k]||{}; const nm = r.nome || m.nome || '';
+      const box = (campo, rot) => '<label class="ckbox" title="'+rot+'"><input type="checkbox" data-ckk="'+esc(r.k)+'" data-campo="'+campo+'"'+(m[campo]?' checked':'')+' aria-label="'+esc(rot+' · '+(nm||r.fn))+'"><span></span></label>';
+      h += '<div class="ckrow'+(m.ci?' feito':'')+'"><span class="ckn">'+(r.nome ? '<b>'+esc(r.nome)+'</b>' : '<input class="inp ckin" data-cknome="'+esc(r.k)+'" placeholder="Digite o nome" value="'+esc(m.nome||'')+'">')+'<small>'+esc(r.fn)+'</small></span>'
+        + box('ci','Check-in') + box('ret','Retirou equipamento/crachá') + box('dev','Devolveu equipamento/crachá') + '</div>'; });
+    h += '</div>';
+  });
+  h += '<div class="bar" style="margin-top:6px"><button class="btn ghost small" data-ck-pdf="'+esc(S.ckD)+'|'+esc(S.ckC)+'">Baixar ficha em PDF</button></div>';
+  return h;
+}
+async function ckSalvar(k, campo, valor){
+  if (!temGestao()) return;
+  const chave = S.ckD+'_'+S.ckC, b = blocosCheckin(S.ckD, S.ckC);
+  let row = null, g0 = null; b.grupos.forEach(g => g.rows.forEach(r => { if (r.k===k) { row = r; g0 = g; } }));
+  const ant = (S.ckMarks||{})[k] || {};
+  const dado = {ci:!!ant.ci, ret:!!ant.ret, dev:!!ant.dev, nome: ant.nome||'', escalado: row ? row.nome : '', area: g0 ? g0.area : '', funcao: row ? row.fn : '', [campo]: valor, por: S.uid, em: new Date().toISOString()};
+  S.ckMarks = {...(S.ckMarks||{}), [k]: dado}; if (campo !== 'nome') render();
+  try { await S.db.doc('checkin/'+chave+'/m/'+k).set(dado); } catch(e){ falhaEscrita(e); }
+}
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'ckD' && t.value) { S.ckD = t.value; render(); return; }
+  if (t.dataset && t.dataset.ckk) { ckSalvar(t.dataset.ckk, t.dataset.campo, t.checked); t.closest('.ckrow') && t.dataset.campo==='ci' && t.closest('.ckrow').classList.toggle('feito', t.checked); return; }
+  if (t.dataset && t.dataset.cknome) ckSalvar(t.dataset.cknome, 'nome', t.value.trim());
+});
+document.addEventListener('click', e => { const c = e.target.closest('[data-ck-culto]'); if (c) { S.ckC = c.dataset.ckCulto; render(); } });
+
+/* ---------- planilha personalizada ---------- */
+document.addEventListener('input', e => { if (e.target.id==='xDe') S.perDe = e.target.value; if (e.target.id==='xAte') S.perAte = e.target.value; if (e.target.id==='xTipo') S.perTipo = e.target.value; });
+async function exportarPeriodo(tipo, btn){
+  const de = S.perDe, ate = S.perAte;
+  if (!de || !ate || de > ate) { toast('Confira as datas: “De” precisa vir antes de “Até”.'); return; }
+  const txt = btn.textContent; btn.textContent = 'Gerando…'; btn.disabled = true;
+  try {
+    const s = await S.db.collection('escalas').where('data','>=',de).where('data','<=',ate).orderBy('data','asc').limit(2000).get();
+    const lista = s.docs.map(d => ({id:d.id, ...d.data()})).filter(x => S.filtro==='todas' || conexoesDe(x).includes(S.filtro));
+    if (S.perTipo === 'checkin' && !temGestao()) S.perTipo = 'escala';
+    const rows = S.perTipo === 'checkin' ? semLouvor(linhasDe(lista)) : linhasDe(lista);
+    if (!rows.length) { toast('Não há escala preenchida nesse período.'); return; }
+    const grupos = []; rows.forEach(r => { const g = fmtDia(r.data)+' · Culto da '+r.culto.toLowerCase()+(r.hora?' · '+r.hora:''); const t = g.charAt(0).toUpperCase()+g.slice(1);
+      if (!grupos.length || grupos[grupos.length-1].t !== t) grupos.push({t, rows:[]}); grupos[grupos.length-1].rows.push(r); });
+    const ck = S.perTipo === 'checkin';
+    const titulo = ((S.cfg&&S.cfg.igreja)||'Igreja')+(ck?' · Check-in de ':' · Escala de ')+dataBR(de)+' a '+dataBR(ate)+(S.filtro!=='todas'?' · '+conexaoNome(S.filtro):'');
+    const arq = (ck?'checkin-':'escala-')+de+'-a-'+ate;
+    const HEAD = ck ? CK_HEAD : ['Área','Conexão','Função','Nome'];
+    const vals = r => ck ? [r.area, r.funcao, r.pessoa, '', '', ''] : [r.area, r.conexao, r.funcao, r.pessoa];
+    const nc = HEAD.length; const ult = String.fromCharCode(64+nc);
+    if (tipo === 'pdf') {
+      await carregar(JSPDF); await carregar(AUTOTABLE);
+      const doc = new window.jspdf.jsPDF({orientation: ck?'landscape':'portrait', unit:'mm', format:'a4'});
+      doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.text(titulo, 14, 16);
+      const body = []; grupos.forEach(g => { body.push([{content:g.t, colSpan:nc, styles:{fillColor:[235,235,235], fontStyle:'bold'}}]); g.rows.forEach(r => body.push(vals(r))); });
+      doc.autoTable({ startY:22, theme:'grid', head:[ck ? HEAD.map(h => h.replace(' (', '\n(')) : HEAD], body, styles:{fontSize:9.5, cellPadding:2.4, minCellHeight: ck?10:0, valign:'middle', lineColor:[150,150,150], lineWidth:0.2, textColor:[20,20,20]}, headStyles:{fillColor:[25,25,25], textColor:255, fontStyle:'bold'},
+        columnStyles: ck ? {0:{cellWidth:34}, 1:{cellWidth:50}, 2:{cellWidth:46}, 3:{cellWidth:20}} : {} });
+      await baixar(arq+'.pdf', doc.output('arraybuffer'));
+    } else {
+      await carregar(EXCELJS);
+      const wb = new window.ExcelJS.Workbook();
+      const ws = wb.addWorksheet(ck?'Check-in':'Escala', {pageSetup:{orientation: ck?'landscape':'portrait', paperSize:9, fitToPage:true, fitToWidth:1, fitToHeight:0}});
+      ws.columns = ck ? [{width:20},{width:30},{width:26},{width:11},{width:32},{width:32}] : [{width:22},{width:22},{width:30},{width:30}];
+      ws.mergeCells('A1:'+ult+'1'); ws.getCell('A1').value = titulo; ws.getCell('A1').font = {bold:true, size:13};
+      const borda = {style:'thin', color:{argb:'FF888888'}}; const bordas = {top:borda, left:borda, bottom:borda, right:borda};
+      let n = 3; const hr = ws.getRow(n); hr.values = HEAD; hr.height = ck?32:18; hr.eachCell(c => { c.font = {bold:true, color:{argb:'FFFFFFFF'}}; c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF191919'}}; c.border = bordas; c.alignment = {vertical:'middle', wrapText:true}; }); ws.pageSetup.printTitlesRow = '3:3';
+      grupos.forEach(g => { n++; ws.mergeCells('A'+n+':'+ult+n); const c = ws.getCell('A'+n); c.value = g.t; c.font = {bold:true}; c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FFEDEDED'}}; c.border = bordas;
+        g.rows.forEach(r => { n++; const row = ws.getRow(n); row.values = vals(r); if (ck) row.height = 26; for (let k = 1; k <= nc; k++) { row.getCell(k).border = bordas; row.getCell(k).alignment = {vertical:'middle', wrapText:true}; } }); });
+      await baixar(arq+'.xlsx', await wb.xlsx.writeBuffer());
+    }
+  } catch(e) { console.warn(e); toast('Não foi possível gerar o arquivo agora.'); }
+  finally { btn.textContent = txt; btn.disabled = false; }
+}
+document.addEventListener('click', e => { const t = e.target.closest('button[data-per]'); if (t) exportarPeriodo(t.dataset.per, t); });
+
+/* ---------- AVISOS ---------- */
+function viewAvisos(){
+  const top = '<div class="bar"><h2 style="font-size:22px">Avisos</h2><span style="flex:1"></span>'+(temAvisos()?'<button class="btn" data-novo-aviso>+ Novo aviso</button>':'')+'</div>';
+  if (!S.avisos.length) return top + '<div class="empty">Nenhum aviso publicado ainda.</div>';
+  return top + [...S.avisos].sort((x, y) => (x.fixoFim||0) - (y.fixoFim||0)).map(a => { const pode = isAdm() || a.autor===S.uid;
+    return '<article class="card" id="av-'+esc(a.id)+'">'+imgTag(a.img,'banner')+'<h3>'+esc(a.titulo)+'<span class="tag">'+esc(a.fixoFim?'Fixo':(a.conexao?conexaoNome(a.conexao):'Geral'))+'</span></h3>'
+      + '<div class="meta">'+esc(nome(a.autor))+' · '+esc(fmtQuando(a.criadoEm))+'</div>'+txtLongo(a.texto)+btnLink(a.link)+btnLinks(a.botoes)
+      + (pode?'<div class="bar" style="margin:10px 0 0"><button class="link" data-edit-aviso="'+a.id+'">Editar</button><button class="link" data-del-aviso="'+a.id+'">Excluir</button></div>':'')+'</article>'; }).join('');
+}
+function formAviso(a){
+  const alvo = [{id:'',nome:'Geral (todas)'}, ...conexoes().filter(c=>podeConexao(c.id))];
+  abrir('<form><h2>'+(a?'Editar aviso':'Novo aviso')+'</h2><label class="f" for="aT">Título</label><input class="inp" id="aT" name="titulo" required maxlength="120" value="'+esc(a?a.titulo:'')+'">'
+    + '<label class="f" for="aC">Para quem</label><select class="inp" id="aC" name="conexao">'+opts(alvo, a?a.conexao||'':'')+'</select>'
+    + '<label class="f" for="aX">Mensagem</label><textarea class="inp" id="aX" name="texto" required>'+esc(a?a.texto:'')+'</textarea>'
+    + '<label class="f" for="aL">Link de inscrição (opcional)</label><input class="inp" id="aL" name="link" type="url" placeholder="https://" value="'+esc(a?a.link||'':'')+'">' + campoImg(a)
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Publicar aviso</button></div></form>',
+  async fd => {
+    const data = {titulo:String(fd.get('titulo')).trim(), texto:String(fd.get('texto')).trim(), link:String(fd.get('link')||'').trim(), conexao:fd.get('conexao')||null, img: await lerImg(fd, a),
+      autor: a?a.autor:S.uid, fixoFim: (a&&a.fixoFim)||0, criadoEm: a?a.criadoEm:new Date().toISOString(), atualizadoEm:new Date().toISOString()};
+    const ref = a ? S.db.doc('avisos/'+a.id) : S.db.collection('avisos').doc();
+    const ok = await salvar(ref, data, {acao:a?'editou':'criou', tipo:'aviso', resumo:data.titulo, antes:a?semId(a):null});
+    if (ok) toast(a?'Aviso atualizado':'Aviso publicado'); return ok;
+  });
+}
+
+/* ---------- AGENDA ---------- */
+function viewAgenda(){
+  const top = '<div class="bar"><h2 style="font-size:22px">Agenda</h2><span style="flex:1"></span>'+(temAvisos()?'<button class="btn" data-novo-evento>+ Novo evento</button>':'')+'</div>';
+  const prox = S.eventos.filter(e => e.data >= hoje());
+  if (!prox.length) return top + '<div class="empty">Nenhum evento marcado daqui para frente.</div>';
+  return top + prox.map(ev => { const d = new Date(ev.data+'T12:00:00'); const pode = isAdm() || ev.autor===S.uid;
+    return '<article class="card" id="ev-'+esc(ev.id)+'">'+imgTag(ev.img,'banner')+'<div class="ev"><div class="date"><b>'+d.getDate()+'</b>'+esc(d.toLocaleDateString('pt-BR',{month:'short'}).replace('.',''))+'</div><div>'
+      + '<h3>'+esc(ev.titulo)+'</h3><div class="meta">'+esc(d.toLocaleDateString('pt-BR',{weekday:'long'}))+(ev.hora?' · '+esc(ev.hora):'')+(ev.local?' · '+esc(ev.local):'')+'</div>'
+      + (ev.descricao?txtLongo(ev.descricao):'')+btnLink(ev.link)+btnZap(ev.contatos)
+      + (pode?'<div class="bar" style="margin:8px 0 0"><button class="link" data-edit-evento="'+ev.id+'">Editar</button><button class="link" data-del-evento="'+ev.id+'">Excluir</button></div>':'')+'</div></div></article>'; }).join('');
+}
+function formEvento(ev){
+  abrir('<form><h2>'+(ev?'Editar evento':'Novo evento')+'</h2><label class="f" for="eT">Nome do evento</label><input class="inp" id="eT" name="titulo" required maxlength="120" value="'+esc(ev?ev.titulo:'')+'">'
+    + '<div class="row"><div><label class="f" for="eD">Data</label><input class="inp" id="eD" type="date" name="data" required value="'+esc(ev?ev.data:hoje())+'"></div><div><label class="f" for="eH">Horário</label><input class="inp" id="eH" type="time" name="hora" value="'+esc(ev?ev.hora||'':'')+'"></div></div>'
+    + '<label class="f" for="eL">Local</label><input class="inp" id="eL" name="local" value="'+esc(ev?ev.local||'':'')+'">'
+    + '<label class="f" for="eX">Detalhes (opcional)</label><textarea class="inp" id="eX" name="descricao">'+esc(ev?ev.descricao||'':'')+'</textarea>'
+    + '<label class="f" for="eLk">Link de inscrição (opcional)</label><input class="inp" id="eLk" name="link" type="url" placeholder="https://" value="'+esc(ev?ev.link||'':'')+'">' + campoImg(ev)
+    + '<label class="f" for="eZ">Contatos no WhatsApp (opcional)</label><textarea class="inp" id="eZ" name="contatos" style="min-height:70px" placeholder="Nome | +55 11 99999-9999">'+esc(ev&&ev.contatos?ev.contatos.map(c=>c.nome+' | '+c.tel).join('\n'):'')+'</textarea><div class="hint">Um por linha, no formato Nome | número com DDD.</div>'
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Salvar evento</button></div></form>',
+  async fd => {
+    const data = {titulo:String(fd.get('titulo')).trim(), data:fd.get('data'), hora:fd.get('hora')||'', local:String(fd.get('local')||'').trim(), descricao:String(fd.get('descricao')||'').trim(), link:String(fd.get('link')||'').trim(),
+      contatos: String(fd.get('contatos')||'').split('\n').map(l => { const [n,t] = l.split('|').map(s=>s.trim()); return n && t ? {nome:n, tel:t} : null; }).filter(Boolean),
+      img: await lerImg(fd, ev), autor: ev?ev.autor:S.uid, atualizadoEm:new Date().toISOString()};
+    const ref = ev ? S.db.doc('eventos/'+ev.id) : S.db.collection('eventos').doc();
+    const ok = await salvar(ref, data, {acao:ev?'editou':'criou', tipo:'evento', resumo:data.titulo+' · '+fmtCurto(data.data), antes:ev?semId(ev):null});
+    if (ok) toast(ev?'Evento atualizado':'Evento salvo'); return ok;
+  });
+}
+document.addEventListener('click', async e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if ('novoAviso' in t.dataset && temAvisos()) formAviso();
+  if (t.dataset.editAviso) formAviso(S.avisos.find(a=>a.id===t.dataset.editAviso));
+  if (t.dataset.delAviso) { const a=S.avisos.find(x=>x.id===t.dataset.delAviso); if (a && await confirmar('Excluir o aviso “'+a.titulo+'”?')) { if (await excluir(S.db.doc('avisos/'+a.id), semId(a), 'aviso', a.titulo)) toast('Aviso excluído'); } }
+  if ('novoEvento' in t.dataset && temAvisos()) formEvento();
+  if (t.dataset.editEvento) formEvento(S.eventos.find(a=>a.id===t.dataset.editEvento));
+  if (t.dataset.delEvento) { const ev=S.eventos.find(x=>x.id===t.dataset.delEvento); if (ev && await confirmar('Excluir o evento “'+ev.titulo+'”?')) { if (await excluir(S.db.doc('eventos/'+ev.id), semId(ev), 'evento', ev.titulo)) toast('Evento excluído'); } }
+});
+
+/* ---------- HISTÓRICO ---------- */
+let histCache = null, histCarregando = false, histTipo = 'todos';
+function viewHistorico(){
+  if (!isAdm()) return '<div class="empty">Só administradores acessam o histórico.</div>';
+  const tipos = [{id:'todos',nome:'Tudo'},{id:'escala',nome:'Escalas'},{id:'aviso',nome:'Avisos'},{id:'evento',nome:'Agenda'},{id:'config',nome:'Ajustes'}];
+  const top = '<div class="bar"><h2 style="font-size:22px">Histórico de alterações</h2><span style="flex:1"></span><button class="btn ghost small" data-hist-reload>Atualizar</button>'+(S.dl?'<button class="btn ghost small" data-hist-csv>Baixar</button>':'')+'</div>'
+    + '<div class="chips">'+tipos.map(t=>'<button class="chip" data-hist-tipo="'+t.id+'" aria-pressed="'+(histTipo===t.id)+'">'+t.nome+'</button>').join('')+'</div>';
+  if (!histCache) return top + '<div class="empty">Carregando histórico…</div>';
+  const itens = histCache.filter(l => histTipo==='todos' || l.tipo===histTipo);
+  if (!itens.length) return top + '<div class="empty">Nenhuma alteração registrada ainda.</div>';
+  return top + '<div class="card">' + itens.slice(0,300).map(l => '<div class="log"><b>'+esc(nome(l.por))+'</b> <span class="act-'+esc(l.acao)+'">'+esc(l.acao)+'</span> '+esc(l.tipo)+': '+esc(l.resumo)
+    + '<div class="diff">'+esc(fmtQuando(l.em))+(l.acao==='editou'?' · '+esc(diff(l.antes,l.depois)):'')+'</div></div>').join('') + '</div>';
+}
+const fmtFuncoes = fs => (fs||[]).map(f => f.nome+': '+((f.pessoas||[]).join(', ')||'—')).join('; ');
+function diff(a,b){
+  if (!a||!b) return '';
+  const nomes = {data:'data',culto:'culto',conexao:'conexão',conexoes:'conexões',funcoes:'equipe',pessoas:'pessoas',obs:'obs',titulo:'título',texto:'mensagem',hora:'horário',local:'local',descricao:'detalhes'};
+  const out = [];
+  for (const k of Object.keys(nomes)) { const x = JSON.stringify(a[k]??''), y = JSON.stringify(b[k]??''); if (x!==y) out.push(nomes[k]+': '+fmtV(k,a[k])+' → '+fmtV(k,b[k])); }
+  return out.join(' | ') || 'sem mudança visível';
+}
+const fmtV = (k,v) => k==='funcoes' ? fmtFuncoes(v) : k==='conexao' ? (conexaoNome(v)||'—') : k==='conexoes' ? ((v||[]).map(conexaoNome).join(', ')||'—') : Array.isArray(v) ? v.join(', ') : (v==null||v==='' ? '—' : String(v));
+async function carregarHistorico(force){
+  if ((histCache && !force) || histCarregando) return; histCarregando = true;
+  try {
+    const ids = [...new Set([...S.membros, S.uid].filter(Boolean))];
+    const res = await Promise.all(ids.map(id => S.db.collection('log/'+id+'/e').orderBy('em','desc').limit(150).get().then(s=>s.docs.map(d=>d.data())).catch(()=>[])));
+    histCache = res.flat().sort((a,b)=>b.em.localeCompare(a.em));
+    await resolverNomes(histCache.map(l=>l.por));
+  } finally { histCarregando = false; }
+  if (S.tab==='historico') $('#view').innerHTML = viewHistorico();
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.histTipo) { histTipo = t.dataset.histTipo; render(); }
+  if ('histReload' in t.dataset) { histCache = null; render(); carregarHistorico(true); }
+  if ('histCsv' in t.dataset && histCache) {
+    const q = v => '"'+String(v??'').replace(/"/g,'""')+'"';
+    const lines = [['Quando','Quem','Ação','Tipo','Item','Mudanças'].map(q).join(';'), ...histCache.map(l => [fmtQuando(l.em), nome(l.por), l.acao, l.tipo, l.resumo, l.acao==='editou'?diff(l.antes,l.depois):''].map(q).join(';'))];
+    baixar('historico-painel.csv', '\uFEFF'+lines.join('\r\n'));
+  }
+});
+
+/* ---------- AJUDA / TUTORIAL ---------- */
+const passo = (titulo, itens, aberto) => '<details class="card tut"'+(aberto?' open':'')+'><summary><span>'+titulo+'</span><span class="chev" aria-hidden="true">›</span></summary><ol>'+itens.map(i => '<li>'+i+'</li>').join('')+'</ol></details>';
+function viewAjuda(){
+  const p = pessoaDe(S.uid); const lid = minhas().length > 0;
+  const voce = isAdm() ? 'Administrador: você pode fazer tudo no painel.' : lid ? PAPEIS[p.papel]+' da conexão '+esc(conexaoNome(p.conexao))+': você preenche a Direção do culto e o Super Kids nos dias da sua conexão.' : 'Consulta: você pode ver tudo. Se for líder, auxiliar ou da organização de uma conexão, faça seu cadastro (passo 3).';
+  let h = cardCadastro() + '<h2 class="section-title" style="margin-top:0">Como usar o painel</h2><div class="notice"><b>Seu acesso hoje</b><br>'+voce+'</div>';
+  h += passo('1. Primeiros passos', ['Entre no Claude sempre com o <b>mesmo e-mail</b> que recebeu o convite.', 'Abra o painel pelo link que você recebeu. O link é sempre o mesmo, então vale salvar nos favoritos.', 'Para ter um atalho no celular: no iPhone, toque em Compartilhar e depois em <b>Adicionar à Tela de Início</b>. No Android, toque no menu ⋮ e depois em <b>Adicionar à tela inicial</b>.', 'Este tutorial fica sempre no botão <b>❓ Como usar</b>, no topo da tela.'], true);
+  h += passo('2. Tela inicial', ['No cartão grande fica o <b>próximo domingo</b>, com o culto da manhã (amarelo) e o da noite (azul).', 'Toque numa área, como Direção do culto ou Louvor, para ver quem está escalado em cada função.', 'Logo abaixo vem o domingo seguinte, em <b>Em seguida</b>.', 'Em <b>Em breve</b> ficam os eventos e avisos. Os botões amarelos levam para a inscrição e os verdes abrem o WhatsApp de quem organiza.', 'No final ficam o Instagram e o YouTube da igreja.']);
+  h += passo('3. Fazer seu cadastro (líder, auxiliar ou organização)', ['Na tela inicial, preencha o cartão <b>É líder, auxiliar ou da organização da conexão?</b>', 'Coloque seu nome completo, o WhatsApp com DDD, a sua conexão e a sua função.', 'Toque em <b>Enviar cadastro</b> e aguarde a aprovação de um administrador.', 'Depois de enviado, a conexão só pode ser trocada por um administrador.', 'Quem só vai consultar não precisa se cadastrar.']);
+  h += passo('4. Ver a escala', ['Toque na aba <b>Escala</b>, embaixo.', 'Cada linha é um culto: a data fica à esquerda, com manhã ou noite logo abaixo.', 'As colunas são as áreas: Direção do culto, Super Kids, Louvor, Mídia, Staff e Ministração. No celular, deslize a tabela para o lado.', 'Toque em qualquer nome para abrir a página com cada função e quem está nela.', 'Use as setas ‹ › ao lado do mês para ver outros meses.']);
+  h += passo('5. Preencher a escala da sua conexão', ['Na aba <b>Escala</b>, encontre o domingo em que a sua conexão está na Direção do culto ou no Super Kids.', 'Toque no nome da sua conexão e depois em <b>Preencher escala</b> (ou <b>Editar escala</b>).', 'Digite os nomes em cada função: Estacionamento, Recepção, Envelopes e lembrancinhas e Café. Vaga vazia aparece como “vaga aberta”.', 'Toque em <b>Salvar escala</b>. Pronto, todo mundo já vê.', 'Você só consegue editar os dias da sua conexão. Louvor, Mídia, Staff e Ministração são preenchidos pelos administradores.']);
+  h += passo('6. Imprimir o check-in', ['Na aba <b>Escala</b>, no final de cada linha, toque em <b>Baixar PDF</b> ou <b>Baixar Excel</b>.', 'Na tela inicial também há o botão <b>Check-in do dia</b>.', 'A folha sai com Área, Função, Nome, Check-in e as assinaturas de retirada e de devolução do equipamento e do crachá.', 'No dia, marque o check-in de quem chegou e peça as assinaturas.']);
+  h += passo('7. Avisos e agenda', ['Na aba <b>Avisos</b> ficam os comunicados, e na <b>Agenda</b> ficam os eventos com data.', 'Quando houver, toque em <b>Fazer inscrição</b> ou no botão do WhatsApp.', 'Líderes e administradores podem publicar avisos e eventos pelo botão <b>+</b>.']);
+  h += passo('8. Histórico', ['A aba <b>Histórico</b> mostra tudo o que foi criado, editado ou excluído: quem fez, o quê, e a data e a hora.']);
+  if (isAdm()) h += passo('9. Para administradores', ['Em <b>Ajustes</b>, aprove os cadastros em <b>Pessoas e permissões</b>: escolha a função e a conexão e toque em <b>Salvar pessoas</b>.', 'Para convidar alguém, o dono do painel usa o botão <b>Compartilhar</b> e convida pelo e-mail como Editor. Depois, em Ajustes, envie o passo a passo pelo WhatsApp.', 'Administradores preenchem Louvor, Mídia, Staff e Ministração, e também podem criar <b>+ Culto extra</b>.', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
+  h += '<div class="end" style="justify-content:center;margin:18px 0"><button class="btn" data-go="inicio">Começar a usar</button></div>';
+  return h;
+}
+
+/* ---------- convite pelo WhatsApp ---------- */
+const LINK_PAINEL = 'https://claude.ai/artifact/QNZ6yrcPL5ZUPzMfv2NHJT';
+const msgConvite = n => 'Olá'+(n.trim()?', '+n.trim().split(' ')[0]:'')+'! Graça e paz! 🙌\n\nVocê foi convidado(a) para o Painel da '+((S.cfg&&S.cfg.igreja)||'igreja')+', onde ficam as escalas, os avisos e a agenda.\n\n*Como entrar:*\n1. Você vai receber um e-mail de convite do Claude (ele vem em inglês). Aceite o convite.\n2. Entre no Claude (claude.ai) com esse mesmo e-mail. Se ainda não tiver conta, crie uma com ele.\n3. Abra o painel por este link: '+LINK_PAINEL+'#ajuda\n   (Na primeira vez, aparece um tutorial com o passo a passo de tudo. Ele fica sempre no botão ❓ Como usar, no topo.)\n4. Na tela inicial, preencha o cadastro: nome completo, WhatsApp, sua conexão e se você é líder, auxiliar ou da organização.\n5. Aguarde a aprovação de um administrador. Depois disso, você já consegue preencher a escala da sua conexão.\n\nQualquer dúvida, é só me chamar!';
+const waUrl = (tel, txt) => { let d = String(tel||'').replace(/\D/g,''); if (d && d.length <= 11) d = '55'+d; return 'https://wa.me/'+d+'?text='+encodeURIComponent(txt); };
+document.addEventListener('input', e => { if (e.target.id==='cvN' || e.target.id==='cvW') { const a = $('#cvLink'); if (a) a.href = waUrl($('#cvW').value, msgConvite($('#cvN').value)); } });
+
+/* ---------- AJUSTES (administrador) ---------- */
+const DIAS = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+function viewAjustes(){
+  if (!isAdm()) return '<div class="empty">Só administradores acessam os ajustes.</div>';
+  const c = S.cfg || {};
+  let html = '<h2 class="section-title">Ajustes do painel</h2><div class="card"><form id="cfgForm">'
+    + '<label class="f" for="cI">Nome da igreja</label><input class="inp" id="cI" name="igreja" value="'+esc(c.igreja||'')+'">'
+    + '<label class="f" for="cC">Conexões</label><textarea class="inp" id="cC" name="conexoes">'+esc(conexoes().map(x=>x.nome).join('\n'))+'</textarea><div class="hint">Uma por linha. A ordem alfabética é automática.</div>'
+    + '<label class="f" for="cU">Cultos</label><textarea class="inp" id="cU" name="cultos">'+esc(cultos().map(x=>x.nome+(x.hora?' | '+x.hora:'')).join('\n'))+'</textarea><div class="hint">Um por linha, no formato Nome | horário. Ex.: Manhã | 10h</div>'
+    + '<label class="f" for="cIg">Link do Instagram</label><input class="inp" id="cIg" name="instagram" type="url" value="'+esc(((c.redes||{}).instagram)||'')+'">'
+    + '<label class="f" for="cYt">Link do YouTube</label><input class="inp" id="cYt" name="youtube" type="url" value="'+esc(((c.redes||{}).youtube)||'')+'">'
+    + '<label class="f" for="cDs">Postagens em destaque (opcional)</label><textarea class="inp" id="cDs" name="destaques" placeholder="Título | link do post ou vídeo">'+esc(((c.destaques)||[]).map(d=>d.titulo+' | '+d.link).join('\n'))+'</textarea><div class="hint">Uma por linha, no formato Título | link. Aparecem na tela inicial, em “Nas redes”.</div>'
+    + '<label class="f">Dias de culto</label><div class="chips">'+DIAS.map((d,i)=>'<label class="chip"><input type="checkbox" name="dia" value="'+i+'"'+(diasCulto().includes(i)?' checked':'')+'> '+d+'</label>').join('')+'</div>'
+    + '<div class="end"><button type="submit" class="btn">Salvar ajustes</button></div></form></div>';
+  html += '<h2 class="section-title">Áreas da escala</h2><div class="card">' + areas().map(a => '<p class="fn" style="margin:0 0 10px"><strong>'+esc(a.nome)+'</strong>'+(a.porConexao?'<span class="tag">por conexão</span>':'')+'<br><span class="meta">'+a.funcoes.map(f=>esc(f.nome)+(f.vagas?' ('+f.vagas+')':' (livre)')).join(', ')+'</span></p>').join('') + '<p class="hint">Para mudar áreas, funções ou quantidade de vagas, é só pedir ao Claude.</p></div>';
+  html += '<h2 class="section-title">Convidar pelo WhatsApp</h2><div class="card"><p class="meta" style="margin:0">1º: convide a pessoa pelo e-mail no botão Compartilhar do painel. 2º: mande para ela o passo a passo pelo WhatsApp.</p>'
+    + '<div class="row"><div><label class="f" for="cvN">Nome</label><input class="inp" id="cvN" autocomplete="off"></div><div><label class="f" for="cvW">WhatsApp com DDD</label><input class="inp" id="cvW" type="tel" inputmode="tel" placeholder="(11) 99999-9999"></div></div>'
+    + '<div class="end"><a class="btn zap" id="cvLink" target="_blank" rel="noopener" href="'+esc(waUrl('', msgConvite('')))+'">Enviar passo a passo no WhatsApp</a></div>'
+    + '<p class="hint">Sem número, o WhatsApp abre para você escolher o contato ou um grupo.</p></div>';
+  html += '<h2 class="section-title">Pessoas e permissões</h2>';
+  const ids = [...new Set([...S.membros, ...Object.keys(S.cadastros||{}), ...Object.keys(c.pessoas||{})])].filter(id => id && id!==S.uid);
+  const nAdm = Object.values(c.pessoas||{}).filter(p=>p.papel==='admin').length;
+  if (!ids.length) html += '<div class="empty">Ninguém além de você abriu o painel ainda. Quando cada pessoa abrir o link e enviar o cadastro, ela aparece aqui para você aprovar.</div>';
+  else html += '<div class="card tbl-wrap"><table class="lead"><thead><tr><th>Pessoa</th><th>Pediu</th><th>Função</th><th>Conexão</th><th>Extras</th><th></th></tr></thead><tbody>'
+    + ids.map(id => { const atual = (c.pessoas||{})[id]; const ped = (S.cadastros||{})[id]; const base = atual || ped || {papel:'leitura', conexao:''};
+      return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+((base.whatsapp)?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(base.whatsapp).replace(/\D/g,'').length<=11?'55':'')+String(base.whatsapp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(base.whatsapp)+'</a>':'')+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
+        + '<td><select class="inp" data-p-papel="'+esc(id)+'">'+opts(Object.entries(PAPEIS).map(([k,v])=>({id:k,nome:v})), base.papel)+'</select></td>'
+        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'">Remover</button></td></tr>'; }).join('')
+    + '</tbody></table><div class="end"><button class="btn" data-salvar-pessoas>Salvar pessoas</button></div></div>';
+  html += '<p class="hint">Administradores podem tudo (hoje: '+(nAdm+1)+' contando você; o ideal é até 5). Líder e Auxiliar preenchem só a Direção do culto e o Super Kids nos dias em que a conexão deles está escalada. Louvor, Mídia, Staff e Ministração ficam com os administradores. <b>Extras:</b> Gestão pode imprimir o check-in (PDF e Excel); Ministro pode editar a escala de Louvor; Avisos/Eventos pode publicar avisos e eventos (e editar ou excluir os que publicou). Os extras valem junto com qualquer função. Para conseguir salvar, a pessoa também precisa ser convidada pelo e-mail como Editor no compartilhamento.</p>';
+  return html;
+}
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'cfgForm') return; e.preventDefault();
+  const fd = new FormData(e.target); const old = S.cfg || {};
+  const lines = k => String(fd.get(k)||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  const data = { ...old, igreja:String(fd.get('igreja')||'').trim(),
+    conexoes: lines('conexoes').map(n=>({id:slug(n), nome:n})),
+    cultos: lines('cultos').map(l => { const [n,h] = l.split('|').map(s=>s.trim()); return {id:slug(n), nome:n, hora:h||''}; }),
+    diasCulto: fd.getAll('dia').map(Number),
+    redes: {...(old.redes||{}), instagram:String(fd.get('instagram')||'').trim(), youtube:String(fd.get('youtube')||'').trim()},
+    destaques: lines('destaques').map(l => { const k = l.lastIndexOf('|'); return k > 0 ? {titulo:l.slice(0,k).trim(), link:l.slice(k+1).trim()} : null; }).filter(Boolean) };
+  if (await salvar(S.db.doc('config/geral'), data, {acao:'editou', tipo:'config', resumo:'Ajustes do painel', antes:null})) toast('Ajustes salvos');
+});
+document.addEventListener('click', async e => {
+  const t = e.target.closest('button[data-rm-pessoa]'); if (!t || !isAdm()) return;
+  const id = t.dataset.rmPessoa; const quem = nomeComp(id);
+  if (!await confirmar('Remover o cadastro de '+quem+'?\n\nA permissão, a conexão, o WhatsApp e o pedido de cadastro serão apagados. Se a pessoa abrir o painel de novo, ela volta para o modo consulta e precisa fazer o cadastro outra vez.\n\nPara tirar também o acesso ao painel, remova o e-mail dela no botão Compartilhar.')) return;
+  t.disabled = true;
+  try {
+    const pessoas = {...((S.cfg && S.cfg.pessoas) || {})}; delete pessoas[id];
+    await S.db.doc('config/geral').set({...S.cfg, pessoas});
+    try { await S.db.doc('cadastros/'+id).delete(); } catch(err){}
+    try { await S.db.doc('membros/'+id).delete(); } catch(err){}
+    await logar('excluiu', 'config', 'Cadastro removido: '+quem, null, null);
+    toast('Cadastro de '+quem+' removido');
+  } catch(err){ falhaEscrita(err); }
+  finally { t.disabled = false; }
+});
+document.addEventListener('click', async e => {
+  const t = e.target.closest('button'); if (!t || !('salvarPessoas' in t.dataset) || !isAdm()) return;
+  const pessoas = {};
+  document.querySelectorAll('[data-p-papel]').forEach(sel => { const id = sel.dataset.pPapel; const con = document.querySelector('[data-p-con="'+id+'"]').value;
+    const ant = (S.cfg && S.cfg.pessoas && S.cfg.pessoas[id]) || {}; const ped = (S.cadastros||{})[id] || {};
+    pessoas[id] = {papel: sel.value, conexao: con || null, nome: ant.nome || ped.nome || S.names[id] || '', apelido: ant.apelido || ped.apelido || '', whatsapp: ant.whatsapp || ped.whatsapp || '', gestao: !!(document.querySelector('[data-p-gestao="'+id+'"]')||{}).checked, ministro: !!(document.querySelector('[data-p-min="'+id+'"]')||{}).checked, avisos: !!(document.querySelector('[data-p-av="'+id+'"]')||{}).checked}; });
+  const falta = Object.entries(pessoas).filter(([id,p]) => ehEquipe(p) && !p.conexao);
+  if (falta.length) { toast('Escolha a conexão de '+falta.map(([id])=>nome(id)).join(', ')+'.'); return; }
+  const nAdm = Object.values(pessoas).filter(p=>p.papel==='admin').length;
+  if (nAdm > 4 && !await confirmar('Serão '+(nAdm+1)+' administradores contando você. Confirmar?')) return;
+  const resumo = 'Pessoas: ' + (Object.entries(pessoas).filter(([,p])=>p.papel!=='leitura').map(([id,p]) => nome(id)+' ('+PAPEIS[p.papel]+(p.conexao&&p.papel!=='admin'?' · '+conexaoNome(p.conexao):'')+')').join('; ') || 'só consulta');
+  if (await salvar(S.db.doc('config/geral'), {...S.cfg, pessoas}, {acao:'editou', tipo:'config', resumo, antes:null})) toast('Pessoas salvas');
+});
+
+init();
+})();
+</script>
+
+</body>
+</html>

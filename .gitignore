@@ -1,0 +1,9 @@
+# Dados reais (nomes e WhatsApp): NUNCA vão para o GitHub
+dados-exportados/
+# Chaves e senhas
+.env
+.env.*
+!.env.exemplo
+node_modules/
+dist/
+.DS_Store
