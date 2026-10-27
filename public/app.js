@@ -423,9 +423,18 @@ function viewDetalhe(){
 }
 const botoesDia = d => S.uid ? '<div class="bar" style="margin:6px 0 12px">'+(temGestao()?'<button class="btn ghost small" data-dia-ficha="'+d+'">Check-in do dia</button>':'')+'<button class="btn ghost small" data-dia-csv="'+d+'">Planilha do dia</button></div>' : '';
 const bannerCadastro = () => (!S.uid || S.tab==='inicio' || S.tab==='ajuda' || isAdm() || !S.cfg || pessoaDe(S.uid) || S.meuCad) ? '' : '<div class="notice"><b>É líder, auxiliar ou da organização da conexão?</b> Faça seu cadastro para poder preencher a escala da sua conexão.<div style="margin-top:8px"><button class="btn small" data-go="inicio">Fazer meu cadastro</button></div></div>';
+const msgAprovacao = () => 'Olá! Acabei de fazer meu cadastro no painel da Família Alcançar: '+((S.meuCad||{}).nome||'')+' · '+(PAPEIS[(S.meuCad||{}).papel]||'')+' da conexão '+conexaoNome((S.meuCad||{}).conexao)+'. Pode aprovar, por favor?';
+// Logo depois do cadastro: janela com o botão verde para avisar o administrador.
+function avisarAdmin(){
+  abrir('<form><h2>Falta só avisar o administrador</h2><p style="margin:0">Seu cadastro foi enviado. Para ser aprovado, toque no botão verde e envie a mensagem pronta pelo WhatsApp.</p>'
+    + '<p class="hint">Até a aprovação, você só consegue ver o painel, como quem não entrou.</p>'
+    + '<a class="btn big" style="background:#25D366;color:#fff" href="https://wa.me/'+ADM_WPP()+'?text='+encodeURIComponent(msgAprovacao())+'" target="_blank" rel="noopener" data-avisou>Avisar o administrador pelo WhatsApp</a>'
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Fechar</button></div></form>', async () => true);
+}
+document.addEventListener('click', e => { if (e.target.closest('[data-avisou]')) setTimeout(() => { const d = $('#dlg'); if (d.open) d.close(); }, 300); });
 function cardCadastro(){
   if (!S.uid || isAdm() || pessoaDe(S.uid) || !S.cfg) return '';
-  if (S.meuCad) { const msg = 'Olá! Acabei de fazer meu cadastro no painel da Família Alcançar: '+(S.meuCad.nome||'')+' · '+(PAPEIS[S.meuCad.papel]||'')+' da conexão '+conexaoNome(S.meuCad.conexao)+'. Pode aprovar, por favor?';
+  if (S.meuCad) { const msg = msgAprovacao();
     return '<div class="notice">Cadastro enviado: '+esc(S.meuCad.nome||'')+' · '+esc(PAPEIS[S.meuCad.papel]||'')+' da conexão '+esc(conexaoNome(S.meuCad.conexao))+'. Agora é só aguardar a aprovação de um administrador. Para agilizar, avise pelo WhatsApp:<a class="btn" style="display:block;text-align:center;margin-top:12px;text-decoration:none;background:#25D366;color:#fff" href="https://wa.me/'+ADM_WPP()+'?text='+encodeURIComponent(msg)+'" target="_blank" rel="noopener">Avisar o administrador pelo WhatsApp</a></div>'; }
   return '<section class="card"><h3>É líder, auxiliar ou da organização da conexão?</h3><p class="meta" style="margin:4px 0 0">Faça seu cadastro para poder preencher a escala da sua conexão. Quem só vai consultar não precisa se cadastrar.</p><form id="cadForm">'
     + '<label class="f" for="kN">Nome completo</label><input class="inp" id="kN" name="nome" required autocomplete="name" value="'+esc(S.nomeConta||'')+'">'
@@ -445,7 +454,7 @@ document.addEventListener('submit', async e => {
   try {
     const r = await sb.from('cadastros').insert({id:S.uid, email:S.email, ...data}); if (r.error) throw r.error;
     await logar('criou','config','Pedido de cadastro: '+(PAPEIS[data.papel]||'')+' · '+conexaoNome(data.conexao), null, {nome:data.nome, papel:data.papel, conexao:data.conexao});
-    toast('Cadastro enviado'); await carregarPessoas(); renderTabs(); render();
+    await carregarPessoas(); renderTabs(); render(); avisarAdmin();
   } catch(err){ falhaEscrita(err); b.disabled = false; }
 });
 function viewInicio(){
