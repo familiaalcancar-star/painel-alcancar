@@ -29,3 +29,5 @@ O Netlify grátis só publica, de um repositório privado, alterações assinada
 Este repositório já está configurado para assinar como `familiaalcancar-star`
 (e-mail `348324950+familiaalcancar-star@users.noreply.github.com`). Alterações assinadas por outra
 pessoa aparecem no Netlify como "Unrecognized Git contributor" e não são publicadas.
+Pelo mesmo motivo, as mensagens de commit **não** devem ter a linha `Co-Authored-By:`
+(o Netlify conta o coautor como outro contribuidor e bloqueia a publicação).
