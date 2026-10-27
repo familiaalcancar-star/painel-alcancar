@@ -2,6 +2,18 @@
 /* Painel da Igreja Família Alcançar — versão 2.0 (Supabase).
    Mesma estrutura do painel feito no Claude (referencia/referencia-painel-atual.html);
    a camada de dados agora é o Supabase, e as permissões valem no banco (RLS). */
+// Esconde o selo "Powered by Netlify" que o Netlify coloca por cima da página (cobria as abas).
+// Qualquer elemento flutuante que não seja do painel, colocado direto no <body>, fica oculto.
+(function(){
+  const nosso = el => el.matches('.wrap, #tabs, #dlg, #chat, .toast, [role="dialog"], script, style, link, noscript');
+  const esconder = () => [...document.body.children].forEach(el => {
+    if (nosso(el)) return;
+    const pos = getComputedStyle(el).position;
+    if (/netlify/i.test(el.tagName + ' ' + el.id + ' ' + (typeof el.className === 'string' ? el.className : '')) || pos === 'fixed' || pos === 'sticky' || el.tagName === 'IFRAME')
+      el.style.setProperty('display', 'none', 'important');
+  });
+  esconder(); new MutationObserver(esconder).observe(document.body, {childList:true});
+})();
 const sb = window.supabase.createClient(window.PAINEL.url, window.PAINEL.chave, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' }
 });

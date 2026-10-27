@@ -42,6 +42,10 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
 
   console.log('Visitante (sem login)');
   let p = await abrir(null);
+  await p.evaluate(() => { const e = document.createElement('netlify-drawer'); const sh = e.attachShadow({mode:'open'}); sh.innerHTML = '<div style="position:fixed;right:10px;bottom:10px">Powered by Netlify</div>'; document.body.appendChild(e);
+    const d = document.createElement('div'); d.id = 'selo-falso'; d.style.cssText = 'position:fixed;bottom:0;right:0'; d.textContent = 'Powered by Netlify'; document.body.appendChild(d); });
+  await p.waitForTimeout(100);
+  conferir(await p.evaluate(() => getComputedStyle(document.querySelector('netlify-drawer')).display === 'none' && getComputedStyle(document.querySelector('#selo-falso')).display === 'none' && getComputedStyle(document.querySelector('#tabs')).display !== 'none'), 'selo "Powered by Netlify" escondido e abas visíveis');
   conferir(JSON.stringify(await abas(p)) === JSON.stringify(['Início','Escala','Avisos','Agenda']), 'vê só Início, Escala, Avisos e Agenda');
   conferir(await p.isVisible('[data-entrar]'), 'botão Entrar no topo');
   conferir((await p.textContent('#subtitle')).includes('Somente visualização'), 'subtítulo "Somente visualização"');
