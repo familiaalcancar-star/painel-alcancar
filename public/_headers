@@ -1,0 +1,4 @@
+# Cabeçalhos de segurança (lidos pelo Cloudflare Pages; o Netlify usa o netlify.toml)
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
