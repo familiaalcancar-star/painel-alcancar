@@ -10,3 +10,6 @@ dist/
 
 # Capturas dos testes de tela
 teste/capturas/
+
+# Pacote do site para hospedar em outro lugar
+painel-alcancar-site.zip
