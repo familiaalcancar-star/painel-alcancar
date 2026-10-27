@@ -869,7 +869,7 @@ document.addEventListener('click', e => { const t = e.target.closest('button[dat
 /* ---------- IMPORTAR ESCALA (só administrador) ---------- */
 // Lê um Excel, CSV ou PDF com a escala e preenche Direção do culto e Super Kids (nomes das
 // conexões), Louvor e Mídia (nomes das pessoas). Mostra uma prévia antes de gravar.
-const PDFJS = 'vendor/pdfjs-3.11.174.min.js', PDFJS_WORKER = 'vendor/pdfjs-3.11.174.worker.min.js';
+const PDFJS = 'vendor/pdfjs-3.11.174.min.js', PDFJS_WORKER = 'vendor/pdfjs-3.11.174.worker.min.js', JSZIP = 'vendor/jszip-3.10.1.min.js';
 const AREAS_IMPORT = ['direcao','superkids','louvor','midia'];
 const nrm = s => semAcento(s).replace(/[^a-z0-9]+/g,' ').trim();
 const MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
@@ -928,6 +928,27 @@ async function lerArquivo(file){
     const linhas = (await file.text()).replace(/^﻿/,'').split(/\r?\n/); const sep = [';','\t',','].find(s => linhas.some(l => l.includes(s))) || ';';
     return [{nome:file.name, rows:linhas.map(l => l.split(sep).map((t, j) => ({t:t.replace(/^"|"$/g,'').trim(), x:j+1})))}];
   }
+  if (ext === 'docx') {
+    // Word: lê o document.xml; cada parágrafo solto vira uma linha de 1 célula (títulos como "LOUVOR"),
+    // e cada tabela vira suas linhas. Células mescladas na vertical repetem o texto de cima.
+    await carregar(JSZIP); const zip = await window.JSZip.loadAsync(await file.arrayBuffer());
+    const xml = await zip.file('word/document.xml').async('string');
+    const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const doc = new DOMParser().parseFromString(xml, 'application/xml'), body = doc.getElementsByTagNameNS(W, 'body')[0];
+    const filhos = (el, nome) => [...el.childNodes].filter(n => n.localName === nome);
+    const texto = el => (el.localName === 'p' ? [el] : [...el.getElementsByTagNameNS(W, 'p')]).map(p => [...p.getElementsByTagNameNS(W, 't')].map(x => x.textContent).join('')).filter(Boolean).join('\n').trim();
+    const rows = [];
+    const lerTabela = tbl => { const acima = {};
+      filhos(tbl, 'tr').forEach(tr => { const cs = []; let col = 1;
+        filhos(tr, 'tc').forEach(tc => { const pr = filhos(tc, 'tcPr')[0]; const span = pr && filhos(pr, 'gridSpan')[0] ? +filhos(pr, 'gridSpan')[0].getAttributeNS(W, 'val') || 1 : 1;
+          const vm = pr && filhos(pr, 'vMerge')[0]; let t = texto(tc);
+          if (vm && vm.getAttributeNS(W, 'val') !== 'restart' && !t) t = acima[col] || ''; else acima[col] = t;
+          cs.push({t, x:col}); col += span; });
+        rows.push(cs); });
+      rows.push([]); };
+    [...body.childNodes].forEach(n => { if (n.localName === 'p') { const t = texto(n); if (t) rows.push([{t, x:1}]); } else if (n.localName === 'tbl') lerTabela(n); });
+    return [{nome:file.name, rows}];
+  }
   if (ext === 'pdf') {
     await carregar(PDFJS); window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
     const pdf = await window.pdfjsLib.getDocument({data: new Uint8Array(await file.arrayBuffer())}).promise; const tabs = [];
@@ -940,7 +961,7 @@ async function lerArquivo(file){
     }
     return tabs;
   }
-  throw new Error('formato');
+  throw new Error(ext === 'doc' ? 'doc' : 'formato');
 }
 // Tabelas → itens {data, culto|null, area, funcao|null, valor}
 function interpretar(tabs){
@@ -954,12 +975,12 @@ function interpretar(tabs){
       if (!cheias.length) return;
       const datas = cheias.filter(c => lerData(c.t)), rotulos = cheias.map(c => ({c, r:lerRotulo(c.t)})).filter(x => x.r);
       // cabeçalho com datas nas colunas (ex.: louvor: funções × domingos)
-      if (datas.length >= 2 && datas.length >= cheias.length - 1) { colsData = datas.map(c => ({x:c.x, x0:c.x0, x1:c.x1, data:lerData(c.t), culto:lerCulto(c.t)})); cab = null; return; }
+      if ((datas.length >= 2 || (datas.length === 1 && !cab)) && datas.length >= cheias.length - 1) { colsData = datas.map(c => ({x:c.x, x0:c.x0, x1:c.x1, data:lerData(c.t), culto:lerCulto(c.t)})); cab = null; return; }
       if (colsData && cheias.every(c => lerCulto(c.t) || !c.t) && cheias.length >= 2) { cheias.forEach(c => { const col = colsData.find(k => naColuna([c], k, tab.pdf)); if (col) col.culto = lerCulto(c.t); }); return; }
       // cabeçalho com áreas nas colunas
       if (rotulos.length >= 1 && !datas.length && (rotulos.length >= 2 || cheias.some(c => /^data|^dia|^domingo/.test(nrm(c.t))))) { cab = rotulos.map(x => ({x:x.c.x, x0:x.c.x0, x1:x.c.x1, ...x.r})); colsData = null; return; }
       // título de seção ("LOUVOR", "MÍDIA")
-      if (cheias.length === 1 && rotulos.length === 1 && !rotulos[0].r.funcao) { areaSecao = rotulos[0].r.area; return; }
+      if (cheias.length === 1 && rotulos.length === 1 && !rotulos[0].r.funcao) { areaSecao = rotulos[0].r.area; cab = null; colsData = null; return; }
       if (colsData) {
         const rot = rotulos.find(x => x.c.x === cheias[0].x) || (rotulos.length && rotulos[0].c === cheias[0] ? rotulos[0] : null);
         let alvo = rot ? rot.r : (areaSecao ? {area:areaSecao} : null);
@@ -1002,13 +1023,13 @@ async function planejar(itens){
   return {mudancas, fora};
 }
 function formImportar(){
-  abrir('<form><h2>Importar escala</h2><p class="meta" style="margin:0">Escolha um arquivo <b>Excel (.xlsx)</b>, <b>CSV</b> ou <b>PDF</b> com a escala. O painel reconhece as datas, o culto (manhã ou noite) e as áreas <b>Direção do culto</b> e <b>Super Kids</b> (nomes das conexões), <b>Louvor</b> e <b>Mídia</b> (nomes das pessoas).</p>'
-    + '<label class="f" for="iArq">Arquivo</label><input class="inp" id="iArq" name="arq" type="file" required accept=".xlsx,.csv,.pdf">'
+  abrir('<form><h2>Importar escala</h2><p class="meta" style="margin:0">Escolha um arquivo <b>Excel (.xlsx)</b>, <b>Word (.docx)</b>, <b>CSV</b> ou <b>PDF</b> com a escala. O painel reconhece as datas, o culto (manhã ou noite) e as áreas <b>Direção do culto</b> e <b>Super Kids</b> (nomes das conexões), <b>Louvor</b> e <b>Mídia</b> (nomes das pessoas).</p>'
+    + '<label class="f" for="iArq">Arquivo</label><input class="inp" id="iArq" name="arq" type="file" required accept=".xlsx,.csv,.pdf,.docx">'
     + '<p class="hint">Se a linha não disser manhã ou noite, a escala vale para os dois cultos do dia. Nada é gravado antes da prévia.</p>'
     + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Ler arquivo</button></div></form>',
   async fd => {
     const f = fd.get('arq'); if (!f || !f.size) { toast('Escolha um arquivo.'); return false; }
-    let tabs; try { tabs = await lerArquivo(f); } catch(e){ console.warn(e); toast(e && e.message === 'formato' ? 'Use um arquivo .xlsx, .csv ou .pdf (no Excel antigo, salve como .xlsx).' : 'Não consegui ler esse arquivo.'); return false; }
+    let tabs; try { tabs = await lerArquivo(f); } catch(e){ console.warn(e); toast(e && e.message === 'doc' ? 'Esse é um Word antigo (.doc). Abra no Word e salve como .docx.' : e && e.message === 'formato' ? 'Use um arquivo .xlsx, .csv, .docx ou .pdf (no Excel antigo, salve como .xlsx).' : 'Não consegui ler esse arquivo.'); return false; }
     const {itens, ignorados} = interpretar(tabs);
     const {mudancas, fora} = await planejar(itens);
     setTimeout(() => previaImportar(f.name, mudancas, [...fora, ...ignorados.slice(0, 20).map(t => 'Linha não reconhecida: "'+t+'"')]), 0);
@@ -1160,7 +1181,7 @@ function viewAjuda(){
   h += passo('7. Avisos e agenda', ['Na aba <b>Avisos</b> ficam os comunicados, e na <b>Agenda</b> ficam os eventos com data.', 'Quando houver, toque em <b>Fazer inscrição</b> ou no botão do WhatsApp.', 'Quem tem a permissão <b>Avisos/Eventos</b> publica pelo botão <b>+</b>.']);
   if (isAdm()) {
     h += passo('8. Histórico', ['A aba <b>Histórico</b> mostra tudo o que foi criado, editado ou excluído: quem fez, o quê, e a data e a hora.']);
-    h += passo('9. Para administradores', ['Em <b>Ajustes</b>, aprove os cadastros em <b>Pessoas e permissões</b>: escolha a função e a conexão e toque em <b>Salvar pessoas</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
+    h += passo('9. Para administradores', ['Em <b>Ajustes</b>, aprove os cadastros em <b>Pessoas e permissões</b>: escolha a função e a conexão e toque em <b>Salvar pessoas</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, Word, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
   }
   h += '<div class="end" style="justify-content:center;margin:18px 0"><button class="btn" data-go="inicio">Começar a usar</button></div>';
   return h;
