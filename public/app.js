@@ -3,7 +3,7 @@
    Mesma estrutura do painel feito no Claude (referencia/referencia-painel-atual.html);
    a camada de dados agora é o Supabase, e as permissões valem no banco (RLS). */
 const sb = window.supabase.createClient(window.PAINEL.url, window.PAINEL.chave, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' }
 });
 const S = { pronto:false, sessao:undefined, uid:null, email:'', cfg:null, cfgLoaded:false, pessoas:{}, cadastros:{}, meuCad:null, membros:[], emails:{}, whatsAdm:'',
   prox:[], mesEsc:[], avisos:[], eventos:[], names:{}, tab:'inicio', filtro:'todas',
@@ -162,29 +162,103 @@ function renderWho(){
       + '<span class="eu"><span>'+esc(nome(S.uid) === 'Alguém' ? S.email : nome(S.uid))+'</span><button class="sair" data-sair>Sair</button></span>'
     : '<button class="entrar" data-entrar>Entrar</button>';
 }
-function formLogin(){
-  abrir('<form id="loginForm"><h2>Entrar</h2><p class="meta" style="margin:0">Só quem vai preencher escalas, publicar avisos ou fazer check-in precisa entrar. Para só consultar, não precisa.</p>'
-    + '<label class="f" for="lE">Seu e-mail</label><input class="inp" id="lE" name="email" type="email" required autocomplete="email" inputmode="email" placeholder="voce@exemplo.com">'
-    + '<p class="hint">Vamos mandar um código de 6 números para esse e-mail. Não precisa de senha.</p>'
-    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Receber código</button></div></form>',
+const urlVolta = () => location.origin + location.pathname;
+const IC_G = '<svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.7 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17.1z"/><path fill="#FBBC05" d="M10.5 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.3-8.5 2.3-6.2 0-11.5-4.2-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>';
+// Mensagens do Supabase em português.
+function erroLogin(e){
+  const m = String((e && (e.code || '')) + ' ' + (e && e.message || '')).toLowerCase();
+  if (/invalid_credentials|invalid login/.test(m)) return 'E-mail ou senha incorretos.';
+  if (/email_not_confirmed|not confirmed/.test(m)) return 'Falta confirmar o e-mail: toque no link que enviamos (veja também o spam).';
+  if (/user_already_exists|already registered/.test(m)) return 'Já existe uma conta com esse e-mail. Use Entrar ou Esqueci minha senha.';
+  if (/weak_password|password should|at least/.test(m)) return 'A senha precisa ter pelo menos 8 caracteres, misturando letras e números.';
+  if (/same_password|different from the old/.test(m)) return 'A nova senha precisa ser diferente da anterior.';
+  if (/rate|limit|seconds|too many/.test(m)) return 'Muitas tentativas seguidas. Espere alguns minutos e tente de novo.';
+  if (/provider is not enabled|unsupported provider/.test(m)) return 'O login com Google ainda não foi ativado. Use e-mail e senha.';
+  if (/signup.*disabled|signups not allowed/.test(m)) return 'A criação de contas está desligada no momento.';
+  if (/fetch|network/.test(m)) return 'Sem internet no momento. Tente de novo em instantes.';
+  return 'Não foi possível concluir agora. Tente de novo em instantes.';
+}
+function aviso(titulo, html){
+  abrir('<form><h2>'+titulo+'</h2><div class="notice" style="margin:0">'+html+'</div><div class="end"><button type="button" class="btn ghost" data-cancel>Fechar</button><button type="submit" class="btn">Entendi</button></div></form>', async () => true);
+}
+function formLogin(email){
+  abrir('<form id="loginForm"><h2>Entrar</h2><p class="meta" style="margin:0">Só quem vai preencher escalas, publicar avisos, fazer check-in ou usar o bate-papo precisa entrar. Para só consultar, não precisa.</p>'
+    + '<button type="button" class="btn-google" data-google>'+IC_G+'<span>Continuar com Google</span></button>'
+    + '<div class="ou">ou entre com e-mail e senha</div>'
+    + '<label class="f" for="lE">E-mail</label><input class="inp" id="lE" name="email" type="email" required autocomplete="username" inputmode="email" placeholder="voce@exemplo.com" value="'+esc(email||'')+'">'
+    + '<label class="f" for="lS">Senha</label><input class="inp" id="lS" name="senha" type="password" required autocomplete="current-password">'
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Entrar</button></div>'
+    + '<div class="login-links"><button type="button" class="link" data-criar-conta>Criar conta</button><button type="button" class="link" data-esqueci>Esqueci minha senha</button></div></form>',
   async fd => {
-    const email = String(fd.get('email')||'').trim().toLowerCase();
-    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
-    if (error) { console.warn(error); toast(/rate|limit|seconds/i.test(error.message) ? 'Muitas tentativas. Espere um minuto e tente de novo.' : 'Não foi possível enviar o código agora.'); return false; }
-    setTimeout(() => formCodigo(email), 0); return true;
+    const { error } = await sb.auth.signInWithPassword({ email: String(fd.get('email')||'').trim().toLowerCase(), password: String(fd.get('senha')||'') });
+    if (error) { console.warn(error); toast(erroLogin(error)); return false; }
+    return true;
   });
 }
-function formCodigo(email){
-  abrir('<form><h2>Digite o código</h2><p class="meta" style="margin:0">Enviamos um e-mail para <b>'+esc(email)+'</b>. Pode levar 1 ou 2 minutos; confira também a caixa de spam.</p>'
-    + '<label class="f" for="lC">Código</label><input class="inp codigo" id="lC" name="codigo" required inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="000000">'
-    + '<p class="hint">Se o e-mail trouxer um link em vez do código, é só tocar no link.</p>'
-    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Entrar</button></div></form>',
+function formCriarConta(email){
+  abrir('<form><h2>Criar conta</h2><p class="meta" style="margin:0">Se você tem Gmail, é mais fácil usar <b>Continuar com Google</b>, sem criar senha.</p>'
+    + '<label class="f" for="cE">E-mail</label><input class="inp" id="cE" name="email" type="email" required autocomplete="username" inputmode="email" value="'+esc(email||'')+'">'
+    + '<label class="f" for="cS">Crie uma senha</label><input class="inp" id="cS" name="senha" type="password" required minlength="8" autocomplete="new-password">'
+    + '<label class="f" for="cS2">Repita a senha</label><input class="inp" id="cS2" name="senha2" type="password" required minlength="8" autocomplete="new-password"><p class="hint">Pelo menos 8 caracteres, misturando letras e números.</p>'
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Criar conta</button></div>'
+    + '<div class="login-links"><button type="button" class="link" data-voltar-login>Já tenho conta</button></div></form>',
   async fd => {
-    const token = String(fd.get('codigo')||'').replace(/\D/g,'');
-    const { error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
-    if (error) { console.warn(error); toast('Código incorreto ou vencido. Confira ou peça outro.'); return false; }
+    const em = String(fd.get('email')||'').trim().toLowerCase(), s = String(fd.get('senha')||'');
+    if (s !== String(fd.get('senha2')||'')) { toast('As duas senhas não estão iguais.'); return false; }
+    if (s.length < 8) { toast('A senha precisa ter pelo menos 8 caracteres.'); return false; }
+    const { data, error } = await sb.auth.signUp({ email: em, password: s, options: { emailRedirectTo: urlVolta() } });
+    if (error) { console.warn(error); toast(erroLogin(error)); return false; }
+    if (data && data.session) return true;
+    if (data && data.user && Array.isArray(data.user.identities) && !data.user.identities.length) { toast(erroLogin({code:'user_already_exists'})); return false; }
+    setTimeout(() => aviso('Confirme seu e-mail', 'Enviamos um e-mail para <b>'+esc(em)+'</b>. Toque no link dele para ativar a conta e depois entre com seu e-mail e senha.<br><br>Pode levar alguns minutos; confira também a caixa de spam.'), 0);
     return true;
-  }, body => body.querySelector('#lC').focus());
+  });
+}
+function formEsqueci(email){
+  abrir('<form><h2>Esqueci minha senha</h2><p class="meta" style="margin:0">Digite o e-mail da sua conta. Vamos mandar um link para você criar uma senha nova.</p>'
+    + '<label class="f" for="rE">E-mail</label><input class="inp" id="rE" name="email" type="email" required autocomplete="username" inputmode="email" value="'+esc(email||'')+'">'
+    + '<p class="hint">Se você entra com o Google, não precisa de senha: use <b>Continuar com Google</b>.</p>'
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Enviar link</button></div></form>',
+  async fd => {
+    const em = String(fd.get('email')||'').trim().toLowerCase();
+    const { error } = await sb.auth.resetPasswordForEmail(em, { redirectTo: urlVolta() });
+    if (error) { console.warn(error); toast(erroLogin(error)); return false; }
+    setTimeout(() => aviso('Confira seu e-mail', 'Se existir uma conta com <b>'+esc(em)+'</b>, enviamos um link para criar uma senha nova. Abra o e-mail <b>neste mesmo aparelho</b> e toque no link.<br><br>Confira também a caixa de spam.'), 0);
+    return true;
+  });
+}
+function formNovaSenha(){
+  abrir('<form><h2>Criar senha nova</h2>'
+    + '<label class="f" for="nS">Senha nova</label><input class="inp" id="nS" name="senha" type="password" required minlength="8" autocomplete="new-password">'
+    + '<label class="f" for="nS2">Repita a senha nova</label><input class="inp" id="nS2" name="senha2" type="password" required minlength="8" autocomplete="new-password"><p class="hint">Pelo menos 8 caracteres, misturando letras e números.</p>'
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Agora não</button><button type="submit" class="btn">Salvar senha</button></div></form>',
+  async fd => {
+    const s = String(fd.get('senha')||'');
+    if (s !== String(fd.get('senha2')||'')) { toast('As duas senhas não estão iguais.'); return false; }
+    if (s.length < 8) { toast('A senha precisa ter pelo menos 8 caracteres.'); return false; }
+    const { error } = await sb.auth.updateUser({ password: s });
+    if (error) { console.warn(error); toast(erroLogin(error)); return false; }
+    toast('Senha nova salva. Você já está conectado.'); return true;
+  }, body => body.querySelector('#nS').focus());
+}
+const emailDoForm = () => { const i = document.querySelector('#dlg input[type=email]'); return i ? i.value.trim() : ''; };
+document.addEventListener('click', async e => {
+  if (e.target.closest('[data-google]')) {
+    const b = e.target.closest('[data-google]'); b.disabled = true;
+    const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: urlVolta(), queryParams: { prompt: 'select_account' } } });
+    if (error) { console.warn(error); toast(erroLogin(error)); b.disabled = false; }
+  }
+  if (e.target.closest('[data-criar-conta]')) formCriarConta(emailDoForm());
+  if (e.target.closest('[data-esqueci]')) formEsqueci(emailDoForm());
+  if (e.target.closest('[data-voltar-login]')) formLogin(emailDoForm());
+});
+// Erros que voltam no endereço depois do Google ou de um link de e-mail.
+function erroNaUrl(){
+  const q = new URLSearchParams(location.search), h = new URLSearchParams(location.hash.slice(1));
+  const cod = q.get('error_code') || h.get('error_code') || q.get('error') || h.get('error');
+  if (!cod) return;
+  history.replaceState(null, '', location.pathname + '#' + S.tab);
+  toast(/expired|otp/.test(cod) ? 'Esse link venceu ou já foi usado. Peça outro.' : /access_denied/.test(cod) ? 'O login foi cancelado.' : 'Não foi possível entrar. Tente de novo.');
 }
 document.addEventListener('click', async e => {
   if (e.target.closest('[data-entrar]')) formLogin();
@@ -194,6 +268,7 @@ async function aplicarSessao(session){
   const uid = session ? session.user.id : null;
   if (uid === S.sessao) return;
   S.sessao = uid; S.uid = uid; S.email = session ? (session.user.email||'') : '';
+  S.nomeConta = session ? ((session.user.user_metadata||{}).full_name || (session.user.user_metadata||{}).name || '') : '';
   if (uid) {
     try { await sb.from('acessos').upsert({id:uid, email:S.email, visto:new Date().toISOString()}); } catch(e){}
     try { if (!localStorage.getItem('tutorialVisto')) { S.tab = 'ajuda'; localStorage.setItem('tutorialVisto', '1'); } } catch(e){}
@@ -209,12 +284,13 @@ async function init(){
   renderTabs(); renderWho();
   const { data } = await sb.auth.getSession();
   await aplicarSessao(data.session);
-  sb.auth.onAuthStateChange((ev, session) => { setTimeout(() => aplicarSessao(session), 0); });
+  sb.auth.onAuthStateChange((ev, session) => { setTimeout(() => aplicarSessao(session), 0); if (ev === 'PASSWORD_RECOVERY') setTimeout(formNovaSenha, 600); });
+  erroNaUrl();
   try { await carregarConfig(); S.mes = proxCulto().slice(0,7);
     await Promise.all([carregarPessoas(), carregarProx(), carregarMes(), carregarAvisos(), carregarEventos()]); await carregarChat(); }
   catch(e){ console.warn(e); }
   S.pronto = true;
-  if (location.hash.includes('access_token')) history.replaceState(null, '', location.pathname + '#' + S.tab);
+  if (/access_token|type=/.test(location.hash)) history.replaceState(null, '', location.pathname + '#' + S.tab);
   renderWho(); renderTabs(); render();
   assinarTempoReal();
 }
@@ -352,7 +428,7 @@ function cardCadastro(){
   if (S.meuCad) { const msg = 'Olá! Acabei de fazer meu cadastro no painel da Família Alcançar: '+(S.meuCad.nome||'')+' · '+(PAPEIS[S.meuCad.papel]||'')+' da conexão '+conexaoNome(S.meuCad.conexao)+'. Pode aprovar, por favor?';
     return '<div class="notice">Cadastro enviado: '+esc(S.meuCad.nome||'')+' · '+esc(PAPEIS[S.meuCad.papel]||'')+' da conexão '+esc(conexaoNome(S.meuCad.conexao))+'. Agora é só aguardar a aprovação de um administrador. Para agilizar, avise pelo WhatsApp:<a class="btn" style="display:block;text-align:center;margin-top:12px;text-decoration:none;background:#25D366;color:#fff" href="https://wa.me/'+ADM_WPP()+'?text='+encodeURIComponent(msg)+'" target="_blank" rel="noopener">Avisar o administrador pelo WhatsApp</a></div>'; }
   return '<section class="card"><h3>É líder, auxiliar ou da organização da conexão?</h3><p class="meta" style="margin:4px 0 0">Faça seu cadastro para poder preencher a escala da sua conexão. Quem só vai consultar não precisa se cadastrar.</p><form id="cadForm">'
-    + '<label class="f" for="kN">Nome completo</label><input class="inp" id="kN" name="nome" required autocomplete="name">'
+    + '<label class="f" for="kN">Nome completo</label><input class="inp" id="kN" name="nome" required autocomplete="name" value="'+esc(S.nomeConta||'')+'">'
     + '<label class="f" for="kA">Me chamar: (apelido)</label><input class="inp" id="kA" name="apelido" placeholder="Como você prefere ser chamado">'
     + '<label class="f" for="kW">WhatsApp (com DDD)</label><input class="inp" id="kW" name="whatsapp" type="tel" required inputmode="tel" placeholder="(11) 99999-9999">'
     + '<label class="f" for="kC">Conexão</label><select class="inp" id="kC" name="conexao" required><option value="">Escolha…</option>'+opts(conexoes(), '')+'</select>'
@@ -881,7 +957,7 @@ function viewAjuda(){
   const voce = !S.uid ? 'Visitante: você pode ver tudo sem entrar. Para preencher a escala da sua conexão, toque em <b>Entrar</b> e depois faça seu cadastro (passo 3).'
     : isAdm() ? 'Administrador: você pode fazer tudo no painel.' : lid ? PAPEIS[p.papel]+' da conexão '+esc(conexaoNome(p.conexao))+': você preenche a Direção do culto e o Super Kids nos dias da sua conexão.' : 'Consulta: você pode ver tudo. Se for líder, auxiliar ou da organização de uma conexão, faça seu cadastro (passo 3).';
   let h = cardCadastro() + '<h2 class="section-title" style="margin-top:0">Como usar o painel</h2><div class="notice"><b>Seu acesso hoje</b><br>'+voce+'</div>';
-  h += passo('1. Primeiros passos', ['Para só consultar a escala, os avisos e a agenda, <b>não precisa entrar</b>: é só abrir o link.', 'Para preencher a escala, publicar avisos ou fazer check-in, toque em <b>Entrar</b>, no topo da tela, e digite o seu e-mail.', 'Você recebe um e-mail com um <b>código de 6 números</b>. Digite o código no painel e pronto. Não precisa de senha.', 'Neste aparelho, você continua conectado. Para sair, toque em <b>Sair</b>, embaixo do seu nome.', 'Para ter um atalho no celular: no iPhone, toque em Compartilhar e depois em <b>Adicionar à Tela de Início</b>. No Android, toque no menu ⋮ e depois em <b>Adicionar à tela inicial</b>.', 'Este tutorial fica sempre no botão <b>❓ Como usar</b>, no topo da tela.'], true);
+  h += passo('1. Primeiros passos', ['Para só consultar a escala, os avisos e a agenda, <b>não precisa entrar</b>: é só abrir o link.', 'Para preencher a escala, publicar avisos, fazer check-in ou usar o bate-papo, toque em <b>Entrar</b>, no topo da tela.', 'O jeito mais fácil é <b>Continuar com Google</b> (quem tem Gmail). Ou entre com e-mail e senha: na primeira vez, toque em <b>Criar conta</b> e confirme pelo link que chega no e-mail.', 'Esqueceu a senha? Toque em <b>Esqueci minha senha</b> e siga o link que chega no e-mail.', 'Neste aparelho, você continua conectado. Para sair, toque em <b>Sair</b>, embaixo do seu nome.', 'Para ter um atalho no celular: no iPhone, toque em Compartilhar e depois em <b>Adicionar à Tela de Início</b>. No Android, toque no menu ⋮ e depois em <b>Adicionar à tela inicial</b>.', 'Este tutorial fica sempre no botão <b>❓ Como usar</b>, no topo da tela.'], true);
   h += passo('2. Tela inicial', ['No cartão grande fica o <b>próximo domingo</b>, com o culto da manhã (amarelo) e o da noite (azul).', 'Toque numa área, como Direção do culto ou Louvor, para ver quem está escalado em cada função.', 'Logo abaixo vem o domingo seguinte, em <b>Em seguida</b>.', 'Depois vêm a <b>Agenda</b> e os <b>Avisos</b>. Toque em um item para ver os detalhes. Os botões amarelos levam para a inscrição e os verdes abrem o WhatsApp de quem organiza.', 'No final ficam o Instagram, o YouTube e o endereço da igreja.']);
   h += passo('3. Fazer seu cadastro (líder, auxiliar ou organização)', ['Toque em <b>Entrar</b> e entre com o seu e-mail.', 'Na tela inicial, preencha o cartão <b>É líder, auxiliar ou da organização da conexão?</b>', 'Coloque seu nome completo, o WhatsApp com DDD, a sua conexão e a sua função.', 'Toque em <b>Enviar cadastro</b> e depois em <b>Avisar o administrador pelo WhatsApp</b>.', 'Depois de enviado, a conexão só pode ser trocada por um administrador.', 'Quem só vai consultar não precisa se cadastrar.']);
   h += passo('4. Ver a escala', ['Toque na aba <b>Escala</b>, embaixo.', 'Cada linha é um culto: a data fica à esquerda, com manhã ou noite logo abaixo.', 'As colunas são as áreas: Direção do culto, Super Kids, Mídia, Staff, Ministração e Louvor. No celular, deslize a tabela para o lado.', 'Toque em qualquer nome para abrir a página com cada função e quem está nela.', 'Use as setas ‹ › ao lado do mês para ver outros meses.']);
@@ -898,7 +974,7 @@ function viewAjuda(){
 
 /* ---------- convite pelo WhatsApp ---------- */
 const LINK_PAINEL = () => location.origin + location.pathname;
-const msgConvite = n => 'Olá'+(n.trim()?', '+n.trim().split(' ')[0]:'')+'! Graça e paz! 🙌\n\nVocê foi convidado(a) para o Painel da '+((S.cfg&&S.cfg.igreja)||'igreja')+', onde ficam as escalas, os avisos e a agenda.\n\n*Como entrar:*\n1. Abra o painel por este link: '+LINK_PAINEL()+'#ajuda\n2. Toque em *Entrar*, no topo, e digite o seu e-mail.\n3. Você vai receber um e-mail com um código de 6 números. Digite o código no painel (não precisa de senha).\n4. Na tela inicial, preencha o cadastro: nome completo, WhatsApp, sua conexão e se você é líder, auxiliar ou da organização.\n5. Aguarde a aprovação de um administrador. Depois disso, você já consegue preencher a escala da sua conexão.\n\nNa primeira vez, aparece um tutorial com o passo a passo de tudo. Ele fica sempre no botão ❓ Como usar, no topo.\n\nQualquer dúvida, é só me chamar!';
+const msgConvite = n => 'Olá'+(n.trim()?', '+n.trim().split(' ')[0]:'')+'! Graça e paz! 🙌\n\nVocê foi convidado(a) para o Painel da '+((S.cfg&&S.cfg.igreja)||'igreja')+', onde ficam as escalas, os avisos e a agenda.\n\n*Como entrar:*\n1. Abra o painel por este link: '+LINK_PAINEL()+'#ajuda\n2. Toque em *Entrar*, no topo, e depois em *Continuar com Google* (se tiver Gmail). Sem Gmail: toque em *Criar conta*, cadastre e-mail e senha e confirme pelo link que chega no e-mail.\n3. Entre no painel.\n4. Na tela inicial, preencha o cadastro: nome completo, WhatsApp, sua conexão e se você é líder, auxiliar ou da organização.\n5. Aguarde a aprovação de um administrador. Depois disso, você já consegue preencher a escala da sua conexão.\n\nNa primeira vez, aparece um tutorial com o passo a passo de tudo. Ele fica sempre no botão ❓ Como usar, no topo.\n\nQualquer dúvida, é só me chamar!';
 const waUrl = (tel, txt) => { let d = String(tel||'').replace(/\D/g,''); if (d && d.length <= 11) d = '55'+d; return 'https://wa.me/'+d+'?text='+encodeURIComponent(txt); };
 document.addEventListener('input', e => { if (e.target.id==='cvN' || e.target.id==='cvW') { const a = $('#cvLink'); if (a) a.href = waUrl($('#cvW').value, msgConvite($('#cvN').value)); } });
 

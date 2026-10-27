@@ -30,6 +30,7 @@ const mesma = (t, a, b) => (chaves[t]||['id']).every(k => a[k] === b[k]);
 let sessao = null; const ouvintes = [];
 try { const p = localStorage.getItem('mockPapel'); if (p && U[p]) sessao = {user:{id:U[p], email:p+'@x'}}; } catch(e){}
 const emitir = ev => ouvintes.forEach(cb => setTimeout(() => cb(ev, sessao), 0));
+window.__mockRecuperar = () => { sessao = {user:{id:U.novo, email:'nova.pessoa@gmail.com', user_metadata:{}}}; emitir('PASSWORD_RECOVERY'); };
 class Q {
   constructor(t){ this.t = t; this.f = []; this.op = 'select'; this.ord = null; this.lim = 1e9; this.um = false; this.ret = false; }
   select(){ if (this.op !== 'select') this.ret = true; return this; }
@@ -79,7 +80,10 @@ window.supabase = { createClient: () => ({
   auth: {
     getSession: async () => ({data:{session:sessao}}),
     onAuthStateChange: cb => { ouvintes.push(cb); setTimeout(() => cb('INITIAL_SESSION', sessao), 0); return {data:{subscription:{unsubscribe(){}}}}; },
-    signInWithOtp: async ({email}) => { window.__ultimoEmail = email; return {error:null}; },
-    verifyOtp: async ({email, token}) => { if (token !== '123456') return {error:{message:'Token has expired or is invalid'}}; sessao = {user:{id:U.novo, email}}; emitir('SIGNED_IN'); return {data:{session:sessao}, error:null}; },
+    signInWithPassword: async ({email, password}) => { if (password !== 'senha1234') return {data:{}, error:{code:'invalid_credentials', message:'Invalid login credentials'}}; sessao = {user:{id:U.novo, email, user_metadata:{}}}; emitir('SIGNED_IN'); return {data:{session:sessao}, error:null}; },
+    signUp: async ({email}) => { window.__cadastro = email; return {data:{user:{id:'x', identities:[{}]}, session:null}, error:null}; },
+    resetPasswordForEmail: async email => { window.__recuperar = email; return {data:{}, error:null}; },
+    updateUser: async ({password}) => { window.__novaSenha = password; return {data:{}, error:null}; },
+    signInWithOAuth: async ({provider}) => { window.__oauth = provider; return {data:{}, error:null}; },
     signOut: async () => { sessao = null; emitir('SIGNED_OUT'); return {error:null}; } } }) };
 })();

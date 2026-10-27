@@ -226,7 +226,6 @@ nav.tabs button{position:relative}.badge{position:absolute;top:4px;left:50%;marg
 .who .sair{background:none;border:0;padding:0;color:var(--muted);font-size:12px;text-decoration:underline}
 .who .eu{display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;max-width:40vw}
 .who .eu span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
-.codigo{letter-spacing:.4em;font-size:22px;text-align:center;font-weight:700}
 
 
 /* ---------- Painel 2.0: bate-papo ---------- */
@@ -250,3 +249,11 @@ header.top .who{flex-direction:column;align-items:flex-end;gap:6px}
 .chat-form textarea{flex:1;resize:none;min-height:44px;max-height:120px;border-radius:22px;padding:10px 16px;line-height:1.35}
 .chat-form .btn{width:44px;height:44px;padding:0;border-radius:50%;flex:none;font-size:18px}
 @media (max-width:430px){.logo{margin-top:40px}}
+
+/* ---------- Painel 2.0: login com Google e senha ---------- */
+.btn-google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:16px;background:#fff;color:#1f1f1f;border:1px solid #dadce0;border-radius:999px;padding:12px 18px;font-weight:600;font-size:16px}
+.btn-google:disabled{opacity:.6}
+.ou{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;margin:18px 0 0}
+.ou::before,.ou::after{content:"";flex:1;height:1px;background:var(--line)}
+.login-links{display:flex;justify-content:space-between;gap:12px;margin-top:14px}
+.login-links .link{font-size:14px;color:var(--ink)}
