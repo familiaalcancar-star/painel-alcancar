@@ -33,6 +33,7 @@ create table if not exists pessoas (
   gestao boolean not null default false,
   ministro boolean not null default false,
   avisos boolean not null default false,
+  escala boolean not null default false,   -- extra "Escala": preenche Direção/Super Kids de qualquer conexão
   criado_em timestamptz not null default now()
 );
 
@@ -169,6 +170,12 @@ language sql stable security definer set search_path = public as $$
   select coalesce((select papel = 'admin' or avisos from pessoas where id = auth.uid()), false)
 $$;
 
+-- Extra "Escala": preenche Direção do culto e Super Kids de qualquer conexão.
+create or replace function tem_escala() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select escala from pessoas where id = auth.uid()), false)
+$$;
+
 -- Louvor: extra "Ministro" ou equipe das conexões Flechas, Forasteiros, Heróis.
 create or replace function pode_louvor() returns boolean
 language sql stable security definer set search_path = public as $$
@@ -190,6 +197,7 @@ create or replace function pode_editar_escala(a text, cons jsonb) returns boolea
 language sql stable security definer set search_path = public as $$
   select is_admin()
       or (a = 'louvor' and pode_louvor())
+      or (area_por_conexao(a) and tem_escala())
       or (area_por_conexao(a) and minha_conexao() is not null and cons ? minha_conexao())
 $$;
 
@@ -257,8 +265,9 @@ language plpgsql security definer set search_path = public as $$
 begin
   new.por := auth.uid();
   new.em := now();
-  new.por_nome := coalesce((select coalesce(nullif(apelido,''), nome) from pessoas where id = auth.uid()),
-                           (select nome from cadastros where id = auth.uid()), '');
+  -- Mostra só o apelido; sem apelido, só o primeiro nome.
+  new.por_nome := coalesce((select coalesce(nullif(apelido,''), split_part(trim(nome),' ',1)) from pessoas where id = auth.uid()),
+                           (select coalesce(nullif(apelido,''), split_part(trim(nome),' ',1)) from cadastros where id = auth.uid()), '');
   return new;
 end $$;
 drop trigger if exists historico_guarda on historico;
@@ -327,7 +336,7 @@ create policy acessos_gravar on acessos for insert to authenticated with check (
 drop policy if exists acessos_atualizar on acessos;
 create policy acessos_atualizar on acessos for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 drop policy if exists acessos_apagar on acessos;
-create policy acessos_apagar on acessos for delete to authenticated using (is_admin());
+create policy acessos_apagar on acessos for delete to authenticated using (id = auth.uid() or is_admin());
 
 -- escalas: todos leem; criar = admin (ou Louvor para quem pode);
 -- editar = regra pode_editar_escala; excluir = admin.
@@ -377,11 +386,39 @@ create policy hist_gravar on historico for insert to authenticated with check (t
 drop policy if exists hist_ler on historico;
 create policy hist_ler on historico for select to authenticated using (is_admin());
 
+-- ---------- Bate-papo ----------
+-- Só pessoas aprovadas (com linha em "pessoas", de qualquer função) leem e escrevem.
+-- Cada um apaga as próprias mensagens; admin apaga qualquer uma.
+create table if not exists chat (
+  id uuid primary key default gen_random_uuid(),
+  texto text not null check (char_length(texto) between 1 and 1000),
+  por uuid default auth.uid() references auth.users(id) on delete set null,
+  em timestamptz not null default now()
+);
+create index if not exists chat_em_idx on chat (em desc);
+alter table chat enable row level security;
+
+create or replace function chat_guarda() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin new.por := auth.uid(); new.em := now(); return new; end $$;
+drop trigger if exists chat_guarda on chat;
+create trigger chat_guarda before insert on chat for each row execute function chat_guarda();
+
+drop policy if exists chat_ler on chat;
+create policy chat_ler on chat for select to authenticated
+  using (exists (select 1 from pessoas where id = auth.uid()));
+drop policy if exists chat_enviar on chat;
+create policy chat_enviar on chat for insert to authenticated
+  with check (exists (select 1 from pessoas where id = auth.uid()));
+drop policy if exists chat_apagar on chat;
+create policy chat_apagar on chat for delete to authenticated
+  using (por = auth.uid() or is_admin());
+
 -- ---------- Tempo real ----------
 do $$
 declare t text;
 begin
-  foreach t in array array['config','escalas','avisos','eventos','checkin_marcas','cadastros','pessoas'] loop
+  foreach t in array array['config','escalas','avisos','eventos','checkin_marcas','cadastros','pessoas','chat'] loop
     if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = t) then
       execute format('alter publication supabase_realtime add table %I', t);
     end if;
@@ -411,10 +448,10 @@ create policy img_apagar on storage.objects for delete to authenticated
 do $$
 declare f text;
 begin
-  foreach f in array array['escalas_guarda()','autoria_guarda()','checkin_guarda()','historico_guarda()'] loop
+  foreach f in array array['escalas_guarda()','autoria_guarda()','checkin_guarda()','historico_guarda()','chat_guarda()'] loop
     execute format('revoke execute on function %s from public, anon, authenticated', f);
   end loop;
-  foreach f in array array['minha_pessoa()','is_admin()','eh_equipe()','minha_conexao()','tem_gestao()','tem_avisos()',
+  foreach f in array array['minha_pessoa()','is_admin()','eh_equipe()','minha_conexao()','tem_gestao()','tem_avisos()','tem_escala()',
                            'pode_louvor()','area_por_conexao(text)','pode_editar_escala(text, jsonb)','pessoas_nomes()'] loop
     execute format('revoke execute on function %s from public, anon', f);
     execute format('grant execute on function %s to authenticated', f);

@@ -62,3 +62,21 @@ select t('Admin edita aviso de outro','0a',$q$update avisos set d='{}' where id=
 select t('Admin faz check-in','0a',$q$insert into checkin_marcas(data,culto,chave) values ('2026-11-01','manha','k2')$q$,'ok');
 select t('Admin apaga acesso de alguém','0a',$q$delete from acessos where id='00000000-0000-0000-0000-0000000000a5'$q$,'ok');
 select t('Betel NÃO apaga acesso de outro','b1',$q$delete from acessos where id='00000000-0000-0000-0000-0000000000a5'$q$,'bloq');
+-- extra Escala
+select t('Extra Escala edita Direção de qualquer conexão','e5',$q$update escalas set d=d||'{"obs":"x"}' where id='2026-11-01_manha_direcao'$q$,'ok');
+select t('Extra Escala edita Super Kids de qualquer conexão','e5',$q$update escalas set d=d||'{"obs":"x"}' where id='2026-11-01_noite_superkids'$q$,'ok');
+select t('Extra Escala NÃO troca a conexão','e5',$q$update escalas set d=d||'{"conexoes":["flechas"]}' where id='2026-11-01_manha_direcao'$q$,'bloq');
+select t('Extra Escala NÃO edita Mídia','e5',$q$update escalas set d=d||'{"obs":"x"}' where id='2026-11-01_manha_midia'$q$,'bloq');
+select t('Extra Escala NÃO cria escala','e5',$q$insert into escalas(id,d) values ('n','{"data":"2026-11-08","culto":"manha","area":"direcao","conexao":"betel"}')$q$,'bloq');
+-- bate-papo
+select t('Aprovado envia mensagem','b1',$q$insert into chat(texto) values ('oi')$q$,'ok');
+select t('Aprovado lê mensagens','b1','select * from chat','ok');
+select t('Não aprovado NÃO lê mensagens','99','select * from chat','bloq');
+select t('Não aprovado NÃO envia','99',$q$insert into chat(texto) values ('oi')$q$,'bloq');
+select t('Visitante NÃO lê mensagens','anon','select * from chat','bloq');
+select t('Mensagem acima de 1000 caracteres é recusada','b1',$q$insert into chat(texto) values (repeat('a',1001))$q$,'bloq');
+select t('Ninguém manda em nome de outro','b1',$q$insert into chat(texto,por) values ('x','00000000-0000-0000-0000-0000000000a5') returning (por=auth.uid())::int/(por=auth.uid())::int$q$,'ok');
+select t('Apaga a própria mensagem','b1',$q$delete from chat where id='00000000-0000-0000-0000-00000000c001'$q$,'ok');
+select t('NÃO apaga a mensagem de outro','a5',$q$delete from chat where id='00000000-0000-0000-0000-00000000c001'$q$,'bloq');
+select t('Admin apaga qualquer mensagem','0a',$q$delete from chat where id='00000000-0000-0000-0000-00000000c001'$q$,'ok');
+select t('Histórico guarda só o apelido ou o primeiro nome','0a',$q$insert into historico(acao,tipo) values ('editou','escala') returning 1/(por_nome='Adm')::int$q$,'ok');

@@ -21,7 +21,8 @@ const fmtQuando = iso => new Date(iso).toLocaleString('pt-BR',{day:'2-digit',mon
 const isoLocal = d => { const x=new Date(d); x.setMinutes(x.getMinutes()-x.getTimezoneOffset()); return x.toISOString().slice(0,10); };
 const hoje = () => isoLocal(new Date());
 const somaDias = (iso, n) => { const d=new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n); return isoLocal(d); };
-const nome = id => { const p = S.pessoas[id] || {}, c = (S.cadastros || {})[id] || {}, n = S.names[id] || {}; return p.apelido || p.nome || c.apelido || c.nome || n.apelido || n.nome || S.emails[id] || 'Alguém'; };
+const primeiro = s => String(s||'').trim().split(/\s+/)[0] || '';
+const nome = id => { const p = S.pessoas[id] || {}, c = (S.cadastros || {})[id] || {}, n = S.names[id] || {}; return p.apelido || n.apelido || c.apelido || primeiro(p.nome || n.nome || c.nome) || S.emails[id] || 'Alguém'; };
 const nomeComp = id => { const p = S.pessoas[id] || {}, c = (S.cadastros || {})[id] || {}, x = S.names[id] || {}; const n = p.nome || c.nome || x.nome || S.emails[id] || 'Alguém', a = p.apelido || c.apelido || x.apelido; return a && a !== n ? n+' ('+a+')' : n; };
 function confirmar(msg){ return new Promise(ok => {
   const o = document.createElement('div'); o.setAttribute('role','dialog'); o.setAttribute('aria-modal','true');
@@ -58,7 +59,8 @@ const semAcento = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').tri
 const podeLouvor = () => { const p = pessoaDe(S.uid); return ehEquipe(p) && LOUVOR_CON.includes(semAcento(conexaoNome(p.conexao))); };
 const temGestao = () => isAdm() || !!(pessoaDe(S.uid)||{}).gestao;
 const temMinistro = () => !!(pessoaDe(S.uid)||{}).ministro;
-const podeArea = (a, x) => isAdm() || (ehLouvor(a.nome) && (podeLouvor() || temMinistro())) || (a.porConexao && !!x && conexoesDe(x).some(c => minhas().includes(c)));
+const temEscala = () => !!(pessoaDe(S.uid)||{}).escala;
+const podeArea = (a, x) => isAdm() || (ehLouvor(a.nome) && (podeLouvor() || temMinistro())) || (a.porConexao && !!x && (temEscala() || conexoesDe(x).some(c => minhas().includes(c))));
 const temAvisos = () => isAdm() || !!(pessoaDe(S.uid)||{}).avisos;
 const papelTexto = () => { if (!S.uid) return 'Somente visualização'; if (isAdm()) return 'Administrador'; const p = pessoaDe(S.uid);
   if (ehEquipe(p)) return PAPEIS[p.papel]+' · Conexão '+conexaoNome(p.conexao);
@@ -132,13 +134,14 @@ async function carregarMes(){ const m = S.mes; const l = linhas(await sb.from('e
 async function carregarAvisos(){ S.avisos = linhas(await sb.from('avisos').select('id,d,autor').order('criado_em', {ascending:false}).limit(60)); }
 async function carregarEventos(){ S.eventos = linhas(await sb.from('eventos').select('id,d,autor').order('data').limit(300)); }
 function assinarMes(){ carregarMes().then(render); }
-async function carregarPrivado(){ await Promise.all([carregarPessoas(), carregarConfig()]); renderWho(); renderTabs(); render(); }
+async function carregarPrivado(){ await Promise.all([carregarPessoas(), carregarConfig()]); await carregarChat(); if (!podeChat()) fecharChat(); renderWho(); renderTabs(); render(); }
 
 // Tempo real: quando algo muda no banco, recarrega só aquela parte.
 const RECARGA = {
   config: () => carregarConfig(), pessoas: () => carregarPessoas(), cadastros: () => carregarPessoas(),
   escalas: () => Promise.all([carregarProx(), carregarMes(), S.ckD ? ckCarregarDocs() : null]),
-  avisos: () => carregarAvisos(), eventos: () => carregarEventos(), checkin_marcas: () => S.ckD ? ckCarregarMarcas() : null };
+  avisos: () => carregarAvisos(), eventos: () => carregarEventos(), checkin_marcas: () => S.ckD ? ckCarregarMarcas() : null,
+  chat: () => carregarChat().then(chatAtualizado) };
 const pendRecarga = {};
 function agendarRecarga(tabela){
   if (!RECARGA[tabela]) return; clearTimeout(pendRecarga[tabela]);
@@ -154,7 +157,9 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 /* ---------- login ---------- */
 function renderWho(){
   const w = $('#who'); if (!w) return;
-  w.innerHTML = S.uid ? '<span class="eu"><span>'+esc(nome(S.uid) === 'Alguém' ? S.email : nome(S.uid))+'</span><button class="sair" data-sair>Sair</button></span>'
+  const n = podeChat() ? naoLidas() : 0;
+  w.innerHTML = S.uid ? (podeChat() ? '<button class="chat-btn" data-chat>💬 Bate-papo'+(n ? '<span class="badge">'+(n > 99 ? '99+' : n)+'</span>' : '')+'</button>' : '')
+      + '<span class="eu"><span>'+esc(nome(S.uid) === 'Alguém' ? S.email : nome(S.uid))+'</span><button class="sair" data-sair>Sair</button></span>'
     : '<button class="entrar" data-entrar>Entrar</button>';
 }
 function formLogin(){
@@ -194,6 +199,7 @@ async function aplicarSessao(session){
     try { if (!localStorage.getItem('tutorialVisto')) { S.tab = 'ajuda'; localStorage.setItem('tutorialVisto', '1'); } } catch(e){}
   } else if (!TABS.some(t => t.id===S.tab && !t.owner && !t.gestao)) S.tab = 'inicio';
   histCache = null;
+  if (!uid) { fecharChat(); CHAT.msgs = []; }
   if (S.pronto) await carregarPrivado();
 }
 
@@ -204,7 +210,8 @@ async function init(){
   const { data } = await sb.auth.getSession();
   await aplicarSessao(data.session);
   sb.auth.onAuthStateChange((ev, session) => { setTimeout(() => aplicarSessao(session), 0); });
-  try { await Promise.all([carregarConfig(), carregarPessoas(), carregarProx(), carregarMes(), carregarAvisos(), carregarEventos()]); }
+  try { await carregarConfig(); S.mes = proxCulto().slice(0,7);
+    await Promise.all([carregarPessoas(), carregarProx(), carregarMes(), carregarAvisos(), carregarEventos()]); await carregarChat(); }
   catch(e){ console.warn(e); }
   S.pronto = true;
   if (location.hash.includes('access_token')) history.replaceState(null, '', location.pathname + '#' + S.tab);
@@ -261,7 +268,7 @@ function render(){
   if (!S.pronto) return;
   if (document.querySelector('#dlg[open]')) return;
   const abertos = [...document.querySelectorAll('details.area[open]')].map(d => d.dataset.k);
-  $('#subtitle').textContent = papelTexto() + (!isAdm() && pessoaDe(S.uid) ? [pessoaDe(S.uid).gestao?' · Gestão':'', pessoaDe(S.uid).ministro?' · Ministro':'', pessoaDe(S.uid).avisos?' · Avisos/Eventos':''].join('') : '');
+  $('#subtitle').textContent = papelTexto() + (!isAdm() && pessoaDe(S.uid) ? [pessoaDe(S.uid).gestao?' · Gestão':'', pessoaDe(S.uid).ministro?' · Ministro':'', pessoaDe(S.uid).avisos?' · Avisos/Eventos':'', pessoaDe(S.uid).escala?' · Escala':''].join('') : '');
   renderWho();
   const v = $('#view');
   if (!S.cfgLoaded) { v.innerHTML='<div class="empty">Carregando o painel…</div>'; return; }
@@ -836,7 +843,7 @@ function viewHistorico(){
   return top + '<div class="card">' + itens.slice(0,300).map(l => '<div class="log"><b>'+esc(quemFez(l))+'</b> <span class="act-'+esc(l.acao)+'">'+esc(l.acao)+'</span> '+esc(l.tipo)+': '+esc(l.resumo)
     + '<div class="diff">'+esc(fmtQuando(l.em))+(l.acao==='editou'?' · '+esc(diff(l.antes,l.depois)):'')+'</div></div>').join('') + '</div>';
 }
-const quemFez = l => l.por_nome || (l.por ? nome(l.por) : 'Sistema');
+const quemFez = l => l.por && (S.pessoas[l.por] || S.names[l.por]) ? nome(l.por) : (l.por_nome || (l.por ? 'Alguém' : 'Sistema'));
 const fmtFuncoes = fs => (fs||[]).map(f => f.nome+': '+((f.pessoas||[]).join(', ')||'—')).join('; ');
 function diff(a,b){
   if (!a||!b) return '';
@@ -878,7 +885,7 @@ function viewAjuda(){
   h += passo('2. Tela inicial', ['No cartão grande fica o <b>próximo domingo</b>, com o culto da manhã (amarelo) e o da noite (azul).', 'Toque numa área, como Direção do culto ou Louvor, para ver quem está escalado em cada função.', 'Logo abaixo vem o domingo seguinte, em <b>Em seguida</b>.', 'Depois vêm a <b>Agenda</b> e os <b>Avisos</b>. Toque em um item para ver os detalhes. Os botões amarelos levam para a inscrição e os verdes abrem o WhatsApp de quem organiza.', 'No final ficam o Instagram, o YouTube e o endereço da igreja.']);
   h += passo('3. Fazer seu cadastro (líder, auxiliar ou organização)', ['Toque em <b>Entrar</b> e entre com o seu e-mail.', 'Na tela inicial, preencha o cartão <b>É líder, auxiliar ou da organização da conexão?</b>', 'Coloque seu nome completo, o WhatsApp com DDD, a sua conexão e a sua função.', 'Toque em <b>Enviar cadastro</b> e depois em <b>Avisar o administrador pelo WhatsApp</b>.', 'Depois de enviado, a conexão só pode ser trocada por um administrador.', 'Quem só vai consultar não precisa se cadastrar.']);
   h += passo('4. Ver a escala', ['Toque na aba <b>Escala</b>, embaixo.', 'Cada linha é um culto: a data fica à esquerda, com manhã ou noite logo abaixo.', 'As colunas são as áreas: Direção do culto, Super Kids, Mídia, Staff, Ministração e Louvor. No celular, deslize a tabela para o lado.', 'Toque em qualquer nome para abrir a página com cada função e quem está nela.', 'Use as setas ‹ › ao lado do mês para ver outros meses.']);
-  h += passo('5. Preencher a escala da sua conexão', ['Na aba <b>Escala</b>, encontre o domingo em que a sua conexão está na Direção do culto ou no Super Kids.', 'Toque no nome da sua conexão e depois em <b>Preencher escala</b> (ou <b>Editar escala</b>).', 'Digite os nomes em cada função. Vaga vazia aparece como “vaga aberta”.', 'Toque em <b>Salvar escala</b>. Pronto, todo mundo já vê.', 'Você só consegue editar os dias da sua conexão. As conexões Flechas, Forasteiros e Heróis também preenchem o Louvor.']);
+  h += passo('5. Preencher a escala da sua conexão', ['Na aba <b>Escala</b>, encontre o domingo em que a sua conexão está na Direção do culto ou no Super Kids.', 'Toque no nome da sua conexão e depois em <b>Preencher escala</b> (ou <b>Editar escala</b>).', 'Digite os nomes em cada função. Vaga vazia aparece como “vaga aberta”.', 'Toque em <b>Salvar escala</b>. Pronto, todo mundo já vê.', 'Você só consegue editar os dias da sua conexão. As conexões Flechas, Forasteiros e Heróis também preenchem o Louvor. Quem tem a permissão <b>Escala</b> preenche a Direção do culto e o Super Kids de qualquer conexão.']);
   h += passo('6. Imprimir o check-in (Gestão)', ['Na aba <b>Escala</b>, no final de cada linha, toque em <b>Baixar PDF</b> ou <b>Baixar Excel</b>.', 'Na tela inicial também há o botão <b>Check-in do dia</b>.', 'A folha sai com Função, Nome, Check-in e as assinaturas de retirada e de devolução do equipamento e do crachá.', 'No dia, use a aba <b>Check-in</b> para marcar quem chegou, quem retirou e quem devolveu. As marcações aparecem na hora em todos os celulares.']);
   h += passo('7. Avisos e agenda', ['Na aba <b>Avisos</b> ficam os comunicados, e na <b>Agenda</b> ficam os eventos com data.', 'Quando houver, toque em <b>Fazer inscrição</b> ou no botão do WhatsApp.', 'Quem tem a permissão <b>Avisos/Eventos</b> publica pelo botão <b>+</b>.']);
   if (isAdm()) {
@@ -924,9 +931,9 @@ function viewAjustes(){
       const wpp = base.whatsapp || (ped && ped.whatsapp) || '';
       return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+(S.emails[id] && nomeComp(id)!==S.emails[id]?'<br><span class="meta">'+esc(S.emails[id])+'</span>':'')+(wpp?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(wpp).replace(/\D/g,'').length<=11?'55':'')+String(wpp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(wpp)+'</a>':'')+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
         + '<td><select class="inp" data-p-papel="'+esc(id)+'">'+opts(Object.entries(PAPEIS).map(([k,v])=>({id:k,nome:v})), base.papel)+'</select></td>'
-        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'">Remover</button></td></tr>'; }).join('')
+        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'">Remover</button></td></tr>'; }).join('')
     + '</tbody></table><div class="end"><button class="btn" data-salvar-pessoas>Salvar pessoas</button></div></div>';
-  html += '<p class="hint">Administradores podem tudo (hoje: '+(nAdm+1)+' contando você; o ideal é até 5). Líder, Auxiliar e Organização preenchem a Direção do culto e o Super Kids nos dias em que a conexão deles está escalada; se a conexão for Flechas, Forasteiros ou Heróis, também o Louvor. <b>Extras:</b> Gestão vê a aba Check-in e imprime o check-in (PDF e Excel); Ministro pode editar a escala de Louvor; Avisos/Eventos pode publicar avisos e eventos (e editar ou excluir os que publicou). Os extras valem junto com qualquer função.</p>';
+  html += '<p class="hint">Administradores podem tudo (hoje: '+(nAdm+1)+' contando você; o ideal é até 5). Líder, Auxiliar e Organização preenchem a Direção do culto e o Super Kids nos dias em que a conexão deles está escalada; se a conexão for Flechas, Forasteiros ou Heróis, também o Louvor. <b>Extras:</b> Gestão vê a aba Check-in e imprime o check-in (PDF e Excel); Ministro pode editar a escala de Louvor; Avisos/Eventos pode publicar avisos e eventos (e editar ou excluir os que publicou); Escala pode preencher os nomes da Direção do culto e do Super Kids de qualquer conexão. Os extras valem junto com qualquer função.</p>';
   return html;
 }
 document.addEventListener('submit', async e => {
@@ -949,12 +956,12 @@ document.addEventListener('submit', async e => {
 });
 document.addEventListener('click', async e => {
   const t = e.target.closest('button[data-rm-pessoa]'); if (!t || !isAdm()) return;
-  const id = t.dataset.rmPessoa; const quem = nomeComp(id);
+  const id = t.dataset.rmPessoa; const quem = nomeComp(id), quemCurto = nome(id);
   if (!await confirmar('Remover o cadastro de '+quem+'?\n\nA função, a permissão, a conexão, o nome, o apelido, o WhatsApp e o pedido de cadastro serão apagados. Se a pessoa entrar de novo, ela volta para o modo consulta e precisa fazer o cadastro outra vez.')) return;
   t.disabled = true;
   try {
     for (const tab of ['pessoas','cadastros','acessos']) { const r = await sb.from(tab).delete().eq('id', id); if (r.error) throw r.error; }
-    await logar('excluiu', 'config', 'Cadastro removido: '+quem, null, null);
+    await logar('excluiu', 'config', 'Cadastro removido: '+quemCurto, null, null);
     toast('Cadastro de '+quem+' removido');
     await carregarPessoas(); renderTabs(); render();
   } catch(err){ falhaEscrita(err); }
@@ -965,12 +972,12 @@ document.addEventListener('click', async e => {
   const pessoas = {};
   document.querySelectorAll('[data-p-papel]').forEach(sel => { const id = sel.dataset.pPapel; const con = document.querySelector('[data-p-con="'+id+'"]').value;
     const ant = S.pessoas[id] || {}; const ped = (S.cadastros||{})[id] || {};
-    pessoas[id] = {id, email: ant.email || ped.email || S.emails[id] || null, papel: sel.value, conexao: con || null, nome: ant.nome || ped.nome || (S.names[id]||{}).nome || '', apelido: ant.apelido || ped.apelido || '', whatsapp: ant.whatsapp || ped.whatsapp || '', gestao: !!(document.querySelector('[data-p-gestao="'+id+'"]')||{}).checked, ministro: !!(document.querySelector('[data-p-min="'+id+'"]')||{}).checked, avisos: !!(document.querySelector('[data-p-av="'+id+'"]')||{}).checked}; });
+    pessoas[id] = {id, email: ant.email || ped.email || S.emails[id] || null, papel: sel.value, conexao: con || null, nome: ant.nome || ped.nome || (S.names[id]||{}).nome || '', apelido: ant.apelido || ped.apelido || '', whatsapp: ant.whatsapp || ped.whatsapp || '', gestao: !!(document.querySelector('[data-p-gestao="'+id+'"]')||{}).checked, ministro: !!(document.querySelector('[data-p-min="'+id+'"]')||{}).checked, avisos: !!(document.querySelector('[data-p-av="'+id+'"]')||{}).checked, escala: !!(document.querySelector('[data-p-esc="'+id+'"]')||{}).checked}; });
   const falta = Object.entries(pessoas).filter(([id,p]) => ehEquipe(p) && !p.conexao);
   if (falta.length) { toast('Escolha a conexão de '+falta.map(([id])=>nome(id)).join(', ')+'.'); return; }
   const nAdm = Object.values(pessoas).filter(p=>p.papel==='admin').length;
   if (nAdm > 4 && !await confirmar('Serão '+(nAdm+1)+' administradores contando você. O ideal é até 5. Confirmar?')) return;
-  const resumo = 'Pessoas: ' + (Object.entries(pessoas).filter(([,p])=>p.papel!=='leitura').map(([id,p]) => nomeComp(id)+' ('+PAPEIS[p.papel]+(p.conexao&&p.papel!=='admin'?' · '+conexaoNome(p.conexao):'')+')').join('; ') || 'só consulta');
+  const resumo = 'Pessoas: ' + (Object.entries(pessoas).filter(([,p])=>p.papel!=='leitura').map(([id,p]) => (p.apelido || primeiro(p.nome) || nome(id))+' ('+PAPEIS[p.papel]+(p.conexao&&p.papel!=='admin'?' · '+conexaoNome(p.conexao):'')+')').join('; ') || 'só consulta');
   t.disabled = true;
   try {
     const lista = Object.values(pessoas); if (!lista.length) return;
@@ -980,6 +987,76 @@ document.addEventListener('click', async e => {
   } catch(err){ falhaEscrita(err); }
   finally { t.disabled = false; }
 });
+
+/* ---------- BATE-PAPO ---------- */
+// Só para pessoas aprovadas (com linha em "pessoas"). O banco também garante isso (RLS).
+const CHAT = { msgs:[], aberto:false };
+const podeChat = () => !!S.uid && !!pessoaDe(S.uid);
+const chaveVisto = () => 'chatVisto:'+S.uid;
+const chatVisto = () => { try { return localStorage.getItem(chaveVisto()) || ''; } catch(e){ return ''; } };
+const marcarVisto = () => { const u = CHAT.msgs[CHAT.msgs.length-1]; if (u) try { localStorage.setItem(chaveVisto(), u.em); } catch(e){} };
+const naoLidas = () => { const v = chatVisto(); return CHAT.msgs.filter(m => m.por !== S.uid && m.em > v).length; };
+async function carregarChat(){
+  if (!podeChat()) { CHAT.msgs = []; return; }
+  const r = await sb.from('chat').select('id,texto,por,em').order('em', {ascending:false}).limit(300);
+  if (r.error) { console.warn(r.error); return; }
+  CHAT.msgs = (r.data||[]).reverse();
+}
+function chatAtualizado(){ if (CHAT.aberto) { desenharMensagens(); marcarVisto(); } renderWho(); }
+const horaDe = iso => new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+function rotuloDia(d){ if (d === hoje()) return 'Hoje'; if (d === somaDias(hoje(), -1)) return 'Ontem'; const t = fmtDia(d); return t.charAt(0).toUpperCase()+t.slice(1); }
+function desenharMensagens(){
+  const l = $('#chatLista'); if (!l) return;
+  if (!CHAT.msgs.length) { l.innerHTML = '<div class="empty" style="margin:auto 0">Nenhuma mensagem ainda. Escreva a primeira!</div>'; return; }
+  let dia = '', h = '';
+  CHAT.msgs.forEach(m => {
+    const d = isoLocal(new Date(m.em)); if (d !== dia) { dia = d; h += '<div class="dia-sep">'+esc(rotuloDia(d))+'</div>'; }
+    const minha = m.por === S.uid, apaga = minha || isAdm();
+    h += '<div class="msg'+(minha?' minha':'')+'">'+(minha ? '' : '<div class="de">'+esc(m.por ? nome(m.por) : 'Alguém')+'</div>')
+      + '<div class="tx">'+linkify(m.texto)+'</div><div class="h">'+(apaga ? '<button class="apagar" data-apagar-msg="'+esc(m.id)+'">apagar</button>' : '')+'<span>'+esc(horaDe(m.em))+'</span></div></div>';
+  });
+  const fim = l.scrollHeight - l.scrollTop - l.clientHeight < 80;
+  l.innerHTML = h;
+  if (fim || !l.dataset.rolou) { l.scrollTop = l.scrollHeight; l.dataset.rolou = '1'; }
+}
+function abrirChat(){
+  if (!podeChat() || CHAT.aberto) return;
+  CHAT.aberto = true;
+  const o = document.createElement('div'); o.id = 'chat'; o.className = 'chatbox'; o.setAttribute('role','dialog'); o.setAttribute('aria-label','Bate-papo');
+  o.innerHTML = '<div class="chat-top"><button class="btn ghost small" data-fechar-chat>‹ Voltar</button><h2>💬 Bate-papo</h2></div>'
+    + '<div class="chat-lista" id="chatLista"></div>'
+    + '<form class="chat-form" id="chatForm"><textarea class="inp" id="chatTx" name="texto" rows="1" maxlength="1000" placeholder="Mensagem" aria-label="Mensagem"></textarea><button type="submit" class="btn" aria-label="Enviar">➤</button></form>';
+  document.body.appendChild(o); document.body.style.overflow = 'hidden';
+  try { history.pushState({chat:1}, '', location.hash || '#'+S.tab); } catch(e){}
+  desenharMensagens(); marcarVisto(); renderWho();
+  carregarChat().then(chatAtualizado);
+}
+function fecharChat(){
+  if (!CHAT.aberto) return;
+  CHAT.aberto = false; const o = $('#chat'); if (o) o.remove(); document.body.style.overflow = ''; renderWho();
+}
+window.addEventListener('popstate', () => fecharChat());
+async function enviarChat(){
+  const tx = $('#chatTx'); const texto = tx.value.trim();
+  if (!texto) return;
+  if (texto.length > 1000) { toast('A mensagem pode ter até 1000 caracteres.'); return; }
+  tx.disabled = true;
+  try { const r = await sb.from('chat').insert({texto}); if (r.error) throw r.error; tx.value = ''; tx.style.height = ''; await carregarChat(); const l = $('#chatLista'); if (l) l.dataset.rolou = ''; chatAtualizado(); }
+  catch(e){ falhaEscrita(e); }
+  finally { tx.disabled = false; tx.focus(); }
+}
+document.addEventListener('click', async e => {
+  if (e.target.closest('[data-chat]')) abrirChat();
+  if (e.target.closest('[data-fechar-chat]')) { if (history.state && history.state.chat) history.back(); else fecharChat(); }
+  const b = e.target.closest('[data-apagar-msg]');
+  if (b && await confirmar('Apagar esta mensagem?')) {
+    try { const r = await sb.from('chat').delete().eq('id', b.dataset.apagarMsg).select('id'); if (r.error) throw r.error; if (!r.data || !r.data.length) throw {code:'42501'}; await carregarChat(); chatAtualizado(); }
+    catch(err){ falhaEscrita(err); }
+  }
+});
+document.addEventListener('submit', e => { if (e.target.id === 'chatForm') { e.preventDefault(); enviarChat(); } });
+document.addEventListener('keydown', e => { if (e.target.id === 'chatTx' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviarChat(); } });
+document.addEventListener('input', e => { if (e.target.id === 'chatTx') { const t = e.target; t.style.height = ''; t.style.height = Math.min(t.scrollHeight, 120)+'px'; } });
 
 init();
 })();

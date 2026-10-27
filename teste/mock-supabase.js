@@ -4,20 +4,24 @@
 (() => {
 const D = window.__DADOS;
 const U = { admin:'00000000-0000-0000-0000-00000000000a', betel:'00000000-0000-0000-0000-0000000000b1', flechas:'00000000-0000-0000-0000-0000000000f1',
-  gestao:'00000000-0000-0000-0000-0000000000c0', novo:'00000000-0000-0000-0000-000000000099' };
+  gestao:'00000000-0000-0000-0000-0000000000c0', escala:'00000000-0000-0000-0000-0000000000e5', novo:'00000000-0000-0000-0000-000000000099' };
 const T = {
   config:[{id:'geral', d:D.config}], config_privada:[{id:'geral', d:{whatsAdm:'5511958800779'}}],
   pessoas:[
     {id:U.admin, email:'augusto@x', nome:'Augusto Teste', apelido:'Augusto', whatsapp:'11958800779', conexao:null, papel:'admin', gestao:false, ministro:false, avisos:false},
     {id:U.betel, email:'betel@x', nome:'Líder Betel', apelido:'', whatsapp:'11911111111', conexao:'betel', papel:'lider', gestao:false, ministro:false, avisos:true},
     {id:U.flechas, email:'flechas@x', nome:'Org Flechas', apelido:'', whatsapp:'11922222222', conexao:'flechas', papel:'organizacao', gestao:false, ministro:false, avisos:false},
-    {id:U.gestao, email:'gestao@x', nome:'Gestora', apelido:'', whatsapp:'11933333333', conexao:null, papel:'leitura', gestao:true, ministro:false, avisos:false}],
+    {id:U.gestao, email:'gestao@x', nome:'Gestora Silva', apelido:'', whatsapp:'11933333333', conexao:null, papel:'leitura', gestao:true, ministro:false, avisos:false},
+    {id:U.escala, email:'escala@x', nome:'Paula Escala', apelido:'Paulinha', whatsapp:'11944444444', conexao:null, papel:'leitura', gestao:false, ministro:false, avisos:false, escala:true}],
   cadastros:[{id:'00000000-0000-0000-0000-0000000000d7', email:'pendente@x', nome:'Maria Pendente', apelido:'Mari', whatsapp:'11977777777', conexao:'shalom', papel:'auxiliar', em:'2026-10-26T10:00:00Z'}],
   acessos:[{id:'00000000-0000-0000-0000-0000000000d7', email:'pendente@x'}],
   escalas: D.escalas.map(x => { const {id, ...d} = x; return {id, d}; }),
   avisos: D.avisos.map(x => { const {id, ...d} = x; return {id, d, autor:null, criado_em:d.criadoEm}; }),
   eventos: D.eventos.map(x => { const {id, ...d} = x; return {id, d, autor:null}; }),
-  checkin_marcas:[], historico:[] };
+  checkin_marcas:[], historico:[],
+  chat:[{id:'m1', texto:'Bom dia, pessoal! Escala de domingo fechada?', por:U.betel, em:'2026-10-25T12:00:00.000Z'},
+        {id:'m2', texto:'Falta só a recepção da noite.', por:U.gestao, em:new Date(Date.now()-3600e3).toISOString()},
+        {id:'m3', texto:'Combinado, eu vejo isso.', por:U.admin, em:new Date(Date.now()-1800e3).toISOString()}] };
 window.__TABELAS = T;
 const derivados = (t, r) => { if (t==='escalas' || t==='eventos') r.data = r.d && r.d.data; if (t==='escalas') { r.culto = r.d.culto; r.area = r.d.area; } return r; };
 Object.keys(T).forEach(t => T[t].forEach(r => derivados(t, r)));
@@ -48,9 +52,10 @@ class Q {
       for (const n of novos) {
         const i = tab.findIndex(r => mesma(this.t, r, n));
         if (i >= 0 && this.op === 'insert') return {data:null, error:{code:'23505', message:'duplicate key'}};
-        if (this.t === 'historico') Object.assign(n, {id:tab.length+1, por:sessao && sessao.user.id, em:agora, por_nome:(T.pessoas.find(p => sessao && p.id===sessao.user.id)||{}).apelido || ''});
+        if (this.t === 'historico') { const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}; Object.assign(n, {id:tab.length+1, por:sessao && sessao.user.id, em:agora, por_nome: eu.apelido || String(eu.nome||'').split(' ')[0]}); }
         if (['avisos','eventos','escalas'].includes(this.t) && i < 0) { n.autor = sessao && sessao.user.id; n.criado_em = agora; }
         if (this.t === 'checkin_marcas') { n.por = sessao && sessao.user.id; n.em = agora; }
+        if (this.t === 'chat') { n.id = 'm'+Date.now(); n.por = sessao && sessao.user.id; n.em = agora; }
         derivados(this.t, n);
         if (i >= 0) tab[i] = {...tab[i], ...n}; else tab.push(n);
       }
@@ -61,7 +66,7 @@ class Q {
     let l = tab.filter(casa).map(r => JSON.parse(JSON.stringify(r)));
     if (this.ord) { const [k, asc] = this.ord; l.sort((a,b) => String(a[k]??'').localeCompare(String(b[k]??'')) * (asc?1:-1)); }
     l = l.slice(0, this.lim);
-    if (['pessoas','cadastros','config_privada','checkin_marcas','historico','acessos'].includes(this.t) && !sessao) l = [];
+    if (['pessoas','cadastros','config_privada','checkin_marcas','historico','acessos','chat'].includes(this.t) && !sessao) l = [];
     return {data: this.um ? (l[0] || null) : l, error:null};
   }
   then(ok, err){ return new Promise(r => setTimeout(r, 15)).then(() => this.exec()).then(ok, err); }
