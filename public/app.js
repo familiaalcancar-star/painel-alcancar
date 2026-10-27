@@ -454,7 +454,8 @@ document.addEventListener('submit', async e => {
   try {
     const r = await sb.from('cadastros').insert({id:S.uid, email:S.email, ...data}); if (r.error) throw r.error;
     await logar('criou','config','Pedido de cadastro: '+(PAPEIS[data.papel]||'')+' · '+conexaoNome(data.conexao), null, {nome:data.nome, papel:data.papel, conexao:data.conexao});
-    await carregarPessoas(); renderTabs(); render(); avisarAdmin();
+    await carregarPessoas(); renderTabs(); render();
+    if (pessoaDe(S.uid)) toast('Cadastro aprovado: você já tem o mesmo acesso do painel antigo.'); else avisarAdmin();
   } catch(err){ falhaEscrita(err); b.disabled = false; }
 });
 function viewInicio(){
