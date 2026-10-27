@@ -129,9 +129,9 @@ Botão "❓ Como usar" no topo; tutorial curto em passos, abre automaticamente n
 - Escala oficial 04/10–27/12/2026 (Louvor, Super Kids, Direção), Mídia de 04/10–27/12, Staff de nov/2026–jan/2027 (24/01/2027 marcado "CNI"), dia 25/10/2026 completo — tudo em `escalas.json` (campos: `data`, `culto`, `area`, `conexao`, `conexoes[]`, `funcoes[{nome, pessoas[]}]`, `obs`).
 - Avisos fixos: **Pasta de Expectativas 2026** (botão "Abrir Pasta de Expectativas" → https://drive.google.com/file/d/1FRx4dQ1Ry5hMz_sHcCuyrbPDPIBbajAA/view?usp=drivesdk) e **Cadastro de Membros** (botão "Cadastrar-se" → https://forms.gle/ZAmQBc6hp4RkqmqU6).
 
-## Próxima melhoria (depois da migração)
+## Importar escala (feito em 27/10/2026)
 
-**Importar escala** (aba Escala, só Admin): ler arquivo **Excel ou PDF** feito por outro administrador, reconhecer datas, culto, área, nomes de conexões (tolerante a variações de escrita) e nomes de Mídia/Louvor, cruzar com os domingos existentes e mostrar **prévia** (preencher / substituir / não reconhecido) antes de "Confirmar importação"; registrar no Histórico. Aguardando arquivos de exemplo reais.
+**Importar escala** (aba Escala, só Admin): ler arquivo **Excel ou PDF** feito por outro administrador, reconhecer datas, culto, área, nomes de conexões (tolerante a variações de escrita) e nomes de Mídia/Louvor, cruzar com os domingos existentes e mostrar **prévia** (preencher / substituir / não reconhecido) antes de "Confirmar importação"; registrar no Histórico. Feito para Direção, Super Kids, Louvor e Mídia; testado com exemplos inventados (`teste/exemplos/`). Ajustar quando chegarem arquivos reais.
 
 ## Ordem sugerida de trabalho
 

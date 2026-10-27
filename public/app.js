@@ -537,7 +537,7 @@ function mesLabel(){ return new Date(S.mes+'-15T12:00:00').toLocaleDateString('p
 function viewEscala(){
   if (S.det) return viewDetalhe();
   const bar = '<div class="bar"><div class="month"><button class="icon-btn" data-mes="-1" aria-label="Mês anterior">‹</button><strong>'+esc(mesLabel())+'</strong><button class="icon-btn" data-mes="1" aria-label="Próximo mês">›</button></div>'
-    + '<span style="flex:1"></span>' + (isAdm() ? '<button class="btn" data-esc-novo>+ Culto extra</button>' : '') + '</div>';
+    + '<span style="flex:1"></span>' + (isAdm() ? '<button class="btn ghost" data-importar>Importar escala</button><button class="btn" data-esc-novo>+ Culto extra</button>' : '') + '</div>';
   const chips = '<div class="chips" role="group" aria-label="Filtrar por conexão">' + [{id:'todas',nome:'Todas'}, ...conexoes()].map(c =>
     '<button class="chip" data-filtro="'+esc(c.id)+'" aria-pressed="'+(S.filtro===c.id)+'">'+esc(c.nome)+'</button>').join('') + '</div>';
   if (!S.perDe) { const [yy,mm] = S.mes.split('-').map(Number); S.perDe = S.mes+'-01'; S.perAte = isoLocal(new Date(yy, mm+2, 0)); }
@@ -866,6 +866,178 @@ async function exportarPeriodo(tipo, btn){
 }
 document.addEventListener('click', e => { const t = e.target.closest('button[data-per]'); if (t) exportarPeriodo(t.dataset.per, t); });
 
+/* ---------- IMPORTAR ESCALA (só administrador) ---------- */
+// Lê um Excel, CSV ou PDF com a escala e preenche Direção do culto e Super Kids (nomes das
+// conexões), Louvor e Mídia (nomes das pessoas). Mostra uma prévia antes de gravar.
+const PDFJS = 'vendor/pdfjs-3.11.174.min.js', PDFJS_WORKER = 'vendor/pdfjs-3.11.174.worker.min.js';
+const AREAS_IMPORT = ['direcao','superkids','louvor','midia'];
+const nrm = s => semAcento(s).replace(/[^a-z0-9]+/g,' ').trim();
+const MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const iso = (y,m,d) => y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+function anoProvavel(m, d){ const h = new Date(hoje()+'T12:00:00'); for (const y of [h.getFullYear(), h.getFullYear()+1, h.getFullYear()-1]) { const x = new Date(y, m-1, d, 12); const dias = (x - h) / 864e5; if (dias >= -90 && dias <= 300) return y; } return h.getFullYear(); }
+function lerData(s){
+  s = String(s||'').trim(); if (!s) return null;
+  let m = s.match(/^D:(\d{4})-(\d{2})-(\d{2})$/); if (m) return iso(+m[1], +m[2], +m[3]);
+  m = s.match(/(?:^|[^\d])(\d{1,2})\s*[\/.-]\s*(\d{1,2})(?:\s*[\/.-]\s*(\d{2,4}))?(?!\d)/);
+  if (m) { const d = +m[1], mm = +m[2]; let y = m[3] ? +m[3] : 0; if (y && y < 100) y += 2000; if (d >= 1 && d <= 31 && mm >= 1 && mm <= 12) return iso(y || anoProvavel(mm, d), mm, d); }
+  const n = nrm(s); m = n.match(/(?:^| )(\d{1,2})(?: de)? (jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*(?: (?:de )?(\d{4}))?/);
+  if (m) { const mm = MESES.indexOf(m[2]) + 1, d = +m[1]; return iso(m[3] ? +m[3] : anoProvavel(mm, d), mm, d); }
+  return null;
+}
+function lerCulto(s){
+  const n = nrm(s); if (!n) return null;
+  for (const c of cultos()) { const cn = nrm(c.nome), ch = nrm(c.hora).replace(/ /g,''); if ((cn && new RegExp('(^| )'+cn+'( |$)').test(n)) || (ch && n.replace(/ /g,'').includes(ch))) return c.id; }
+  if (/(^| )(manha|matutino)( |$)/.test(n)) return (cultos().find(c => /manh/i.test(c.nome))||{}).id || null;
+  if (/(^| )(noite|noturno)( |$)/.test(n)) return (cultos().find(c => /noite/i.test(c.nome))||{}).id || null;
+  return null;
+}
+// Rótulo de coluna/linha: {area, funcao?}
+function lerRotulo(s){
+  const n = nrm(s); if (!n || n.length > 40) return null;
+  const lv = areaInfo('louvor');
+  for (const f of (lv.funcoes||[])) if (n === nrm(f.nome)) return {area:'louvor', funcao:f.nome};
+  // A célula inteira precisa ser o nome da função (assim "Ministra Ana" não vira a função "Ministros").
+  const alias = [[/^ministr(o|os|a|as)$/, 'Ministros'], [/^(contra ?baixo|baixo)$/, 'Contrabaixo'], [/^viol(ao|oes)$/, 'Violão'], [/^guitarr(a|as)$/, 'Guitarra'], [/^(teclado|teclados|teclas)$/, 'Teclado'], [/^bateri(a|as)$/, 'Bateria'],
+    [/^(soprano|soprano 1|primeiro soprano|1 o soprano)$/, '1º Soprano'], [/^(soprano 2|segundo soprano|2 o soprano)$/, '2º Soprano'], [/^contraltos?$/, 'Contralto'], [/^tenor(es)?$/, 'Tenor'], [/^(baixo voz|voz baixo|baixo vocal|baixos)$/, 'Baixo (voz)']];
+  for (const [re, f] of alias) if (re.test(n) && lv.funcoes.some(x => x.nome === f)) return {area:'louvor', funcao:f};
+  if (/^(super ?kids|kids|ministerio infantil|infantil)$/.test(n)) return {area:'superkids'};
+  if (/^(direcao|direcao do culto|direcao de culto|recepcao)$/.test(n)) return {area:'direcao'};
+  if (/^(louvor|equipe de louvor|ministerio de louvor)$/.test(n)) return {area:'louvor'};
+  if (/^(midia|midias|equipe de midia)$/.test(n)) return {area:'midia'};
+  return null;
+}
+function lerConexoes(v){
+  const ok = [], fora = [];
+  String(v||'').split(/\s*(?:\/|,|;|\+|&|\n| e )\s*/i).map(x => x.trim()).filter(x => x && !/^[-–—x]$/i.test(x)).forEach(tk => {
+    const n = nrm(tk).replace(/^conex(ao|oes) /,'');
+    const c = conexoes().find(c => { const cn = nrm(c.nome); return n === cn || n === nrm(c.id) || (n.length >= 4 && (cn.includes(n) || n.includes(cn))) || (cn.replace(/s$/,'') === n.replace(/s$/,'')); });
+    if (c) { if (!ok.includes(c.id)) ok.push(c.id); } else fora.push(tk);
+  });
+  return {ok, fora};
+}
+const lerNomes = v => String(v||'').split(/\s*(?:,|;|\/|\n|&| e (?=[A-ZÀ-Ú]))\s*/).map(x => x.trim()).filter(x => x && !/^[-–—x?]+$/i.test(x) && !/^a definir$/i.test(x));
+// Arquivo → tabelas; cada linha = lista de células {t, x}
+async function lerArquivo(file){
+  const ext = (file.name.split('.').pop()||'').toLowerCase();
+  if (ext === 'xlsx') {
+    await carregar(EXCELJS); const wb = new window.ExcelJS.Workbook(); await wb.xlsx.load(await file.arrayBuffer());
+    const txt = v => { if (v == null) return ''; if (v instanceof Date) return 'D:'+v.toISOString().slice(0,10); if (typeof v === 'object') { if (v.richText) return v.richText.map(x => x.text).join(''); if (v.result !== undefined) return txt(v.result); if (v.text) return String(v.text); } return String(v).trim(); };
+    return wb.worksheets.map(ws => { const rows = []; ws.eachRow({includeEmpty:true}, (row, i) => { const cs = []; row.eachCell({includeEmpty:true}, (c, j) => cs.push({t:txt(c.value), x:j})); rows[i-1] = cs; }); return {nome:ws.name, rows:rows.map(r => r || [])}; });
+  }
+  if (ext === 'csv' || ext === 'txt') {
+    const linhas = (await file.text()).replace(/^﻿/,'').split(/\r?\n/); const sep = [';','\t',','].find(s => linhas.some(l => l.includes(s))) || ';';
+    return [{nome:file.name, rows:linhas.map(l => l.split(sep).map((t, j) => ({t:t.replace(/^"|"$/g,'').trim(), x:j+1})))}];
+  }
+  if (ext === 'pdf') {
+    await carregar(PDFJS); window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const pdf = await window.pdfjsLib.getDocument({data: new Uint8Array(await file.arrayBuffer())}).promise; const tabs = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const itens = (await (await pdf.getPage(p)).getTextContent()).items.filter(i => i.str.trim()).map(i => ({t:i.str, x0:i.transform[4], x1:i.transform[4]+i.width, y:i.transform[5], h:Math.abs(i.transform[3])||8}));
+      itens.sort((a,b) => b.y - a.y || a.x0 - b.x0);
+      const linhas = []; itens.forEach(i => { const l = linhas.find(l => Math.abs(l.y - i.y) <= Math.max(2, i.h*0.4)); if (l) l.its.push(i); else linhas.push({y:i.y, its:[i]}); });
+      linhas.sort((a,b) => b.y - a.y);
+      tabs.push({nome:'Página '+p, pdf:true, rows:linhas.map(l => { l.its.sort((a,b) => a.x0 - b.x0); const cs = []; l.its.forEach(i => { const u = cs[cs.length-1]; if (u && i.x0 - u.x1 < Math.max(4, i.h*0.6)) { u.t += (i.x0 - u.x1 > 1 ? ' ' : '') + i.t; u.x1 = i.x1; } else cs.push({t:i.t, x0:i.x0, x1:i.x1}); }); return cs.map(c => ({t:c.t.trim(), x:(c.x0+c.x1)/2, x0:c.x0, x1:c.x1})); })});
+    }
+    return tabs;
+  }
+  throw new Error('formato');
+}
+// Tabelas → itens {data, culto|null, area, funcao|null, valor}
+function interpretar(tabs){
+  const itens = [], ignorados = new Set();
+  // No PDF, a célula é da coluna se encosta nela e está alinhada pelo centro, pela esquerda ou pela direita.
+  const naColuna = (row, col, pdf) => pdf ? row.find(c => c.x0 <= col.x1 + 8 && c.x1 >= col.x0 - 8 && (Math.abs(c.x - col.x) <= Math.max(40, (col.x1-col.x0)) || Math.abs(c.x0 - col.x0) <= 12 || Math.abs(c.x1 - col.x1) <= 12)) : row.find(c => c.x === col.x);
+  tabs.forEach(tab => {
+    let cab = null, colsData = null, areaSecao = null, ultData = null, ultCulto = null;
+    tab.rows.forEach(row => {
+      const cheias = row.filter(c => c.t);
+      if (!cheias.length) return;
+      const datas = cheias.filter(c => lerData(c.t)), rotulos = cheias.map(c => ({c, r:lerRotulo(c.t)})).filter(x => x.r);
+      // cabeçalho com datas nas colunas (ex.: louvor: funções × domingos)
+      if (datas.length >= 2 && datas.length >= cheias.length - 1) { colsData = datas.map(c => ({x:c.x, x0:c.x0, x1:c.x1, data:lerData(c.t), culto:lerCulto(c.t)})); cab = null; return; }
+      if (colsData && cheias.every(c => lerCulto(c.t) || !c.t) && cheias.length >= 2) { cheias.forEach(c => { const col = colsData.find(k => naColuna([c], k, tab.pdf)); if (col) col.culto = lerCulto(c.t); }); return; }
+      // cabeçalho com áreas nas colunas
+      if (rotulos.length >= 1 && !datas.length && (rotulos.length >= 2 || cheias.some(c => /^data|^dia|^domingo/.test(nrm(c.t))))) { cab = rotulos.map(x => ({x:x.c.x, x0:x.c.x0, x1:x.c.x1, ...x.r})); colsData = null; return; }
+      // título de seção ("LOUVOR", "MÍDIA")
+      if (cheias.length === 1 && rotulos.length === 1 && !rotulos[0].r.funcao) { areaSecao = rotulos[0].r.area; return; }
+      if (colsData) {
+        const rot = rotulos.find(x => x.c.x === cheias[0].x) || (rotulos.length && rotulos[0].c === cheias[0] ? rotulos[0] : null);
+        let alvo = rot ? rot.r : (areaSecao ? {area:areaSecao} : null);
+        if (rot && !rot.r.funcao && areaSecao === 'louvor' && rot.r.area !== 'louvor') alvo = rot.r;
+        if (!alvo) { ignorados.add(cheias[0].t); return; }
+        colsData.forEach(col => { const c = naColuna(row.filter(x => x !== (rot && rot.c)), col, tab.pdf); if (c && c.t) itens.push({data:col.data, culto:col.culto, area:alvo.area, funcao:alvo.funcao||null, valor:c.t}); });
+        return;
+      }
+      if (cab) {
+        const d = datas.length ? lerData(datas[0].t) : null, cu = cheias.map(c => lerCulto(c.t)).find(Boolean) || null;
+        if (d) { ultData = d; ultCulto = cu; } else if (cu && ultData) ultCulto = cu; else return;
+        cab.forEach(col => { const c = naColuna(row, col, tab.pdf); if (c && c.t && !lerData(c.t) && !(lerCulto(c.t) && c.t.length < 12)) itens.push({data:ultData, culto:ultCulto, area:col.area, funcao:col.funcao||null, valor:c.t}); });
+      }
+    });
+  });
+  return {itens, ignorados:[...ignorados]};
+}
+// Itens → mudanças por escala, comparando com o que já está no banco
+async function planejar(itens){
+  const datas = [...new Set(itens.map(i => i.data))].sort(); const fora = [];
+  if (!datas.length) return {mudancas:[], fora};
+  const atuais = linhas(await sb.from('escalas').select('id,d').gte('data', datas[0]).lte('data', datas[datas.length-1]));
+  const plano = new Map();
+  itens.forEach(i => {
+    if (!AREAS_IMPORT.includes(i.area)) return;
+    const cs = i.culto ? [i.culto] : cultos().map(c => c.id);
+    cs.forEach(cu => {
+      const id = docId(i.data, cu, i.area), a = areaInfo(i.area);
+      if (!plano.has(id)) { const x = atuais.find(e => e.id === id); plano.set(id, {id, x, d: x ? JSON.parse(JSON.stringify(semId(x))) : {data:i.data, culto:cu, area:i.area, conexoes:[], conexao:null, funcoes:a.funcoes.map(f => ({nome:f.nome, pessoas:[]})), obs:''}}); }
+      const p = plano.get(id); p.d.funcoes = p.d.funcoes || [];
+      if (a.porConexao) { const {ok, fora:f} = lerConexoes(i.valor); f.forEach(t => fora.push(fmtCurto(i.data)+' · '+a.nome+': "'+t+'"'));
+        if (ok.length) { const mudou = JSON.stringify(conexoesDe(p.d)) !== JSON.stringify(ok); p.d.conexoes = ok; p.d.conexao = ok[0]; if (mudou && p.x && conexoesDe(p.x).length) p.d.funcoes = a.funcoes.map(f => ({nome:f.nome, pessoas:[]})); } }
+      else { const fn = i.funcao || (a.funcoes[0]||{}).nome; let g = p.d.funcoes.find(f => f.nome === fn); if (!g) { g = {nome:fn, pessoas:[]}; p.d.funcoes.push(g); } const ns = lerNomes(i.valor); if (ns.length) g.pessoas = ns; }
+    });
+  });
+  const resumo = (a, d) => !d ? '' : a.porConexao ? (conexoesTxt(d) || '—') : (d.funcoes||[]).filter(f => (f.pessoas||[]).length).map(f => (a.funcoes.length > 1 ? f.nome+': ' : '')+f.pessoas.join(', ')).join(' · ') || '—';
+  const mudancas = [...plano.values()].map(p => { const a = areaInfo(p.d.area); const antes = resumo(a, p.x), depois = resumo(a, p.d);
+    return {...p, a, antes, depois, status: !p.x || antes === '—' ? 'preencher' : antes === depois ? 'igual' : 'substituir'}; })
+    .sort((u, v) => (u.d.data+cultos().findIndex(c => c.id===u.d.culto)+AREAS_IMPORT.indexOf(u.d.area)).localeCompare(v.d.data+cultos().findIndex(c => c.id===v.d.culto)+AREAS_IMPORT.indexOf(v.d.area)));
+  return {mudancas, fora};
+}
+function formImportar(){
+  abrir('<form><h2>Importar escala</h2><p class="meta" style="margin:0">Escolha um arquivo <b>Excel (.xlsx)</b>, <b>CSV</b> ou <b>PDF</b> com a escala. O painel reconhece as datas, o culto (manhã ou noite) e as áreas <b>Direção do culto</b> e <b>Super Kids</b> (nomes das conexões), <b>Louvor</b> e <b>Mídia</b> (nomes das pessoas).</p>'
+    + '<label class="f" for="iArq">Arquivo</label><input class="inp" id="iArq" name="arq" type="file" required accept=".xlsx,.csv,.pdf">'
+    + '<p class="hint">Se a linha não disser manhã ou noite, a escala vale para os dois cultos do dia. Nada é gravado antes da prévia.</p>'
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Ler arquivo</button></div></form>',
+  async fd => {
+    const f = fd.get('arq'); if (!f || !f.size) { toast('Escolha um arquivo.'); return false; }
+    let tabs; try { tabs = await lerArquivo(f); } catch(e){ console.warn(e); toast(e && e.message === 'formato' ? 'Use um arquivo .xlsx, .csv ou .pdf (no Excel antigo, salve como .xlsx).' : 'Não consegui ler esse arquivo.'); return false; }
+    const {itens, ignorados} = interpretar(tabs);
+    const {mudancas, fora} = await planejar(itens);
+    setTimeout(() => previaImportar(f.name, mudancas, [...fora, ...ignorados.slice(0, 20).map(t => 'Linha não reconhecida: "'+t+'"')]), 0);
+    return true;
+  });
+}
+function previaImportar(arquivo, mudancas, avisos){
+  const uteis = mudancas.filter(m => m.status !== 'igual'), iguais = mudancas.length - uteis.length;
+  const ROT = {preencher:'preencher', substituir:'substituir'};
+  const linhaM = (m, i) => '<label class="imp-l"><input type="checkbox" name="m" value="'+i+'" checked><span><b>'+esc(fmtCurto(m.d.data))+' · '+esc(cultoInfo(m.d.culto).nome)+' · '+esc(m.a.nome)+'</b> <span class="tag'+(m.status==='substituir'?' tag-sub':'')+'">'+ROT[m.status]+'</span><br>'+esc(m.depois)+(m.status==='substituir'?'<br><small class="meta">antes: '+esc(m.antes)+'</small>':'')+'</span></label>';
+  abrir('<form><h2>Prévia da importação</h2><p class="meta" style="margin:0">Arquivo: '+esc(arquivo)+'</p>'
+    + (uteis.length ? '<p style="margin:10px 0 6px">'+uteis.length+' escala'+(uteis.length>1?'s':'')+' para gravar'+(iguais?' · '+iguais+' já iguais (ficam como estão)':'')+'. Desmarque o que não quiser.</p><div class="imp-lista">'+uteis.map(linhaM).join('')+'</div>'
+       : '<div class="notice" style="margin-top:12px">Nada novo para gravar'+(iguais?': as '+iguais+' escalas do arquivo já estão iguais no painel':'. Não encontrei datas e áreas que eu reconheça nesse arquivo')+'.</div>')
+    + (avisos.length ? '<p style="margin:14px 0 4px"><b>Não reconhecido</b> (não será gravado):</p><ul class="imp-avisos">'+avisos.map(a => '<li>'+esc(a)+'</li>').join('')+'</ul>' : '')
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button>'+(uteis.length?'<button type="submit" class="btn">Confirmar importação</button>':'')+'</div></form>',
+  async fd => {
+    if (!uteis.length) return true;
+    const escolhidas = fd.getAll('m').map(Number).map(i => uteis[i]); if (!escolhidas.length) { toast('Marque pelo menos uma escala.'); return false; }
+    let ok = 0;
+    for (const m of escolhidas) { try { await ref('escalas', m.id).set({...m.d, atualizadoEm:new Date().toISOString()}); ok++; } catch(e){ console.warn(e); } }
+    await logar('editou', 'escala', 'Importou escala do arquivo '+arquivo+': '+ok+' escala'+(ok>1?'s':''), null, null);
+    await RECARGA.escalas();
+    toast(ok === escolhidas.length ? 'Importação concluída: '+ok+' escala'+(ok>1?'s':'')+' gravada'+(ok>1?'s':'')+'.' : 'Gravei '+ok+' de '+escolhidas.length+'. Tente de novo as que faltaram.');
+    return true;
+  });
+}
+document.addEventListener('click', e => { if (e.target.closest('[data-importar]') && isAdm()) formImportar(); });
+if (window.__TABELAS) window.__importar = {lerArquivo, interpretar, planejar, lerData, lerRotulo, lerCulto}; // só no teste (banco simulado)
+
 /* ---------- AVISOS ---------- */
 function viewAvisos(){
   const top = '<div class="bar"><h2 style="font-size:22px">Avisos</h2><span style="flex:1"></span>'+(temAvisos()?'<button class="btn" data-novo-aviso>+ Novo aviso</button>':'')+'</div>';
@@ -988,7 +1160,7 @@ function viewAjuda(){
   h += passo('7. Avisos e agenda', ['Na aba <b>Avisos</b> ficam os comunicados, e na <b>Agenda</b> ficam os eventos com data.', 'Quando houver, toque em <b>Fazer inscrição</b> ou no botão do WhatsApp.', 'Quem tem a permissão <b>Avisos/Eventos</b> publica pelo botão <b>+</b>.']);
   if (isAdm()) {
     h += passo('8. Histórico', ['A aba <b>Histórico</b> mostra tudo o que foi criado, editado ou excluído: quem fez, o quê, e a data e a hora.']);
-    h += passo('9. Para administradores', ['Em <b>Ajustes</b>, aprove os cadastros em <b>Pessoas e permissões</b>: escolha a função e a conexão e toque em <b>Salvar pessoas</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
+    h += passo('9. Para administradores', ['Em <b>Ajustes</b>, aprove os cadastros em <b>Pessoas e permissões</b>: escolha a função e a conexão e toque em <b>Salvar pessoas</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
   }
   h += '<div class="end" style="justify-content:center;margin:18px 0"><button class="btn" data-go="inicio">Começar a usar</button></div>';
   return h;

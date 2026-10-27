@@ -257,3 +257,11 @@ header.top .who{flex-direction:column;align-items:flex-end;gap:6px}
 .ou::before,.ou::after{content:"";flex:1;height:1px;background:var(--line)}
 .login-links{display:flex;justify-content:space-between;gap:12px;margin-top:14px}
 .login-links .link{font-size:14px;color:var(--ink)}
+
+/* ---------- Painel 2.0: importar escala ---------- */
+.imp-lista{max-height:50vh;overflow-y:auto;border:1px solid var(--line);border-radius:12px;padding:4px 10px}
+.imp-l{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line);font-size:14px;line-height:1.35}
+.imp-l:first-child{border-top:0}
+.imp-l input{margin-top:3px;width:18px;height:18px;flex:none}
+.tag-sub{background:var(--gold-soft);color:var(--yellow)}
+.imp-avisos{margin:0;padding-left:18px;font-size:13px;color:var(--muted);max-height:20vh;overflow-y:auto}
