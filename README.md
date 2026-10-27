@@ -5,7 +5,7 @@ Escalas, avisos, agenda e check-in da igreja. Site estático + Supabase (grátis
 - `CLAUDE.md` — descrição completa do painel (o que ele faz e as permissões).
 - `referencia/` — painel atual (feito no Claude), usado como modelo.
 - `public/` — o site (abre direto no navegador, sem etapa de build): `index.html`, `app.js`, `estilo.css`, `config.js`, logo, banners e bibliotecas em `vendor/`.
-- Hospedagem: **Cloudflare Pages** (sem comando de build; pasta publicada: `public`). O `netlify.toml` ficou da primeira tentativa no Netlify, que no plano grátis bloqueia alterações enviadas por outra conta em repositório privado.
+- Hospedagem: **Netlify** (`netlify.toml` publica a pasta `public`). O repositório é **público** porque o Netlify grátis bloqueia alterações enviadas por outra conta em repositório privado. Por isso, nunca colocar senhas, chaves secretas ou dados de pessoas aqui (os dados ficam no Supabase; `dados-exportados/` está no .gitignore).
 - `teste/` — teste das telas no navegador com o banco simulado: `node teste/testar-site.js`.
 - `supabase/schema.sql` — banco de dados e permissões. Rodar no SQL Editor do Supabase.
 - `supabase/testes/` — testes automáticos das permissões.
