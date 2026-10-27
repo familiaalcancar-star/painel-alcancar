@@ -39,6 +39,7 @@ class Q {
   lte(k,v){ this.f.push(r => r[k] <= v); return this; }
   order(k, o){ this.ord = [k, !o || o.ascending !== false]; return this; }
   limit(n){ this.lim = n; return this; }
+  range(a, b){ this.ini = a; this.lim = b - a + 1; return this; }
   maybeSingle(){ this.um = true; return this; }
   insert(v){ this.op = 'insert'; this.v = v; return this; }
   update(v){ this.op = 'update'; this.v = v; return this; }
@@ -66,7 +67,7 @@ class Q {
     if (this.op === 'delete') { const l = tab.filter(casa); T[this.t] = tab.filter(r => !casa(r)); return {data: this.ret ? l.map(r => ({id:r.id})) : null, error:null}; }
     let l = tab.filter(casa).map(r => JSON.parse(JSON.stringify(r)));
     if (this.ord) { const [k, asc] = this.ord; l.sort((a,b) => String(a[k]??'').localeCompare(String(b[k]??'')) * (asc?1:-1)); }
-    l = l.slice(0, this.lim);
+    l = l.slice(this.ini || 0, (this.ini || 0) + this.lim);
     if (['pessoas','cadastros','config_privada','checkin_marcas','historico','acessos','chat'].includes(this.t) && !sessao) l = [];
     return {data: this.um ? (l[0] || null) : l, error:null};
   }

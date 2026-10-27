@@ -638,7 +638,7 @@ function linhasDe(lista){
     });
   return rows;
 }
-const TIPOS = {csv:'text/csv;charset=utf-8', html:'text/html;charset=utf-8', pdf:'application/pdf', xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
+const TIPOS = {csv:'text/csv;charset=utf-8', html:'text/html;charset=utf-8', pdf:'application/pdf', xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', zip:'application/zip'};
 async function baixar(filename, data){
   try {
     const ext = filename.split('.').pop().toLowerCase();
@@ -1059,6 +1059,27 @@ function previaImportar(arquivo, mudancas, avisos){
 document.addEventListener('click', e => { if (e.target.closest('[data-importar]') && isAdm()) formImportar(); });
 if (window.__TABELAS) window.__importar = {lerArquivo, interpretar, planejar, lerData, lerRotulo, lerCulto}; // só no teste (banco simulado)
 
+/* ---------- BACKUP (só administrador) ---------- */
+const TABELAS_BACKUP = ['config','config_privada','pessoas','cadastros','pessoas_referencia','acessos','escalas','avisos','eventos','checkin_marcas','historico','chat'];
+async function baixarBackup(btn){
+  if (!isAdm()) return;
+  const txt = btn.textContent; btn.textContent = 'Gerando…'; btn.disabled = true;
+  try {
+    await carregar(JSZIP); const zip = new window.JSZip(); const contagem = [];
+    for (const tab of TABELAS_BACKUP) {
+      const todas = [];
+      for (let de = 0; ; de += 1000) { const r = await sb.from(tab).select('*').range(de, de + 999); if (r.error) throw r.error; todas.push(...(r.data||[])); if (!r.data || r.data.length < 1000) break; }
+      zip.file(tab + '.json', JSON.stringify(todas, null, 2)); contagem.push(tab + ': ' + todas.length + ' registro' + (todas.length === 1 ? '' : 's'));
+    }
+    zip.file('LEIA-ME.txt', 'Backup do Painel da ' + ((S.cfg && S.cfg.igreja) || 'igreja') + '\nGerado em ' + fmtQuando(new Date().toISOString()) + ' por ' + nome(S.uid) + '\n\nUm arquivo .json por tabela do banco (Supabase):\n' + contagem.join('\n') + '\n\nContém dados pessoais (WhatsApp e e-mails). Guarde em lugar seguro.\n');
+    await baixar('backup-painel-' + hoje() + '.zip', await zip.generateAsync({type:'blob'}));
+    await logar('criou', 'config', 'Baixou o backup do banco de dados', null, null);
+    toast('Backup baixado.');
+  } catch(e){ console.warn(e); toast('Não foi possível gerar o backup agora.'); }
+  finally { btn.textContent = txt; btn.disabled = false; }
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-backup]'); if (b) baixarBackup(b); });
+
 /* ---------- AVISOS ---------- */
 function viewAvisos(){
   const top = '<div class="bar"><h2 style="font-size:22px">Avisos</h2><span style="flex:1"></span>'+(temAvisos()?'<button class="btn" data-novo-aviso>+ Novo aviso</button>':'')+'</div>';
@@ -1213,6 +1234,7 @@ function viewAjustes(){
     + '<div class="row"><div><label class="f" for="cvN">Nome</label><input class="inp" id="cvN" autocomplete="off"></div><div><label class="f" for="cvW">WhatsApp com DDD</label><input class="inp" id="cvW" type="tel" inputmode="tel" placeholder="(11) 99999-9999"></div></div>'
     + '<div class="end"><a class="btn zap" id="cvLink" target="_blank" rel="noopener" href="'+esc(waUrl('', msgConvite('')))+'">Enviar passo a passo no WhatsApp</a></div>'
     + '<p class="hint">Sem número, o WhatsApp abre para você escolher o contato ou um grupo.</p></div>';
+  html += '<h2 class="section-title">Backup do banco de dados</h2><div class="card"><p class="meta" style="margin:0">Baixa tudo o que está no banco (configuração, pessoas, cadastros, escalas, avisos, eventos, check-in, histórico e bate-papo) num arquivo .zip. Contém WhatsApp e e-mails: guarde em lugar seguro e não compartilhe.</p><div class="end"><button class="btn" data-backup>Baixar backup (.zip)</button></div></div>';
   html += '<h2 class="section-title">Pessoas e permissões</h2>';
   const ids = [...new Set([...S.membros, ...Object.keys(S.cadastros||{}), ...Object.keys(S.pessoas||{})])].filter(id => id && id!==S.uid);
   const nAdm = Object.values(S.pessoas||{}).filter(p=>p.papel==='admin' && p.id!==S.uid).length;
