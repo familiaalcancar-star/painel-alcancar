@@ -32,11 +32,9 @@ const server=http.createServer((req,res)=>{
  await p.check(`[data-p-banco="${id}"]`);await p.click('[data-salvar-pessoas]');await p.waitForTimeout(250);
  check(await p.evaluate(id=>window.__TABELAS.pessoas.find(x=>x.id===id).banco,id),'Banco salvo');
  await p.click(`[data-rm-pessoa="${id}"]`);await p.click('[data-r="1"]');await p.waitForTimeout(250);
- check(await p.inputValue(`[data-p-status="${id}"]`)==='removido','Removido continua na lista');
- check(await p.evaluate(id=>!!window.__TABELAS.cadastros.find(x=>x.id===id)&&window.__TABELAS.pessoas.find(x=>x.id===id).nome==='Maria Pendente',id),'remoção preserva cadastro e nome');
- await p.click(`[data-aprovar="${id}"]`);await p.click('[data-salvar-pessoas]');await p.waitForTimeout(250);
- check(await p.inputValue(`[data-p-status="${id}"]`)==='aprovado','reativação explícita');
- await p.screenshot({path:'/tmp/painel-status-mobile.png',fullPage:true});await p.setViewportSize({width:1440,height:1000});await p.locator('table.lead').screenshot({path:'/tmp/painel-status-tabela.png'});await p.context().close();
+ check(await p.locator(`[data-p-status="${id}"]`).count()===0,'Remover tira a pessoa da lista (28/10: Remover exclui)');
+ check(await p.evaluate(id=>!window.__TABELAS.cadastros.find(x=>x.id===id)&&!window.__TABELAS.pessoas.find(x=>x.id===id),id),'Remover exclui pessoa e pedido de cadastro');
+ await p.screenshot({path:require('path').join(require('os').tmpdir(),'painel-status-mobile.png'),fullPage:true});await p.setViewportSize({width:1440,height:1000});await p.locator('table.lead').screenshot({path:require('path').join(require('os').tmpdir(),'painel-status-tabela.png')});await p.context().close();
  for(const role of ['admin','betel','flechas','gestao','escala']){
  p=await open(role,{email:role+'@x',banco:true},'escala');await p.setViewportSize({width:1440,height:1000});
  check(await p.locator('[data-importar],[data-esc-novo],[data-exp],[data-per],[data-ck-pdf],[data-ck-xls]').count()===0,role+': Banco sem importar/exportar');

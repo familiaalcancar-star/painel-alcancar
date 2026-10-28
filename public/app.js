@@ -1218,7 +1218,7 @@ function viewAjuda(){
   h += passo('7. Avisos e agenda', ['Na aba <b>Avisos</b> ficam os comunicados, e na <b>Agenda</b> ficam os eventos com data.', 'Quando houver, toque em <b>Fazer inscrição</b> ou no botão do WhatsApp.', 'Quem tem a permissão <b>Avisos/Eventos</b> publica pelo botão <b>+</b>.']);
   if (isAdm()) {
     h += passo('8. Histórico', ['A aba <b>Histórico</b> mostra tudo o que foi criado, editado ou excluído: quem fez, o quê, e a data e a hora.']);
-    h += passo('9. Para administradores', ['Em <b>Ajustes</b> → <b>Pessoas e permissões</b>, toque em <b>Confirmar</b> na pessoa, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Sem confirmar, ela continua <b>Pendente</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, Word, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
+    h += passo('9. Para administradores', ['Em <b>Ajustes</b> → <b>Pessoas e permissões</b>, toque em <b>Aprovar</b> na pessoa, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Sem tocar em Aprovar, ela continua <b>Pendente</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, Word, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
   }
   h += '<div class="end" style="justify-content:center;margin:18px 0"><button class="btn" data-go="inicio">Começar a usar</button></div>';
   return h;
@@ -1251,7 +1251,7 @@ function viewAjustes(){
     + '<div class="end"><a class="btn zap" id="cvLink" target="_blank" rel="noopener" href="'+esc(waUrl('', msgConvite('')))+'">Enviar passo a passo no WhatsApp</a></div>'
     + '<p class="hint">Sem número, o WhatsApp abre para você escolher o contato ou um grupo.</p></div>';
   html += '<h2 class="section-title">Backup do banco de dados</h2><div class="card"><p class="meta" style="margin:0">Baixa tudo o que está no banco (configuração, pessoas, cadastros, escalas, avisos, eventos, check-in, histórico e bate-papo) num arquivo .zip. Contém WhatsApp e e-mails: guarde em lugar seguro e não compartilhe.</p><div class="end"><button class="btn" data-backup>Baixar backup (.zip)</button></div></div>';
-  html += '<h2 class="section-title">Pessoas e permissões</h2><p class="hint">O status muda sozinho. Para aprovar alguém: toque em <b>Confirmar</b>, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Quem não for confirmado continua <b>Pendente</b>. <b>Remover</b> revoga o acesso e mantém o registro; para devolver o acesso, use <b>Reativar</b>. <b>Banco</b> permite apenas visualizar e prevalece sobre a função e todos os extras.</p>';
+  html += '<h2 class="section-title">Pessoas e permissões</h2><p class="hint">O status muda sozinho. Para aprovar alguém: toque em <b>Aprovar</b>, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Se você salvar sem tocar em <b>Aprovar</b>, a pessoa continua <b>Pendente</b>. <b>Remover</b> exclui a pessoa da lista e tira o acesso; se ela entrar de novo, faz um cadastro novo. <b>Banco</b> permite apenas visualizar e prevalece sobre a função e todos os extras.</p>';
   const ids = [...new Set([...S.membros, ...Object.keys(S.cadastros||{}), ...Object.keys(S.pessoas||{})])].filter(id => id && id!==S.uid);
   const nAdm = Object.values(S.pessoas||{}).filter(p=>p.papel==='admin' && aprovado(p.id) && !p.banco && p.id!==S.uid).length;
   if (!ids.length) html += '<div class="empty">Ninguém além de você entrou no painel ainda. Quando cada pessoa entrar e enviar o cadastro, ela aparece aqui para você aprovar.</div>';
@@ -1271,7 +1271,7 @@ const ROT_STATUS = {pendente:'Pendente', aprovado:'Aprovado', removido:'Removido
 function celulaStatus(id){
   const st = statusDe(id);
   return '<input type="hidden" data-p-status="'+esc(id)+'" value="'+st+'"><span class="st st-'+st+'" data-st-rot="'+esc(id)+'">'+ROT_STATUS[st]+'</span>'
-    + (st !== 'aprovado' ? '<br><button type="button" class="btn small st-btn" data-aprovar="'+esc(id)+'" data-orig="'+st+'">'+(st === 'removido' ? 'Reativar' : 'Confirmar')+'</button>' : '');
+    + (st !== 'aprovado' ? '<br><button type="button" class="btn small st-btn" data-aprovar="'+esc(id)+'" data-orig="'+st+'">'+(st === 'removido' ? 'Reativar' : 'Aprovar')+'</button>' : '');
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-aprovar]'); if (!b || !isAdm()) return;
@@ -1280,7 +1280,7 @@ document.addEventListener('click', e => {
   inp.value = marcar ? 'aprovado' : b.dataset.orig;
   rot.className = 'st ' + (marcar ? 'st-marcado' : 'st-'+b.dataset.orig);
   rot.textContent = marcar ? 'Será aprovado ao salvar' : ROT_STATUS[b.dataset.orig];
-  b.textContent = marcar ? 'Desfazer' : (b.dataset.orig === 'removido' ? 'Reativar' : 'Confirmar');
+  b.textContent = marcar ? 'Desfazer' : (b.dataset.orig === 'removido' ? 'Reativar' : 'Aprovar');
   b.classList.toggle('ghost', marcar);
   if (marcar) toast('Agora escolha a função e a conexão e toque em Salvar pessoas.');
 });
@@ -1305,14 +1305,12 @@ document.addEventListener('submit', async e => {
 document.addEventListener('click', async e => {
   const t = e.target.closest('button[data-rm-pessoa]'); if (!t || !isAdm()) return;
   const id = t.dataset.rmPessoa; const quem = nomeComp(id), quemCurto = nome(id);
-  if (!await confirmar('Remover o acesso de '+quem+'?\n\nA pessoa ficará com status Removido e perderá as permissões. O cadastro e o histórico serão preservados.')) return;
+  if (!await confirmar('Remover '+quem+'?\n\nA pessoa será excluída da lista: perde a função, os extras, a conexão, o WhatsApp e o pedido de cadastro. Se entrar de novo, precisa fazer o cadastro outra vez. O histórico do que ela fez continua guardado.')) return;
   t.disabled = true;
   try {
-    const ant = S.pessoas[id] || {}; const ped = S.cadastros[id] || {};
-    const registro = {id, email:ant.email || ped.email || S.emails[id] || null, nome:ant.nome || ped.nome || '', apelido:ant.apelido || ped.apelido || '', whatsapp:ant.whatsapp || ped.whatsapp || '', conexao:ant.conexao || ped.conexao || null, papel:ant.papel || ped.papel || 'leitura', status:'removido', banco:!!ant.banco};
-    const r = await sb.from('pessoas').upsert(registro); if (r.error) throw r.error;
-    await logar('editou', 'config', 'Acesso removido: '+quemCurto, {status:statusDe(id)}, {status:'removido'});
-    toast('Acesso removido; cadastro preservado');
+    for (const tab of ['pessoas','cadastros','acessos']) { const r = await sb.from(tab).delete().eq('id', id); if (r.error) throw r.error; }
+    await logar('excluiu', 'config', 'Pessoa removida: '+quemCurto, null, null);
+    toast(quemCurto+' foi removido(a)');
     await carregarPessoas(); renderTabs(); render();
   } catch(err){ falhaEscrita(err); }
   finally { t.disabled = false; }

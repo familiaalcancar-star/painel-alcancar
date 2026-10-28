@@ -1,8 +1,12 @@
-# Status e Banco (27/10/2026) — substitui o fluxo de aprovação anterior
+# Status e Banco — regras atuais (28/10/2026)
 
-- A tabela Pessoas e permissões mostra o Status (Pendente, Aprovado, Removido) sem lista de seleção (28/10/2026). Para aprovar: botão Confirmar na pessoa + Salvar pessoas. Sem Confirmar, continua Pendente. Removido tem o botão Reativar.
-- Quem já estava em pessoas continua aprovado. Novas linhas têm status pendente por padrão. A aprovação automática pela lista antiga de WhatsApp foi desativada.
-- Remover preserva cadastro, identidade e histórico, marca Removido e revoga permissões. Um administrador pode reativar selecionando Aprovado. Cadastros apagados antes desta mudança não são reconstruídos.
-- Banco é um extra restritivo que prevalece sobre papel e demais extras: apenas consulta, sem escrever, importar ou exportar pelo painel. Chat aprovado continua visível, sem envio/exclusão. O conteúdo público continua público.
-- RLS bloqueia escritas de Banco, Pendente e Removido; os controles de exportação são bloqueados na interface. Não é proteção contra captura de tela ou cópia de conteúdo já visível.
-- Testes com dados inventados: node teste/testar-status-banco.js (Playwright) e node teste/testar-status-banco-db.js (@electric-sql/pglite 0.3.14).
+- Status da pessoa (Ajustes → Pessoas e permissões) não é uma lista: aparece como etiqueta.
+  - **Pendente** até o administrador tocar em **Aprovar** na pessoa e depois em **Salvar pessoas**.
+  - Salvar sem tocar em Aprovar mantém Pendente.
+- **Remover** exclui a pessoa (pessoas, cadastros, acessos). Se ela entrar de novo, faz cadastro novo.
+  O histórico do que ela fez continua.
+- **Aprovação automática** de Bethany, Raquel e Sheila (lista do painel antigo em `pessoas_referencia`, pelo WhatsApp)
+  religada a pedido do Augusto: entram com status Aprovado e os mesmos acessos de antes. Lucas (admin, sem WhatsApp) não.
+- **Banco** é um extra restritivo: só visualizar, sem escrever, importar ou exportar, mesmo com outros extras.
+  RLS bloqueia escritas de Banco e de quem não está Aprovado.
+- Testes: `node teste/testar-site.js` e `node teste/testar-status-banco.js`.
