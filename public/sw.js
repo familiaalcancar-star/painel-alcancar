@@ -13,11 +13,12 @@ self.addEventListener('push', e => {
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const url = new URL((e.notification.data && e.notification.data.url) || '/', self.location.origin);
-  const ir = url.hash.slice(1);
+  // O site pode estar numa subpasta (ex.: GitHub Pages): abre sempre a pasta do painel, na aba indicada.
+  const ir = String((e.notification.data && e.notification.data.url) || '').split('#')[1] || '';
+  const url = new URL(self.registration.scope); url.hash = ir;
   e.waitUntil((async () => {
     const abertas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const c = abertas.find(w => new URL(w.url).origin === url.origin);
+    const c = abertas.find(w => w.url.startsWith(self.registration.scope));
     if (c) { await c.focus(); c.postMessage({ ir }); return; }
     await self.clients.openWindow(url.href);
   })());
