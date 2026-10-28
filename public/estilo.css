@@ -296,3 +296,20 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .area.fechada .an{display:block;font-weight:600}
 .area.fechada .ac{display:block;font-size:14px;opacity:.8}
 .cell.fechada{display:block;cursor:default}
+
+/* Agenda da semana */
+.sec-nav{position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0}
+#sec-avisos,#sec-semana,#sec-eventos{scroll-margin-top:56px;margin-top:18px}
+.semana h3 .tag{margin-left:8px}
+.sem-dia{display:grid;grid-template-columns:58px 1fr;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.sem-dia:first-of-type{border-top:0}
+.sem-dia.passou{opacity:.45}
+.sem-dia.hoje .sem-d{background:var(--yellow);color:#000}
+.sem-d{background:var(--surface);border:1px solid var(--line);border-radius:10px;text-align:center;padding:6px 2px;font-size:13px;line-height:1.2;align-self:start}
+.sem-d b{display:block;font-size:14px}
+.sem-i{padding:2px 0 6px}
+.sem-i b{display:block;font-weight:600}
+.sem-i .meta{font-size:13px}
+.sem-arte{margin-top:10px}
+.sem-arte summary{cursor:pointer;color:var(--yellow);font-weight:600;padding:6px 0}
+.sem-arte img.arte{width:100%;height:auto;border-radius:12px;margin-top:8px}

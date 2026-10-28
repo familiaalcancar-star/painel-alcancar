@@ -30,7 +30,7 @@ const S = { pronto:false, sessao:undefined, uid:null, email:'', cfg:null, cfgLoa
   mes: new Date().toISOString().slice(0,7) };
 const TABS = [
   {id:'inicio', label:'Início', ic:'🏠'}, {id:'escala', label:'Escala', ic:'📋'}, {id:'avisos', label:'Avisos', ic:'📣'},
-  {id:'agenda', label:'Agenda', ic:'📅'}, {id:'checkin', label:'Check-in', ic:'✅', gestao:true}, {id:'historico', label:'Histórico', ic:'🕘', owner:true},
+  {id:'checkin', label:'Check-in', ic:'✅', gestao:true}, {id:'historico', label:'Histórico', ic:'🕘', owner:true},
   {id:'ajustes', label:'Ajustes', ic:'⚙️', owner:true}, {id:'ajuda', label:'Ajuda', ic:'❓', hidden:true}];
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -311,7 +311,7 @@ async function aplicarSessao(session){
 
 /* ---------- inicialização ---------- */
 async function init(){
-  const h = location.hash.slice(1); if (TABS.some(t=>t.id===h)) S.tab = h;
+  const h = location.hash.slice(1) === 'agenda' ? 'avisos' : location.hash.slice(1); if (TABS.some(t=>t.id===h)) S.tab = h;
   renderTabs(); renderWho();
   const { data } = await sb.auth.getSession();
   await aplicarSessao(data.session);
@@ -388,7 +388,7 @@ function render(){
   const t = TABS.find(x => x.id === S.tab);
   if (!t || (t.owner && !isAdm()) || (t.gestao && !temGestao())) S.tab = 'inicio';
   if (!S.cfg && S.tab!=='ajustes') { v.innerHTML = isAdm() ? '<div class="empty">O painel ainda não está configurado.<br><br><button class="btn" data-go="ajustes">Configurar agora</button></div>' : '<div class="empty">Não foi possível carregar o painel agora. Confira a internet e tente de novo.</div>'; return; }
-  const fns = {inicio:viewInicio, escala:viewEscala, checkin:viewCheckin, avisos:viewAvisos, agenda:viewAgenda, historico:viewHistorico, ajustes:viewAjustes, ajuda:viewAjuda};
+  const fns = {inicio:viewInicio, escala:viewEscala, checkin:viewCheckin, avisos:viewAvisos, historico:viewHistorico, ajustes:viewAjustes, ajuda:viewAjuda};
   v.innerHTML = bannerCadastro() + fns[S.tab]();
   let k = 0; document.querySelectorAll('details.area').forEach(d => { d.dataset.k = S.tab+(k++); if (abertos.includes(d.dataset.k)) d.open = true; });
   if (S.tab==='historico' && isAdm()) carregarHistorico();
@@ -547,6 +547,7 @@ document.addEventListener('click', e => {
 });
 // Toque na notificação com o painel aberto: vai para a aba certa (ou abre o bate-papo).
 function irPara(h){
+  if (h === 'agenda') h = 'avisos';
   if (h === 'chat') { if (podeChat()) abrirChat(); return; }
   if (TABS.some(t => t.id === h)) { S.tab = h; S.det = null; history.replaceState(null, '', '#'+h); renderTabs(); render(); window.scrollTo(0,0); }
 }
@@ -578,11 +579,12 @@ function viewInicio(){
       '<section class="mini"><h3>'+esc(fmtDia(d))+'</h3>'+blocoDia(d)+botoesDia(d)+'</section>').join('') + '</div>';
   }
   const evs = S.eventos.filter(e => (e.dataFim || e.data) >= hoje());
-  const avs = S.avisos.filter(a => !a.fixoFim);
-  const fixos = [...S.avisos].filter(a => a.fixoFim).sort((x, y) => x.fixoFim - y.fixoFim);
+  const avs = avisosComuns().filter(a => !a.fixoFim);
+  const fixos = avisosComuns().filter(a => a.fixoFim).sort((x, y) => x.fixoFim - y.fixoFim);
   const dLin = d => { const x = new Date(d+'T12:00:00'); return '<span class="ld"><b>'+String(x.getDate()).padStart(2,'0')+'/'+String(x.getMonth()+1).padStart(2,'0')+'</b>'+esc(x.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.',''))+'</span>'; };
-  html += '<h2 class="section-title">Agenda</h2>';
-  html += evs.length ? '<div class="card lst">' + evs.map(ev => '<button class="li" data-ir="agenda|ev-'+esc(ev.id)+'">'+dLin(ev.data)+'<span class="lt">'+esc(ev.titulo)+'</span><span class="lh">'+esc(ev.hora||'')+'</span><span class="la" aria-hidden="true">›</span></button>').join('') + '</div>'
+  html += blocoSemanaInicio(dLin);
+  html += '<h2 class="section-title">Eventos</h2>';
+  html += evs.length ? '<div class="card lst">' + evs.map(ev => '<button class="li" data-ir="avisos|ev-'+esc(ev.id)+'">'+dLin(ev.data)+'<span class="lt">'+esc(ev.titulo)+'</span><span class="lh">'+esc(ev.hora||'')+'</span><span class="la" aria-hidden="true">›</span></button>').join('') + '</div>'
     : '<div class="empty">Nenhum evento marcado daqui para frente.</div>';
   if (avs.length) html += '<h2 class="section-title">Avisos</h2><div class="card lst">' + avs.map(a => '<button class="li" data-ir="avisos|av-'+esc(a.id)+'">'+dLin(String(a.criadoEm||'').slice(0,10))+'<span class="lt">'+esc(a.titulo)+'</span><span class="lh"></span><span class="la" aria-hidden="true">›</span></button>').join('') + '</div>';
   if (fixos.length) html += '<h2 class="section-title">Para você</h2>' + fixos.map(a => { const b = (a.botoes||[]).find(x => x && urlOk(x.link)) || (urlOk(a.link) ? {rotulo:'Abrir', link:a.link} : null);
@@ -1177,16 +1179,77 @@ async function baixarBackup(btn){
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-backup]'); if (b) baixarBackup(b); });
 
-/* ---------- AVISOS ---------- */
+/* ---------- AVISOS (avisos, agenda da semana e eventos) ---------- */
+// A agenda da semana fica na tabela de avisos com tipo "semana" (mesma permissão Avisos/Eventos).
+const avisosComuns = () => S.avisos.filter(a => a.tipo !== 'semana');
+const semanas = () => S.avisos.filter(a => a.tipo === 'semana' && (a.ate || '') >= hoje()).sort((x, y) => (x.de || '').localeCompare(y.de || ''));
+const periodoSemana = w => dataBR(w.de).slice(0,5) + ' a ' + dataBR(w.ate).slice(0,5);
+const diaSemana = d => new Date(d+'T12:00:00').toLocaleDateString('pt-BR', {weekday:'long'});
+function cardSemana(w){
+  const pode = isAdm() || (temAvisos() && !!S.uid && w.autor === S.uid);
+  const dias = [...new Set((w.itens||[]).map(i => i.data))].sort();
+  return '<article class="card semana" id="sem-'+esc(w.id)+'"><h3>'+esc(w.titulo || 'Agenda da semana')+'<span class="tag">'+esc(periodoSemana(w))+'</span></h3>'
+    + dias.map(d => '<div class="sem-dia'+(d < hoje() ? ' passou' : '')+(d === hoje() ? ' hoje' : '')+'"><div class="sem-d"><b>'+esc(diaSemana(d).slice(0,3).toUpperCase())+'</b>'+esc(dataBR(d).slice(0,5))+'</div><div class="sem-l">'
+      + w.itens.filter(i => i.data === d).map(i => '<div class="sem-i"><b>'+esc(i.titulo)+'</b><span class="meta">'+[i.hora, i.local].filter(Boolean).map(esc).join(' · ')+'</span></div>').join('') + '</div></div>').join('')
+    + (w.texto ? txtLongo(w.texto) : '')
+    + (w.img ? '<details class="sem-arte"><summary>Ver a arte da semana</summary>'+imgTag(w.img, 'arte')+'</details>' : '')
+    + (pode ? '<div class="bar" style="margin:10px 0 0"><button class="link" data-edit-semana="'+esc(w.id)+'">Editar</button><button class="link" data-del-aviso="'+esc(w.id)+'">Excluir</button></div>' : '') + '</article>';
+}
+// Na Início: o que ainda falta acontecer na semana atual (ou a próxima semana já publicada).
+function blocoSemanaInicio(dLin){
+  const w = semanas()[0]; if (!w) return '';
+  const itens = (w.itens||[]).filter(i => i.data >= hoje()); if (!itens.length) return '';
+  return '<h2 class="section-title">Agenda da semana <small class="meta">'+esc(periodoSemana(w))+'</small></h2><div class="card lst">'
+    + itens.map(i => '<button class="li" data-ir="avisos|sem-'+esc(w.id)+'">'+dLin(i.data)+'<span class="lt">'+esc(i.titulo)+'</span><span class="lh">'+esc(i.hora||'')+'</span><span class="la" aria-hidden="true">›</span></button>').join('') + '</div>';
+}
 function viewAvisos(){
-  const top = '<div class="bar"><h2 style="font-size:22px">Avisos</h2><span style="flex:1"></span>'+(temAvisos()?'<button class="btn" data-novo-aviso>+ Novo aviso</button>':'')+'</div>';
-  if (!S.avisos.length) return top + '<div class="empty">Nenhum aviso publicado ainda.</div>';
-  return top + [...S.avisos].sort((x, y) => (x.fixoFim||0) - (y.fixoFim||0)).map(a => { const pode = isAdm() || (temAvisos() && !!S.uid && a.autor===S.uid);
+  const nav = '<div class="chips sec-nav"><button class="chip" data-sec="sec-avisos">Avisos</button><button class="chip" data-sec="sec-semana">Agenda da semana</button><button class="chip" data-sec="sec-eventos">Eventos</button></div>';
+  const titulo = (id, t, btn) => '<div class="bar" id="'+id+'"><h2 style="font-size:22px">'+t+'</h2><span style="flex:1"></span>'+(temAvisos() ? btn : '')+'</div>';
+  const lista = [...avisosComuns()].sort((x, y) => (x.fixoFim||0) - (y.fixoFim||0));
+  let h = nav + titulo('sec-avisos', 'Avisos', '<button class="btn" data-novo-aviso>+ Novo aviso</button>');
+  h += lista.length ? lista.map(a => { const pode = isAdm() || (temAvisos() && !!S.uid && a.autor===S.uid);
     const quem = a.autor && (S.pessoas[a.autor] || S.names[a.autor]) ? nome(a.autor)+' · ' : '';
     return '<article class="card" id="av-'+esc(a.id)+'">'+imgTag(a.img,'banner')+'<h3>'+esc(a.titulo)+'<span class="tag">'+esc(a.fixoFim?'Fixo':(a.conexao?conexaoNome(a.conexao):'Geral'))+'</span></h3>'
       + '<div class="meta">'+esc(quem)+esc(fmtQuando(a.criadoEm))+'</div>'+txtLongo(a.texto)+btnLink(a.link)+btnLinks(a.botoes)
-      + (pode?'<div class="bar" style="margin:10px 0 0"><button class="link" data-edit-aviso="'+esc(a.id)+'">Editar</button><button class="link" data-del-aviso="'+esc(a.id)+'">Excluir</button></div>':'')+'</article>'; }).join('');
+      + (pode?'<div class="bar" style="margin:10px 0 0"><button class="link" data-edit-aviso="'+esc(a.id)+'">Editar</button><button class="link" data-del-aviso="'+esc(a.id)+'">Excluir</button></div>':'')+'</article>'; }).join('')
+    : '<div class="empty">Nenhum aviso publicado ainda.</div>';
+  h += titulo('sec-semana', 'Agenda da semana', '<button class="btn" data-nova-semana>+ Agenda da semana</button>');
+  h += semanas().length ? semanas().map(cardSemana).join('') : '<div class="empty">A agenda desta semana ainda não foi publicada.</div>';
+  h += titulo('sec-eventos', 'Eventos', '<button class="btn" data-novo-evento>+ Novo evento</button>') + viewEventos();
+  return h;
 }
+document.addEventListener('click', e => { const b = e.target.closest('[data-sec]'); if (!b) return; const el = document.getElementById(b.dataset.sec); if (el) el.scrollIntoView({behavior:'smooth', block:'start'}); });
+// Itens: um por linha, "dd/mm | Nome | horário | local".
+const lerItensSemana = (txt, de) => String(txt||'').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+  const [d, titulo, hora, local] = l.split('|').map(x => x.trim()); const m = String(d||'').match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+  if (!m || !titulo) return null;
+  let ano = m[3] ? (m[3].length === 2 ? '20'+m[3] : m[3]) : de.slice(0,4); if (!m[3] && Number(m[2]) < Number(de.slice(5,7))) ano = String(Number(ano)+1);
+  return {data: ano+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'), titulo, hora: hora||'', local: local||''};
+});
+function formSemana(w){
+  const seg = (() => { const d = new Date(hoje()+'T12:00:00'); d.setDate(d.getDate() - ((d.getDay()+6)%7)); return isoLocal(d); })();
+  const de = w ? w.de : seg, ate = w ? w.ate : somaDias(seg, 6);
+  abrir('<form><h2>'+(w?'Editar agenda da semana':'Nova agenda da semana')+'</h2>'
+    + '<div class="row"><div><label class="f" for="sDe">De</label><input class="inp" id="sDe" type="date" name="de" required value="'+esc(de)+'"></div><div><label class="f" for="sAte">Até</label><input class="inp" id="sAte" type="date" name="ate" required value="'+esc(ate)+'"></div></div>'
+    + '<label class="f" for="sI">Programação</label><textarea class="inp" id="sI" name="itens" required style="min-height:180px" placeholder="26/10 | Conexão Shalom | 20h00 | Nos lares&#10;27/10 | Ensaio do coro | 19h30 | Auditório">'+esc(w?(w.itens||[]).map(i => [dataBR(i.data).slice(0,5), i.titulo, i.hora, i.local].join(' | ')).join('\n'):'')+'</textarea>'
+    + '<div class="hint">Uma atividade por linha: <b>data | nome | horário | local</b>. Horário e local são opcionais.</div>'
+    + '<label class="f" for="sX">Observação (opcional)</label><textarea class="inp" id="sX" name="texto" style="min-height:60px">'+esc(w?w.texto||'':'')+'</textarea>'
+    + campoImg(w) + '<div class="hint">A imagem é a arte da agenda (opcional). Ela aparece em "Ver a arte da semana".</div>'
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Publicar agenda</button></div></form>',
+  async fd => {
+    const de = String(fd.get('de')), ate = String(fd.get('ate')); if (ate < de) { toast('A data "Até" precisa vir depois de "De".'); return false; }
+    const linhasTxt = String(fd.get('itens')||'').split('\n').filter(l => l.trim()); const itens = lerItensSemana(fd.get('itens'), de);
+    const ruins = linhasTxt.length - itens.filter(Boolean).length;
+    if (ruins) { toast(ruins+' linha'+(ruins>1?'s':'')+' fora do formato "dd/mm | nome | horário | local".'); return false; }
+    const data = {tipo:'semana', titulo:'Agenda da semana', de, ate, itens: itens.sort((x, y) => x.data.localeCompare(y.data)), texto:String(fd.get('texto')||'').trim(), img: await lerImg(fd, w),
+      fixoFim:0, criadoEm: w ? w.criadoEm : new Date().toISOString(), atualizadoEm:new Date().toISOString()};
+    const ok = await salvar(ref('avisos', w ? w.id : 'semana-'+de), data, {acao:w?'editou':'criou', tipo:'aviso', resumo:'Agenda da semana '+periodoSemana(data), antes:w?semId(w):null});
+    if (ok) { toast(w?'Agenda atualizada':'Agenda da semana publicada'); await carregarAvisos(); } return ok;
+  });
+}
+document.addEventListener('click', e => { const t = e.target.closest('button'); if (!t) return;
+  if ('novaSemana' in t.dataset && temAvisos()) formSemana();
+  if (t.dataset.editSemana) formSemana(S.avisos.find(a => a.id === t.dataset.editSemana)); });
 function formAviso(a){
   const alvo = [{id:'',nome:'Geral (todas)'}, ...conexoes().filter(c=>podeConexao(c.id))];
   abrir('<form><h2>'+(a?'Editar aviso':'Novo aviso')+'</h2><label class="f" for="aT">Título</label><input class="inp" id="aT" name="titulo" required maxlength="120" value="'+esc(a?a.titulo:'')+'">'
@@ -1202,12 +1265,11 @@ function formAviso(a){
   });
 }
 
-/* ---------- AGENDA ---------- */
-function viewAgenda(){
-  const top = '<div class="bar"><h2 style="font-size:22px">Agenda</h2><span style="flex:1"></span>'+(temAvisos()?'<button class="btn" data-novo-evento>+ Novo evento</button>':'')+'</div>';
-  const prox = S.eventos.filter(e => e.data >= hoje());
-  if (!prox.length) return top + '<div class="empty">Nenhum evento marcado daqui para frente.</div>';
-  return top + prox.map(ev => { const d = new Date(ev.data+'T12:00:00'); const pode = isAdm() || (temAvisos() && !!S.uid && ev.autor===S.uid);
+/* ---------- EVENTOS ---------- */
+function viewEventos(){
+  const prox = S.eventos.filter(e => (e.dataFim || e.data) >= hoje());
+  if (!prox.length) return '<div class="empty">Nenhum evento marcado daqui para frente.</div>';
+  return prox.map(ev => { const d = new Date(ev.data+'T12:00:00'); const pode = isAdm() || (temAvisos() && !!S.uid && ev.autor===S.uid);
     return '<article class="card" id="ev-'+esc(ev.id)+'">'+imgTag(ev.img,'banner')+'<div class="ev"><div class="date"><b>'+d.getDate()+'</b>'+esc(d.toLocaleDateString('pt-BR',{month:'short'}).replace('.',''))+'</div><div>'
       + '<h3>'+esc(ev.titulo)+'</h3><div class="meta">'+esc(d.toLocaleDateString('pt-BR',{weekday:'long'}))+(ev.hora?' · '+esc(ev.hora):'')+(ev.local?' · '+esc(ev.local):'')+'</div>'
       + (ev.descricao?txtLongo(ev.descricao):'')+btnLink(ev.link)+btnZap(ev.contatos)
@@ -1296,7 +1358,7 @@ function viewAjuda(){
   h += passo('4. Ver a escala', ['Toque na aba <b>Escala</b>, embaixo.', 'Cada linha é um culto: a data fica à esquerda, com manhã ou noite logo abaixo.', 'As colunas são as áreas: Direção do culto, Super Kids, Mídia, Staff, Ministração e Louvor. No celular, deslize a tabela para o lado.', 'Toque em qualquer nome para abrir a página com cada função e quem está nela.', 'Use as setas ‹ › ao lado do mês para ver outros meses.']);
   h += passo('5. Preencher a escala da sua conexão', ['Na aba <b>Escala</b>, encontre o domingo em que a sua conexão está na Direção do culto ou no Super Kids.', 'Toque no nome da sua conexão e depois em <b>Preencher escala</b> (ou <b>Editar escala</b>).', 'Digite os nomes em cada função. Vaga vazia aparece como “vaga aberta”.', 'Toque em <b>Salvar escala</b>. Pronto, todo mundo já vê.', 'Você só consegue editar os dias da sua conexão. As conexões Flechas, Forasteiros e Heróis também preenchem o Louvor. Quem tem a permissão <b>Escala</b> preenche a Direção do culto e o Super Kids de qualquer conexão.']);
   h += passo('6. Imprimir o check-in (Gestão)', ['Na aba <b>Escala</b>, no final de cada linha, toque em <b>Baixar PDF</b> ou <b>Baixar Excel</b>.', 'Na tela inicial também há o botão <b>Check-in do dia</b>.', 'A folha sai com Função, Nome, Check-in e as assinaturas de retirada e de devolução do equipamento e do crachá.', 'No dia, use a aba <b>Check-in</b> para marcar quem chegou, quem retirou e quem devolveu. As marcações aparecem na hora em todos os celulares.']);
-  h += passo('7. Avisos e agenda', ['Na aba <b>Avisos</b> ficam os comunicados, e na <b>Agenda</b> ficam os eventos com data.', 'Quando houver, toque em <b>Fazer inscrição</b> ou no botão do WhatsApp.', 'Quem tem a permissão <b>Avisos/Eventos</b> publica pelo botão <b>+</b>.']);
+  h += passo('7. Avisos, agenda da semana e eventos', ['Na aba <b>Avisos</b> ficam, nesta ordem: os <b>avisos</b>, a <b>agenda da semana</b> e os <b>eventos</b>. Use os botões no topo para ir direto a cada parte.', 'A agenda da semana também aparece na <b>Início</b>, com o que ainda falta acontecer.', 'Quando houver, toque em <b>Fazer inscrição</b> ou no botão do WhatsApp.', 'Quem tem a permissão <b>Avisos/Eventos</b> publica pelo botão <b>+</b>. Na agenda da semana, escreva uma atividade por linha: <b>data | nome | horário | local</b> (ex.: 27/10 | Ensaio do coro | 19h30 | Auditório) e, se quiser, anexe a arte.']);
   if (isAdm()) {
     h += passo('8. Histórico', ['A aba <b>Histórico</b> mostra tudo o que foi criado, editado ou excluído: quem fez, o quê, e a data e a hora.']);
     h += passo('9. Para administradores', ['Em <b>Ajustes</b> → <b>Pessoas e permissões</b>, toque em <b>Aprovar</b> na pessoa, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Sem tocar em Aprovar, ela continua <b>Pendente</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, Word, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
