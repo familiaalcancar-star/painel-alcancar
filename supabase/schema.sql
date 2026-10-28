@@ -487,3 +487,98 @@ end $$;
 drop trigger if exists cadastro_auto on cadastros;
 create trigger cadastro_auto after insert on cadastros for each row execute function cadastro_auto();
 revoke execute on function cadastro_auto() from public, anon, authenticated;
+
+-- Status explícito e extra Banco (somente consulta).
+-- Mantém as aprovações existentes. Novas linhas exigem aprovação explícita.
+alter table public.pessoas add column if not exists status text not null default 'aprovado' check (status in ('pendente','aprovado','removido'));
+alter table public.pessoas alter column status set default 'pendente';
+alter table public.pessoas add column if not exists banco boolean not null default false;
+-- Novos cadastros sempre aguardam a decisão de um administrador.
+drop trigger if exists cadastro_auto on public.cadastros;
+
+create or replace function minha_pessoa() returns pessoas
+language sql stable security definer set search_path = public as $$
+  select * from pessoas where id = auth.uid() and status = 'aprovado' and not banco
+$$;
+
+create or replace function is_admin() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select papel = 'admin' from pessoas where id = auth.uid() and status = 'aprovado' and not banco), false)
+$$;
+
+create or replace function eh_equipe() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select papel in ('lider','auxiliar','organizacao') from pessoas where id = auth.uid() and status = 'aprovado' and not banco), false)
+$$;
+
+create or replace function minha_conexao() returns text
+language sql stable security definer set search_path = public as $$
+  select conexao from pessoas
+   where id = auth.uid() and status = 'aprovado' and not banco and papel in ('lider','auxiliar','organizacao')
+$$;
+
+create or replace function tem_gestao() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select papel = 'admin' or gestao from pessoas where id = auth.uid() and status = 'aprovado' and not banco), false)
+$$;
+
+create or replace function tem_avisos() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select papel = 'admin' or avisos from pessoas where id = auth.uid() and status = 'aprovado' and not banco), false)
+$$;
+
+create or replace function tem_escala() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select escala from pessoas where id = auth.uid() and status = 'aprovado' and not banco), false)
+$$;
+
+create or replace function pode_louvor() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select ministro
+      or (papel in ('lider','auxiliar','organizacao') and conexao in ('flechas','forasteiros','herois'))
+    from pessoas where id = auth.uid() and status = 'aprovado' and not banco), false)
+$$;
+
+-- SECURITY INVOKER: consulta apenas a linha que a própria pessoa já pode ler.
+create or replace function public.sessao_pode_escrever() returns boolean
+language sql stable security invoker set search_path = '' as $$
+  select auth.uid() is not null and not exists (
+    select 1 from public.pessoas p where p.id = auth.uid()
+      and (p.banco or p.status <> 'aprovado')
+  )
+$$;
+revoke all on function public.sessao_pode_escrever() from public;
+grant execute on function public.sessao_pode_escrever() to authenticated;
+
+-- Políticas restritivas são combinadas com as permissões anteriores (AND).
+-- Não concedem nenhum acesso novo e cobrem escrita direta pela API.
+do $$
+declare t text;
+begin
+  foreach t in array array['config','config_privada','pessoas','cadastros','pessoas_referencia','acessos','escalas','avisos','eventos','checkin_marcas','historico','chat'] loop
+    execute format('drop policy if exists status_banco_inserir on public.%I', t);
+    execute format('create policy status_banco_inserir on public.%I as restrictive for insert to authenticated with check (public.sessao_pode_escrever())', t);
+    execute format('drop policy if exists status_banco_editar on public.%I', t);
+    execute format('create policy status_banco_editar on public.%I as restrictive for update to authenticated using (public.sessao_pode_escrever()) with check (public.sessao_pode_escrever())', t);
+    execute format('drop policy if exists status_banco_apagar on public.%I', t);
+    execute format('create policy status_banco_apagar on public.%I as restrictive for delete to authenticated using (public.sessao_pode_escrever())', t);
+  end loop;
+end $$;
+
+drop policy if exists chat_ler on public.chat;
+create policy chat_ler on public.chat for select to authenticated
+  using (exists (select 1 from public.pessoas where id = auth.uid() and status = 'aprovado'));
+drop policy if exists chat_enviar on public.chat;
+create policy chat_enviar on public.chat for insert to authenticated
+  with check (exists (select 1 from public.pessoas where id = auth.uid() and status = 'aprovado' and not banco));
+
+drop policy if exists status_banco_inserir on storage.objects;
+create policy status_banco_inserir on storage.objects as restrictive for insert to authenticated
+  with check (bucket_id <> 'imagens' or public.sessao_pode_escrever());
+drop policy if exists status_banco_editar on storage.objects;
+create policy status_banco_editar on storage.objects as restrictive for update to authenticated
+  using (bucket_id <> 'imagens' or public.sessao_pode_escrever())
+  with check (bucket_id <> 'imagens' or public.sessao_pode_escrever());
+drop policy if exists status_banco_apagar on storage.objects;
+create policy status_banco_apagar on storage.objects as restrictive for delete to authenticated
+  using (bucket_id <> 'imagens' or public.sessao_pode_escrever());
