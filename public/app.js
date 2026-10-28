@@ -1396,7 +1396,11 @@ const marcarVisto = () => { const u = CHAT.msgs[CHAT.msgs.length-1]; if (u) try 
 const naoLidas = () => { const v = chatVisto(); return CHAT.msgs.filter(m => m.por !== S.uid && m.em > v).length; };
 async function carregarChat(){
   if (!podeChat()) { CHAT.msgs = []; return; }
-  const r = await sb.from('chat').select('id,texto,por,em').order('em', {ascending:false}).limit(300);
+  // Cada pessoa só vê o que foi enviado depois da aprovação dela; administradores veem tudo (o banco também garante).
+  let q = sb.from('chat').select('id,texto,por,em');
+  const eu = S.pessoas[S.uid] || {};
+  if (eu.papel !== 'admin' && eu.aprovado_em) q = q.gte('em', eu.aprovado_em);
+  const r = await q.order('em', {ascending:false}).limit(300);
   if (r.error) { console.warn(r.error); return; }
   CHAT.msgs = (r.data||[]).reverse();
 }
@@ -1405,7 +1409,7 @@ const horaDe = iso => new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit',
 function rotuloDia(d){ if (d === hoje()) return 'Hoje'; if (d === somaDias(hoje(), -1)) return 'Ontem'; const t = fmtDia(d); return t.charAt(0).toUpperCase()+t.slice(1); }
 function desenharMensagens(){
   const l = $('#chatLista'); if (!l) return;
-  if (!CHAT.msgs.length) { l.innerHTML = '<div class="empty" style="margin:auto 0">Nenhuma mensagem ainda. Escreva a primeira!</div>'; return; }
+  if (!CHAT.msgs.length) { l.innerHTML = '<div class="empty" style="margin:auto 0">Nenhuma mensagem desde que você entrou. Escreva a primeira!</div>'; return; }
   let dia = '', h = '';
   CHAT.msgs.forEach(m => {
     const d = isoLocal(new Date(m.em)); if (d !== dia) { dia = d; h += '<div class="dia-sep">'+esc(rotuloDia(d))+'</div>'; }

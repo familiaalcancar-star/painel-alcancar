@@ -9,7 +9,7 @@ const T = {
   config:[{id:'geral', d:D.config}], config_privada:[{id:'geral', d:{whatsAdm:'5511958800779'}}],
   pessoas:[
     {id:U.admin, email:'augusto@x', nome:'Augusto Teste', apelido:'Augusto', whatsapp:'11958800779', conexao:null, papel:'admin', gestao:false, ministro:false, avisos:false},
-    {id:U.betel, email:'betel@x', nome:'Líder Betel', apelido:'', whatsapp:'11911111111', conexao:'betel', papel:'lider', gestao:false, ministro:false, avisos:true},
+    {id:U.betel, aprovado_em:new Date(Date.now()-2700e3).toISOString(), email:'betel@x', nome:'Líder Betel', apelido:'', whatsapp:'11911111111', conexao:'betel', papel:'lider', gestao:false, ministro:false, avisos:true},
     {id:U.flechas, email:'flechas@x', nome:'Org Flechas', apelido:'', whatsapp:'11922222222', conexao:'flechas', papel:'organizacao', gestao:false, ministro:false, avisos:false},
     {id:U.gestao, email:'gestao@x', nome:'Gestora Silva', apelido:'', whatsapp:'11933333333', conexao:null, papel:'leitura', gestao:true, ministro:false, avisos:false},
     {id:U.escala, email:'escala@x', nome:'Paula Escala', apelido:'Paulinha', whatsapp:'11944444444', conexao:null, papel:'leitura', gestao:false, ministro:false, avisos:false, escala:true}],
