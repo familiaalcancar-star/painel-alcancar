@@ -202,6 +202,7 @@ nav.tabs button[aria-current="page"]{color:var(--yellow)}
 @media (prefers-reduced-motion:no-preference){dialog[open]{animation:up .18s ease-out}@keyframes up{from{transform:translateY(12px);opacity:0}}}
 .lst{padding:4px 14px}
 .lst .li{display:grid;grid-template-columns:62px 1fr auto 14px;gap:10px;align-items:center;width:100%;background:none;border:0;border-top:1px solid var(--line);padding:12px 0;text-align:left;color:var(--ink)}
+.lst .li.li-aviso{grid-template-columns:1fr auto 14px}
 .lst .li:first-child{border-top:0}
 .lst .ld{display:flex;flex-direction:column;line-height:1.15;font-size:12px;color:var(--muted);text-transform:capitalize}
 .lst .ld b{font:700 17px "Bricolage Grotesque",sans-serif;color:var(--yellow)}
