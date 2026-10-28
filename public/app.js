@@ -14,6 +14,12 @@
   });
   esconder(); new MutationObserver(esconder).observe(document.body, {childList:true});
 })();
+// Dia e hora atuais no topo (atualiza a cada 15 segundos).
+(function(){
+  const el = document.getElementById('relogio'); if (!el) return;
+  const tic = () => { const d = new Date(); const t = d.toLocaleDateString('pt-BR', {weekday:'long', day:'2-digit', month:'2-digit'}) + ' · ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}); el.textContent = t.charAt(0).toUpperCase() + t.slice(1); };
+  tic(); setInterval(tic, 15000);
+})();
 const sb = window.supabase.createClient(window.PAINEL.url, window.PAINEL.chave, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' }
 });
@@ -1212,7 +1218,7 @@ function viewAjuda(){
   h += passo('7. Avisos e agenda', ['Na aba <b>Avisos</b> ficam os comunicados, e na <b>Agenda</b> ficam os eventos com data.', 'Quando houver, toque em <b>Fazer inscrição</b> ou no botão do WhatsApp.', 'Quem tem a permissão <b>Avisos/Eventos</b> publica pelo botão <b>+</b>.']);
   if (isAdm()) {
     h += passo('8. Histórico', ['A aba <b>Histórico</b> mostra tudo o que foi criado, editado ou excluído: quem fez, o quê, e a data e a hora.']);
-    h += passo('9. Para administradores', ['Em <b>Ajustes</b>, aprove os cadastros em <b>Pessoas e permissões</b>: escolha a função, a conexão e o status <b>Aprovado</b>, depois toque em <b>Salvar pessoas</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, Word, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
+    h += passo('9. Para administradores', ['Em <b>Ajustes</b> → <b>Pessoas e permissões</b>, toque em <b>Confirmar</b> na pessoa, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Sem confirmar, ela continua <b>Pendente</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, Word, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
   }
   h += '<div class="end" style="justify-content:center;margin:18px 0"><button class="btn" data-go="inicio">Começar a usar</button></div>';
   return h;
@@ -1245,21 +1251,39 @@ function viewAjustes(){
     + '<div class="end"><a class="btn zap" id="cvLink" target="_blank" rel="noopener" href="'+esc(waUrl('', msgConvite('')))+'">Enviar passo a passo no WhatsApp</a></div>'
     + '<p class="hint">Sem número, o WhatsApp abre para você escolher o contato ou um grupo.</p></div>';
   html += '<h2 class="section-title">Backup do banco de dados</h2><div class="card"><p class="meta" style="margin:0">Baixa tudo o que está no banco (configuração, pessoas, cadastros, escalas, avisos, eventos, check-in, histórico e bate-papo) num arquivo .zip. Contém WhatsApp e e-mails: guarde em lugar seguro e não compartilhe.</p><div class="end"><button class="btn" data-backup>Baixar backup (.zip)</button></div></div>';
-  html += '<h2 class="section-title">Pessoas e permissões</h2><p class="hint">Escolha o status e toque em <b>Salvar pessoas</b>. Pendente aguarda aprovação; Aprovado libera as permissões; Removido revoga o acesso e mantém o registro. <b>Banco</b> permite apenas visualizar e prevalece sobre a função e todos os extras.</p>';
+  html += '<h2 class="section-title">Pessoas e permissões</h2><p class="hint">O status muda sozinho. Para aprovar alguém: toque em <b>Confirmar</b>, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Quem não for confirmado continua <b>Pendente</b>. <b>Remover</b> revoga o acesso e mantém o registro; para devolver o acesso, use <b>Reativar</b>. <b>Banco</b> permite apenas visualizar e prevalece sobre a função e todos os extras.</p>';
   const ids = [...new Set([...S.membros, ...Object.keys(S.cadastros||{}), ...Object.keys(S.pessoas||{})])].filter(id => id && id!==S.uid);
   const nAdm = Object.values(S.pessoas||{}).filter(p=>p.papel==='admin' && aprovado(p.id) && !p.banco && p.id!==S.uid).length;
   if (!ids.length) html += '<div class="empty">Ninguém além de você entrou no painel ainda. Quando cada pessoa entrar e enviar o cadastro, ela aparece aqui para você aprovar.</div>';
-  else html += '<div class="card tbl-wrap"><table class="lead"><thead><tr><th>Pessoa</th><th>Pediu</th><th>Status</th><th>Função</th><th>Conexão</th><th>Extras</th><th></th></tr></thead><tbody>'
+  else html += '<div class="card tbl-wrap"><table class="lead"><thead><tr><th>Pessoa</th><th>Status</th><th>Pediu</th><th>Função</th><th>Conexão</th><th>Extras</th><th></th></tr></thead><tbody>'
     + ids.map(id => { const atual = S.pessoas[id]; const ped = (S.cadastros||{})[id]; const base = atual || ped || {papel:'leitura', conexao:''};
       const wpp = base.whatsapp || (ped && ped.whatsapp) || '';
-      return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+(S.emails[id] && nomeComp(id)!==S.emails[id]?'<br><span class="meta">'+esc(S.emails[id])+'</span>':'')+(wpp?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(wpp).replace(/\D/g,'').length<=11?'55':'')+String(wpp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(wpp)+'</a>':'')+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
-        + '<td><select class="inp status-pessoa" aria-label="Status de '+esc(nomeComp(id))+'" data-p-status="'+esc(id)+'">'+opts(Object.entries(STATUS).map(([id,nome])=>({id,nome})), statusDe(id))+'</select><small class="meta">Atual: '+STATUS[statusDe(id)]+'</small></td>'
+      return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+(S.emails[id] && nomeComp(id)!==S.emails[id]?'<br><span class="meta">'+esc(S.emails[id])+'</span>':'')+(wpp?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(wpp).replace(/\D/g,'').length<=11?'55':'')+String(wpp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(wpp)+'</a>':'')+'</td><td>'+celulaStatus(id)+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
         + '<td><select class="inp" data-p-papel="'+esc(id)+'">'+opts(Object.entries(PAPEIS).map(([k,v])=>({id:k,nome:v})), base.papel)+'</select></td>'
         + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; }).join('')
     + '</tbody></table><div class="end"><button class="btn" data-salvar-pessoas>Salvar pessoas</button></div></div>';
   html += '<p class="hint">Administradores podem tudo (hoje: '+(nAdm+1)+' contando você; o ideal é até 5). Líder, Auxiliar e Organização preenchem a Direção do culto e o Super Kids nos dias em que a conexão deles está escalada; se a conexão for Flechas, Forasteiros ou Heróis, também o Louvor. <b>Extras:</b> Gestão vê a aba Check-in e imprime o check-in (PDF e Excel); Ministro pode editar a escala de Louvor; Avisos/Eventos pode publicar avisos e eventos (e editar ou excluir os que publicou); Escala pode preencher os nomes da Direção do culto e do Super Kids de qualquer conexão. Banco bloqueia alterações, cadastros, envio de mensagens, importações e exportações, mesmo que outros extras estejam marcados.</p>';
   return html;
 }
+// Status: não é escolhido numa lista. Fica Pendente até o administrador tocar em "Confirmar aprovação"
+// (ou "Reativar", para quem foi removido) e salvar.
+const ROT_STATUS = {pendente:'Pendente', aprovado:'Aprovado', removido:'Removido'};
+function celulaStatus(id){
+  const st = statusDe(id);
+  return '<input type="hidden" data-p-status="'+esc(id)+'" value="'+st+'"><span class="st st-'+st+'" data-st-rot="'+esc(id)+'">'+ROT_STATUS[st]+'</span>'
+    + (st !== 'aprovado' ? '<br><button type="button" class="btn small st-btn" data-aprovar="'+esc(id)+'" data-orig="'+st+'">'+(st === 'removido' ? 'Reativar' : 'Confirmar')+'</button>' : '');
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-aprovar]'); if (!b || !isAdm()) return;
+  const id = b.dataset.aprovar, inp = document.querySelector('[data-p-status="'+id+'"]'), rot = document.querySelector('[data-st-rot="'+id+'"]');
+  const marcar = inp.value !== 'aprovado';
+  inp.value = marcar ? 'aprovado' : b.dataset.orig;
+  rot.className = 'st ' + (marcar ? 'st-marcado' : 'st-'+b.dataset.orig);
+  rot.textContent = marcar ? 'Será aprovado ao salvar' : ROT_STATUS[b.dataset.orig];
+  b.textContent = marcar ? 'Desfazer' : (b.dataset.orig === 'removido' ? 'Reativar' : 'Confirmar');
+  b.classList.toggle('ghost', marcar);
+  if (marcar) toast('Agora escolha a função e a conexão e toque em Salvar pessoas.');
+});
 document.addEventListener('submit', async e => {
   if (e.target.id !== 'cfgForm') return; e.preventDefault();
   const fd = new FormData(e.target); const old = S.cfg || {};

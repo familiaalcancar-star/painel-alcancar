@@ -27,14 +27,14 @@ const server=http.createServer((req,res)=>{
  check(await p.inputValue(`[data-p-status="${id}"]`)==='pendente','cadastro novo pendente');
  await p.click('[data-salvar-pessoas]');await p.waitForTimeout(250);
  check(await p.evaluate(id=>window.__TABELAS.pessoas.find(x=>x.id===id).status,id)==='pendente','Salvar não aprova os pendentes automaticamente');
- await p.selectOption(`[data-p-status="${id}"]`,'aprovado');await p.click('[data-salvar-pessoas]');await p.waitForTimeout(250);
+ await p.click(`[data-aprovar="${id}"]`);await p.click('[data-salvar-pessoas]');await p.waitForTimeout(250);
  check(await p.inputValue(`[data-p-status="${id}"]`)==='aprovado','aprovação explícita salva e exibida');
  await p.check(`[data-p-banco="${id}"]`);await p.click('[data-salvar-pessoas]');await p.waitForTimeout(250);
  check(await p.evaluate(id=>window.__TABELAS.pessoas.find(x=>x.id===id).banco,id),'Banco salvo');
  await p.click(`[data-rm-pessoa="${id}"]`);await p.click('[data-r="1"]');await p.waitForTimeout(250);
  check(await p.inputValue(`[data-p-status="${id}"]`)==='removido','Removido continua na lista');
  check(await p.evaluate(id=>!!window.__TABELAS.cadastros.find(x=>x.id===id)&&window.__TABELAS.pessoas.find(x=>x.id===id).nome==='Maria Pendente',id),'remoção preserva cadastro e nome');
- await p.selectOption(`[data-p-status="${id}"]`,'aprovado');await p.click('[data-salvar-pessoas]');await p.waitForTimeout(250);
+ await p.click(`[data-aprovar="${id}"]`);await p.click('[data-salvar-pessoas]');await p.waitForTimeout(250);
  check(await p.inputValue(`[data-p-status="${id}"]`)==='aprovado','reativação explícita');
  await p.screenshot({path:'/tmp/painel-status-mobile.png',fullPage:true});await p.setViewportSize({width:1440,height:1000});await p.locator('table.lead').screenshot({path:'/tmp/painel-status-tabela.png'});await p.context().close();
  for(const role of ['admin','betel','flechas','gestao','escala']){

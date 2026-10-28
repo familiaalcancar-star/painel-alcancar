@@ -271,3 +271,12 @@ body:has(#cfgForm) .wrap{max-width:1120px}
 table.lead{min-width:1000px}
 table.lead select.inp{min-width:140px}
 table.lead .status-pessoa + small{display:block;margin-top:5px}
+
+/* ---------- Painel 2.0: status da pessoa e relógio ---------- */
+.st{display:inline-block;font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px;white-space:nowrap}
+.st-pendente{background:var(--gold-soft);color:var(--yellow)}
+.st-aprovado{background:var(--vine-soft);color:var(--vine)}
+.st-removido{background:var(--danger-soft);color:var(--danger)}
+.st-marcado{background:#0d2b40;color:var(--night)}
+.st-btn{margin-top:6px;white-space:nowrap}
+.relogio{display:block;font-size:12px;color:var(--muted);margin-top:-2px}
