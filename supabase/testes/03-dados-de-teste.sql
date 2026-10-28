@@ -15,6 +15,7 @@ insert into pessoas(id,nome,papel,conexao,gestao,ministro,avisos,whatsapp) value
  ('00000000-0000-0000-0000-0000000000d0','Avisador','leitura',null,false,false,true,'7'),
  ('00000000-0000-0000-0000-0000000000d1','Avisador2','leitura',null,false,false,true,'8');
 insert into pessoas(id,nome,papel,escala) values ('00000000-0000-0000-0000-0000000000e5','Extra Escala','leitura',true);
+update pessoas set status='aprovado';
 insert into escalas(id,d) values
  ('2026-11-01_manha_direcao','{"data":"2026-11-01","culto":"manha","area":"direcao","conexoes":["betel","shalom"],"funcoes":[]}'),
  ('2026-11-01_noite_superkids','{"data":"2026-11-01","culto":"noite","area":"superkids","conexao":"flechas","funcoes":[]}'),

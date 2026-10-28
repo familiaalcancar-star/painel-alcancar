@@ -75,7 +75,7 @@ class Q {
 }
 window.supabase = { createClient: () => ({
   from: t => new Q(t),
-  rpc: async n => n === 'pessoas_nomes' ? {data: sessao ? T.pessoas.map(p => ({id:p.id, nome:p.nome, apelido:p.apelido})) : [], error:null} : {data:null, error:null},
+  rpc: async (n, args) => (window.__rpc = window.__rpc || []).push([n, args]) && n === 'pessoas_nomes' ? {data: sessao ? T.pessoas.map(p => ({id:p.id, nome:p.nome, apelido:p.apelido})) : [], error:null} : {data:null, error:null},
   channel: () => ({ on(){ return this; }, subscribe(){ return this; } }), removeChannel(){},
   storage: { from: () => ({ upload: async () => ({data:{}, error:null}), getPublicUrl: () => ({data:{publicUrl:'imagens/rede-igPrev.webp'}}) }) },
   auth: {

@@ -159,7 +159,7 @@ async function carregarMes(){ const m = S.mes; const l = linhas(await sb.from('e
 async function carregarAvisos(){ S.avisos = linhas(await sb.from('avisos').select('id,d,autor').order('criado_em', {ascending:false}).limit(60)); }
 async function carregarEventos(){ S.eventos = linhas(await sb.from('eventos').select('id,d,autor').order('data').limit(300)); }
 function assinarMes(){ carregarMes().then(render); }
-async function carregarPrivado(){ await Promise.all([carregarPessoas(), carregarConfig()]); await carregarChat(); if (!podeChat()) fecharChat(); renderWho(); renderTabs(); render(); }
+async function carregarPrivado(){ await Promise.all([carregarPessoas(), carregarConfig()]); await carregarChat(); await pushEstado(); if (!podeChat()) fecharChat(); renderWho(); renderTabs(); render(); }
 
 // Tempo real: quando algo muda no banco, recarrega só aquela parte.
 const RECARGA = {
@@ -287,7 +287,7 @@ function erroNaUrl(){
 }
 document.addEventListener('click', async e => {
   if (e.target.closest('[data-entrar]')) formLogin();
-  if (e.target.closest('[data-sair]') && await confirmar('Sair da sua conta neste aparelho?')) { await sb.auth.signOut(); }
+  if (e.target.closest('[data-sair]') && await confirmar('Sair da sua conta neste aparelho?')) { await pushSair(); await sb.auth.signOut(); }
 });
 async function aplicarSessao(session){
   const uid = session ? session.user.id : null;
@@ -314,9 +314,11 @@ async function init(){
   try { await carregarConfig(); S.mes = proxCulto().slice(0,7);
     await Promise.all([carregarPessoas(), carregarProx(), carregarMes(), carregarAvisos(), carregarEventos()]); await carregarChat(); }
   catch(e){ console.warn(e); }
+  await pushEstado();
   S.pronto = true;
   if (/access_token|type=/.test(location.hash)) history.replaceState(null, '', location.pathname + '#' + S.tab);
   renderWho(); renderTabs(); render();
+  if (h === 'chat') irPara('chat');
   assinarTempoReal();
 }
 
@@ -473,6 +475,64 @@ function cardCadastro(){
     + '<p class="hint">Depois de enviado, a conexão só pode ser alterada por um administrador.</p>'
     + '<div class="end"><button type="submit" class="btn">Enviar cadastro</button></div></form></section>';
 }
+/* ---------- notificações no celular (Web Push) ---------- */
+const PUSH = { estado:'fora', salvo:null, fn: window.PAINEL.url + '/functions/v1/notificar' };
+const ehIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const instalado = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+const pushSuporta = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const b64u8 = s => { const b = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g,'+').replace(/_/g,'/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+async function swReg(){ try { return 'serviceWorker' in navigator ? await navigator.serviceWorker.register('sw.js') : null; } catch(e){ console.warn(e); return null; } }
+async function salvarSub(sub){
+  if (!sub || PUSH.salvo === S.uid) return;
+  const j = sub.toJSON(); const r = await sb.rpc('push_inscrever', {p_endpoint:j.endpoint, p_p256dh:j.keys.p256dh, p_auth:j.keys.auth, p_aparelho:navigator.userAgent});
+  if (r && r.error) throw r.error; PUSH.salvo = S.uid;
+}
+async function pushEstado(){
+  try {
+    if (!S.uid || !aprovado(S.uid)) { PUSH.estado = 'fora'; return; }
+    if (!pushSuporta()) { PUSH.estado = ehIOS() && !instalado() ? 'ios' : 'sem'; return; }
+    if (Notification.permission === 'denied') { PUSH.estado = 'bloqueado'; return; }
+    const reg = await swReg(); const sub = reg && await reg.pushManager.getSubscription();
+    if (sub && Notification.permission === 'granted') { PUSH.estado = 'ativo'; await salvarSub(sub); } else PUSH.estado = 'inativo';
+  } catch(e){ console.warn(e); }
+}
+async function ativarPush(){
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { PUSH.estado = perm === 'denied' ? 'bloqueado' : 'inativo'; render(); toast('As notificações não foram permitidas.'); return; }
+    const reg = await swReg(); await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) { const {chave} = await (await fetch(PUSH.fn)).json(); sub = await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64u8(chave)}); }
+    PUSH.salvo = null; await salvarSub(sub); PUSH.estado = 'ativo'; render();
+    toast('Pronto! Este celular vai receber as notificações.');
+  } catch(e){ console.warn(e); toast('Não consegui ativar agora. Tente de novo em instantes.'); }
+}
+// Ao sair da conta, este aparelho para de receber os avisos dela.
+async function pushSair(){
+  try { const reg = pushSuporta() && await navigator.serviceWorker.getRegistration(); const sub = reg && await reg.pushManager.getSubscription();
+    if (sub) { await sb.rpc('push_cancelar', {p_endpoint:sub.endpoint}); await sub.unsubscribe(); } } catch(e){ console.warn(e); }
+  PUSH.salvo = null; PUSH.estado = 'fora';
+}
+function cardPush(sempre){
+  const e = PUSH.estado; if (!['inativo','ios','bloqueado'].includes(e)) return '';
+  if (!sempre) { try { if (Number(localStorage.getItem('pushDepois:'+S.uid) || 0) > Date.now()) return ''; } catch(x){} }
+  const quais = 'mensagem no bate-papo e mudança na escala'+(isAdm() ? ', além de cadastro novo' : '');
+  const txt = e === 'ios' ? 'Para receber aviso de '+quais+' no iPhone: toque em <b>Compartilhar</b> (quadrado com seta ⬆️) → <b>Adicionar à Tela de Início</b>. Depois abra o painel pelo ícone novo e toque em <b>Ativar notificações</b>.'
+    : e === 'bloqueado' ? 'As notificações estão bloqueadas neste aparelho. Toque no cadeado ao lado do endereço do site → <b>Notificações</b> → <b>Permitir</b> e recarregue a página.'
+    : 'Receba aviso de '+quais+', mesmo com o painel fechado.';
+  return '<section class="card push-card"><h3>🔔 Notificações neste celular</h3><p class="meta" style="margin:4px 0 10px">'+txt+'</p><div class="end">'
+    + (sempre ? '' : '<button type="button" class="btn ghost" data-push-depois>Agora não</button>') + (e === 'inativo' ? '<button type="button" class="btn" data-push-ativar>Ativar notificações</button>' : '') + '</div></section>';
+}
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-push-ativar]')) ativarPush();
+  if (e.target.closest('[data-push-depois]')) { try { localStorage.setItem('pushDepois:'+S.uid, String(Date.now() + 30*864e5)); } catch(x){} render(); }
+});
+// Toque na notificação com o painel aberto: vai para a aba certa (ou abre o bate-papo).
+function irPara(h){
+  if (h === 'chat') { if (podeChat()) abrirChat(); return; }
+  if (TABS.some(t => t.id === h)) { S.tab = h; S.det = null; history.replaceState(null, '', '#'+h); renderTabs(); render(); window.scrollTo(0,0); }
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.ir) irPara(String(e.data.ir)); });
 document.addEventListener('submit', async e => {
   if (e.target.id !== 'cadForm') return; e.preventDefault();
   if (S.meuCad) { toast('Seu cadastro já foi enviado.'); return; }
@@ -490,7 +550,7 @@ function viewInicio(){
   const lista = listaCultos(hoje(), somaDias(hoje(), 120), S.prox).filter(c => !horaPassou(c.data, cultoInfo(c.culto).hora));
   const datas = [...new Set(lista.map(c=>c.data))].slice(0, 2);
   const blocoDia = d => lista.filter(c=>c.data===d).map((c,i) => (i?'<hr class="div-culto">':'')+'<div class="culto-sec"><h3 class="culto-t'+(/noite/i.test(cultoInfo(c.culto).nome)?' noite':'')+'">'+esc(cultoTitulo(c))+'</h3>'+blocosCulto(S.prox, c)+'</div>').join('');
-  let html = cardCadastro();
+  let html = cardCadastro() + cardPush();
   if (isAdm() && pendentes().length) { const n = pendentes().length; html = '<button class="card pend" data-go="ajustes"><span>🔔 <b>'+n+' cadastro'+(n>1?'s':'')+' aguardando aprovação</b></span><span class="meta">Revisar ›</span></button>' + html; }
   if (!datas.length) html += '<div class="empty">Nenhum culto programado. Confira os dias de culto em Ajustes.</div>';
   else {
@@ -1065,8 +1125,10 @@ function previaImportar(arquivo, mudancas, avisos){
   async fd => {
     if (!uteis.length) return true;
     const escolhidas = fd.getAll('m').map(Number).map(i => uteis[i]); if (!escolhidas.length) { toast('Marque pelo menos uma escala.'); return false; }
-    let ok = 0;
+    let ok = 0; try { await sb.rpc('notif_importacao_inicio'); } catch(e){}
     for (const m of escolhidas) { try { await ref('escalas', m.id).set({...m.d, atualizadoEm:new Date().toISOString()}); ok++; } catch(e){ console.warn(e); } }
+    const meses = [...new Set(escolhidas.map(m => new Date(m.d.data+'T12:00:00').toLocaleDateString('pt-BR',{month:'long'})))].join(', ');
+    try { await sb.rpc('notif_importacao_fim', {p_qtd:ok, p_meses:meses}); } catch(e){}
     await logar('editou', 'escala', 'Importou escala do arquivo '+arquivo+': '+ok+' escala'+(ok>1?'s':''), null, null);
     await RECARGA.escalas();
     toast(ok === escolhidas.length ? 'Importação concluída: '+ok+' escala'+(ok>1?'s':'')+' gravada'+(ok>1?'s':'')+'.' : 'Gravei '+ok+' de '+escolhidas.length+'. Tente de novo as que faltaram.');
@@ -1209,7 +1271,7 @@ function viewAjuda(){
   const p = pessoaDe(S.uid); const lid = minhas().length > 0;
   const voce = !S.uid ? 'Visitante: você pode ver tudo sem entrar. Para preencher a escala da sua conexão, toque em <b>Entrar</b> e depois faça seu cadastro (passo 3).'
     : isAdm() ? 'Administrador: você pode fazer tudo no painel.' : lid ? PAPEIS[p.papel]+' da conexão '+esc(conexaoNome(p.conexao))+': você preenche a Direção do culto e o Super Kids nos dias da sua conexão.' : 'Consulta: você pode ver tudo. Se for líder, auxiliar ou da organização de uma conexão, faça seu cadastro (passo 3).';
-  let h = cardCadastro() + '<h2 class="section-title" style="margin-top:0">Como usar o painel</h2><div class="notice"><b>Seu acesso hoje</b><br>'+voce+'</div>';
+  let h = cardCadastro() + cardPush(true) + '<h2 class="section-title" style="margin-top:0">Como usar o painel</h2><div class="notice"><b>Seu acesso hoje</b><br>'+voce+'</div>';
   h += passo('1. Primeiros passos', ['Para só consultar a escala, os avisos e a agenda, <b>não precisa entrar</b>: é só abrir o link.', 'Para preencher a escala, publicar avisos, fazer check-in ou usar o bate-papo, toque em <b>Entrar</b>, no topo da tela.', 'O jeito mais fácil é <b>Continuar com Google</b> (quem tem Gmail). Ou entre com e-mail e senha: na primeira vez, toque em <b>Criar conta</b> e confirme pelo link que chega no e-mail.', 'Esqueceu a senha? Toque em <b>Esqueci minha senha</b> e siga o link que chega no e-mail.', 'Neste aparelho, você continua conectado. Para sair, toque em <b>Sair</b>, embaixo do seu nome.', 'Para ter um atalho no celular: no iPhone, toque em Compartilhar e depois em <b>Adicionar à Tela de Início</b>. No Android, toque no menu ⋮ e depois em <b>Adicionar à tela inicial</b>.', 'Este tutorial fica sempre no botão <b>❓ Como usar</b>, no topo da tela.'], true);
   h += passo('2. Tela inicial', ['No cartão grande fica o <b>próximo domingo</b>, com o culto da manhã (amarelo) e o da noite (azul).', 'Toque numa área, como Direção do culto ou Louvor, para ver quem está escalado em cada função.', 'Logo abaixo vem o domingo seguinte, em <b>Em seguida</b>.', 'Depois vêm a <b>Agenda</b> e os <b>Avisos</b>. Toque em um item para ver os detalhes. Os botões amarelos levam para a inscrição e os verdes abrem o WhatsApp de quem organiza.', 'No final ficam o Instagram, o YouTube e o endereço da igreja.']);
   h += passo('3. Fazer seu cadastro (líder, auxiliar ou organização)', ['Toque em <b>Entrar</b> e entre com o seu e-mail.', 'Na tela inicial, preencha o cartão <b>É líder, auxiliar ou da organização da conexão?</b>', 'Coloque seu nome completo, o WhatsApp com DDD, a sua conexão e a sua função.', 'Toque em <b>Enviar cadastro</b> e depois em <b>Avisar o administrador pelo WhatsApp</b>.', 'Depois de enviado, a conexão só pode ser trocada por um administrador.', 'Quem só vai consultar não precisa se cadastrar.']);

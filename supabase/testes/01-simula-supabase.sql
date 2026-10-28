@@ -8,3 +8,7 @@ create table storage.objects(id serial primary key, bucket_id text, name text, o
 alter table storage.objects enable row level security;
 grant usage on schema storage to anon, authenticated; grant all on storage.objects to anon, authenticated; grant usage on all sequences in schema storage to authenticated;
 create publication supabase_realtime;
+-- pg_net de mentira: só anota as chamadas.
+create schema net; create table net.chamadas(url text, body jsonb);
+create function net.http_post(url text, body jsonb default '{}', params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds int default 5000) returns bigint
+language sql as $$ insert into net.chamadas values (url, body); select 1::bigint $$;

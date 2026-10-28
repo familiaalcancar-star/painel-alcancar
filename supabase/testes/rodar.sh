@@ -9,4 +9,4 @@ import json; c=json.load(open('../../dados-exportados/config.json'))
 print(\"insert into config values ('geral', '\"+json.dumps(c,ensure_ascii=False).replace(\"'\",\"''\")+\"'::jsonb);\")" > /tmp/config-teste.sql
 psql -q -c 'drop database if exists painel_teste' -c 'create database painel_teste'
 psql -q -v ON_ERROR_STOP=1 -d painel_teste -f 01-simula-supabase.sql -f ../schema.sql -f 02-permissoes-padrao.sql -f /tmp/config-teste.sql -f 03-dados-de-teste.sql >/dev/null
-psql -q -t -A -d painel_teste -f 04-testes.sql | awk '{print} /FALHOU/{f++} END{print NR" testes, "f+0" falhas"; exit f>0}'
+psql -q -t -A -d painel_teste -f 04-testes.sql -f 05-notificacoes.sql | awk '{print} /FALHOU/{f++} END{print NR" testes, "f+0" falhas"; exit f>0}'

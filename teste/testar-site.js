@@ -295,6 +295,20 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   conferir(await p.evaluate(() => window.__novaSenha) === 'nova12345', 'link de recuperação abre "Criar senha nova" e salva');
   await p.context().close();
 
+  console.log('Notificações');
+  p = await abrir('admin');
+  conferir((await p.textContent('.push-card')).includes('bloqueadas'), 'notificação bloqueada: explica como liberar');
+  // O Chromium de teste sempre nega notificações; simula um celular que ainda não respondeu.
+  await p.addInitScript(() => Object.defineProperty(Notification, 'permission', { get: () => 'default' })); await p.reload(); await p.waitForSelector('.push-card');
+  conferir(await p.isVisible('[data-push-ativar]') && (await p.textContent('.push-card')).includes('cadastro novo'), 'admin logado vê "Ativar notificações" (com cadastro novo)');
+  await foto(p, '35-notificacoes');
+  await p.click('[data-push-depois]'); await p.waitForTimeout(100);
+  conferir(!(await p.$('.push-card')), '"Agora não" esconde o aviso na Início');
+  await p.click('[data-go="ajuda"]'); conferir(await p.isVisible('.push-card [data-push-ativar]'), 'Ajuda continua oferecendo ativar');
+  await p.context().close();
+  p = await abrir('betel'); conferir(!(await p.textContent('.push-card')).includes('cadastro novo'), 'líder: aviso sem "cadastro novo"'); await p.context().close();
+  p = await abrir(null); conferir(!(await p.$('.push-card')), 'visitante não vê o aviso de notificações'); await p.context().close();
+
   await browser.close(); srv.close();
   console.log('\n' + ok + ' conferências ok, ' + falhas + ' falhas. Capturas em ' + SAIDA);
   process.exit(falhas ? 1 : 0);
