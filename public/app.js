@@ -494,7 +494,7 @@ async function pushEstado(){
     if (Notification.permission === 'denied') { PUSH.estado = 'bloqueado'; return; }
     const reg = await swReg(); const sub = reg && await reg.pushManager.getSubscription();
     if (sub && Notification.permission === 'granted') { PUSH.estado = 'ativo'; await salvarSub(sub); } else PUSH.estado = 'inativo';
-  } catch(e){ console.warn(e); }
+  } catch(e){ console.warn(e); if (PUSH.estado === 'fora' && S.uid && aprovado(S.uid)) PUSH.estado = 'inativo'; }
 }
 async function ativarPush(){
   try {
@@ -514,10 +514,13 @@ async function pushSair(){
   PUSH.salvo = null; PUSH.estado = 'fora';
 }
 function cardPush(sempre){
-  const e = PUSH.estado; if (!['inativo','ios','bloqueado'].includes(e)) return '';
+  const e = PUSH.estado;
+  if (sempre && e === 'ativo') return '<div class="notice">🔔 Notificações <b>ativas</b> neste celular.</div>';
+  if (!['inativo','ios','bloqueado','sem'].includes(e)) return '';
   if (!sempre) { try { if (Number(localStorage.getItem('pushDepois:'+S.uid) || 0) > Date.now()) return ''; } catch(x){} }
   const quais = 'mensagem no bate-papo e mudança na escala'+(isAdm() ? ', além de cadastro novo' : '');
   const txt = e === 'ios' ? 'Para receber aviso de '+quais+' no iPhone: toque em <b>Compartilhar</b> (quadrado com seta ⬆️) → <b>Adicionar à Tela de Início</b>. Depois abra o painel pelo ícone novo e toque em <b>Ativar notificações</b>.'
+    : e === 'sem' ? 'Este navegador não recebe notificações. No Android, abra o painel pelo <b>Chrome</b>; no iPhone, pelo <b>Safari</b> (e depois Adicionar à Tela de Início). Se abriu por um link do WhatsApp ou Instagram, toque em ⋮ → <b>Abrir no navegador</b>.'
     : e === 'bloqueado' ? 'As notificações estão bloqueadas neste aparelho. Toque no cadeado ao lado do endereço do site → <b>Notificações</b> → <b>Permitir</b> e recarregue a página.'
     : 'Receba aviso de '+quais+', mesmo com o painel fechado.';
   return '<section class="card push-card"><h3>🔔 Notificações neste celular</h3><p class="meta" style="margin:4px 0 10px">'+txt+'</p><div class="end">'
