@@ -18,14 +18,14 @@ const T = {
   escalas: D.escalas.map(x => { const {id, ...d} = x; return {id, d}; }),
   avisos: D.avisos.map(x => { const {id, ...d} = x; return {id, d, autor:null, criado_em:d.criadoEm}; }),
   eventos: D.eventos.map(x => { const {id, ...d} = x; return {id, d, autor:null}; }),
-  checkin_marcas:[], historico:[],
+  checkin_marcas:[], historico:[], convites:[],
   chat:[{id:'m1', texto:'Bom dia, pessoal! Escala de domingo fechada?', por:U.betel, em:'2026-10-25T12:00:00.000Z'},
         {id:'m2', texto:'Falta só a recepção da noite.', por:U.gestao, em:new Date(Date.now()-3600e3).toISOString()},
         {id:'m3', texto:'Combinado, eu vejo isso.', por:U.admin, em:new Date(Date.now()-1800e3).toISOString()}] };
 window.__TABELAS = T;
 const derivados = (t, r) => { if (t==='escalas' || t==='eventos') r.data = r.d && r.d.data; if (t==='escalas') { r.culto = r.d.culto; r.area = r.d.area; } return r; };
 Object.keys(T).forEach(t => T[t].forEach(r => derivados(t, r)));
-const chaves = {checkin_marcas:['data','culto','chave']};
+const chaves = {checkin_marcas:['data','culto','chave'], convites:['email']};
 const mesma = (t, a, b) => (chaves[t]||['id']).every(k => a[k] === b[k]);
 let sessao = null; const ouvintes = [];
 try { const p = localStorage.getItem('mockPapel'); if (p && U[p]) sessao = {user:{id:U[p], email:p+'@x'}}; } catch(e){}

@@ -148,7 +148,8 @@ async function carregarPessoas(){
   S.pessoas = {}; (p.data||[]).forEach(x => S.pessoas[x.id] = x);
   S.cadastros = {}; (c.data||[]).forEach(x => S.cadastros[x.id] = x); S.meuCad = S.cadastros[S.uid] || null;
   S.names = {}; (n.data||[]).forEach(x => S.names[x.id] = x);
-  if (isAdm()) { const a = await sb.from('acessos').select('id,email'); S.membros = (a.data||[]).map(x => x.id); S.emails = {}; (a.data||[]).forEach(x => S.emails[x.id] = x.email); }
+  if (isAdm()) { const cv = await sb.from('convites').select('*').order('em'); S.convites = cv.error ? null : (cv.data || []);
+    const a = await sb.from('acessos').select('id,email'); S.membros = (a.data||[]).map(x => x.id); S.emails = {}; (a.data||[]).forEach(x => S.emails[x.id] = x.email); }
   else { S.membros = []; S.emails = {}; }
   if (S.email) S.emails[S.uid] = S.email;
 }
@@ -482,7 +483,7 @@ document.addEventListener('submit', async e => {
     const r = await sb.from('cadastros').insert({id:S.uid, email:S.email, ...data}); if (r.error) throw r.error;
     await logar('criou','config','Pedido de cadastro: '+(PAPEIS[data.papel]||'')+' · '+conexaoNome(data.conexao), null, {nome:data.nome, papel:data.papel, conexao:data.conexao});
     await carregarPessoas(); renderTabs(); render();
-    if (pessoaDe(S.uid)) toast('Cadastro aprovado: você já tem o mesmo acesso do painel antigo.'); else avisarAdmin();
+    if (pessoaDe(S.uid)) toast('Cadastro aprovado: seu acesso já está liberado.'); else avisarAdmin();
   } catch(err){ falhaEscrita(err); b.disabled = false; }
 });
 function viewInicio(){
@@ -1250,6 +1251,7 @@ function viewAjustes(){
     + '<div class="row"><div><label class="f" for="cvN">Nome</label><input class="inp" id="cvN" autocomplete="off"></div><div><label class="f" for="cvW">WhatsApp com DDD</label><input class="inp" id="cvW" type="tel" inputmode="tel" placeholder="(11) 99999-9999"></div></div>'
     + '<div class="end"><a class="btn zap" id="cvLink" target="_blank" rel="noopener" href="'+esc(waUrl('', msgConvite('')))+'">Enviar passo a passo no WhatsApp</a></div>'
     + '<p class="hint">Sem número, o WhatsApp abre para você escolher o contato ou um grupo.</p></div>';
+  html += viewConvites();
   html += '<h2 class="section-title">Backup do banco de dados</h2><div class="card"><p class="meta" style="margin:0">Baixa tudo o que está no banco (configuração, pessoas, cadastros, escalas, avisos, eventos, check-in, histórico e bate-papo) num arquivo .zip. Contém WhatsApp e e-mails: guarde em lugar seguro e não compartilhe.</p><div class="end"><button class="btn" data-backup>Baixar backup (.zip)</button></div></div>';
   html += '<h2 class="section-title">Pessoas e permissões</h2><p class="hint">O status muda sozinho. Para aprovar alguém: toque em <b>Aprovar</b>, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Se você salvar sem tocar em <b>Aprovar</b>, a pessoa continua <b>Pendente</b>. <b>Remover</b> exclui a pessoa da lista e tira o acesso; se ela entrar de novo, faz um cadastro novo. <b>Banco</b> permite apenas visualizar e prevalece sobre a função e todos os extras.</p>';
   const ids = [...new Set([...S.membros, ...Object.keys(S.cadastros||{}), ...Object.keys(S.pessoas||{})])].filter(id => id && id!==S.uid);
@@ -1265,6 +1267,51 @@ function viewAjustes(){
   html += '<p class="hint">Administradores podem tudo (hoje: '+(nAdm+1)+' contando você; o ideal é até 5). Líder, Auxiliar e Organização preenchem a Direção do culto e o Super Kids nos dias em que a conexão deles está escalada; se a conexão for Flechas, Forasteiros ou Heróis, também o Louvor. <b>Extras:</b> Gestão vê a aba Check-in e imprime o check-in (PDF e Excel); Ministro pode editar a escala de Louvor; Avisos/Eventos pode publicar avisos e eventos (e editar ou excluir os que publicou); Escala pode preencher os nomes da Direção do culto e do Super Kids de qualquer conexão. Banco bloqueia alterações, cadastros, envio de mensagens, importações e exportações, mesmo que outros extras estejam marcados.</p>';
   return html;
 }
+// ---------- Convidar por e-mail ----------
+// O convite deixa a pessoa pré-aprovada: ao fazer o cadastro entrando com ESSE e-mail, ela já fica Aprovada
+// com a função, a conexão e os extras escolhidos (o banco confere o e-mail do login).
+const EXTRAS = [['gestao','Gestão'],['ministro','Ministro'],['avisos','Avisos/Eventos'],['escala','Escala'],['banco','Banco']];
+const descConvite = c => PAPEIS[c.papel] + (c.conexao && c.papel !== 'admin' ? ' · ' + conexaoNome(c.conexao) : '') + EXTRAS.filter(([k]) => c[k]).map(([, n]) => ' · ' + n).join('');
+function msgConviteEmail(c){
+  const pn = String(c.nome||'').trim().split(' ')[0];
+  return 'Olá' + (pn ? ', ' + pn : '') + '! Graça e paz!\n\nVocê foi convidado(a) para o Painel da ' + ((S.cfg&&S.cfg.igreja)||'igreja') + ', onde ficam as escalas, os avisos e a agenda. Seu acesso já está liberado como: ' + descConvite(c) + '.\n\nComo entrar:\n1. Abra o painel: ' + LINK_PAINEL() + '#ajuda\n2. Toque em Entrar, no topo, e entre com ESTE e-mail (' + c.email + '): pelo botão Continuar com Google ou em Criar conta.\n3. Preencha o cadastro (nome, WhatsApp e conexão). Pronto: o acesso é liberado na hora.\n\nQualquer dúvida, é só me chamar.\nDeus abençoe!';
+}
+const mailtoConvite = c => 'mailto:' + encodeURIComponent(c.email) + '?subject=' + encodeURIComponent('Convite para o Painel da ' + ((S.cfg&&S.cfg.igreja)||'igreja')) + '&body=' + encodeURIComponent(msgConviteEmail(c));
+function viewConvites(){
+  let h = '<h2 class="section-title">Convidar por e-mail</h2><div class="card"><p class="meta" style="margin:0">Coloque o e-mail da pessoa e já escolha o acesso dela. Ao tocar em <b>Enviar convite</b>, abre o seu aplicativo de e-mail com a mensagem pronta. Quando ela entrar com esse e-mail e fizer o cadastro, já fica <b>Aprovada</b>, sem você precisar aprovar de novo.</p>';
+  if (S.convites === null) return h + '<div class="notice" style="margin-top:12px">O convite por e-mail ainda está sendo ativado no banco de dados.</div></div>';
+  h += '<form id="convForm"><div class="row"><div><label class="f" for="cvE">E-mail</label><input class="inp" id="cvE" name="email" type="email" required inputmode="email" autocomplete="off" placeholder="pessoa@gmail.com"></div><div><label class="f" for="cvNm">Nome (opcional)</label><input class="inp" id="cvNm" name="nome" autocomplete="off"></div></div>'
+    + '<div class="row"><div><label class="f" for="cvP">Função</label><select class="inp" id="cvP" name="papel">' + opts(Object.entries(PAPEIS).map(([id, nome]) => ({id, nome})), 'lider') + '</select></div><div><label class="f" for="cvC">Conexão</label><select class="inp" id="cvC" name="conexao"><option value="">—</option>' + opts(conexoes(), '') + '</select></div></div>'
+    + '<label class="f">Extras</label><div class="chips" style="flex-wrap:wrap">' + EXTRAS.map(([k, n]) => '<label class="chip"><input type="checkbox" name="' + k + '"> ' + n + '</label>').join('') + '</div>'
+    + '<div class="end"><button type="submit" class="btn">Enviar convite</button></div></form>';
+  if ((S.convites||[]).length) h += '<p style="margin:16px 0 4px"><b>Convites aguardando cadastro</b></p>' + S.convites.map(c => '<div class="conv-l"><span><b>' + esc(c.nome || c.email) + '</b>' + (c.nome ? '<br><span class="meta">✉️ ' + esc(c.email) + '</span>' : '') + '<br><span class="meta">' + esc(descConvite(c)) + '</span></span><span class="conv-b"><a class="btn small ghost" href="' + esc(mailtoConvite(c)) + '">Reenviar</a><button class="btn small danger" data-cancelar-convite="' + esc(c.email) + '">Cancelar</button></span></div>').join('');
+  return h + '</div>';
+}
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'convForm' || !isAdm()) return; e.preventDefault();
+  const fd = new FormData(e.target);
+  const c = {email: String(fd.get('email')||'').trim().toLowerCase(), nome: String(fd.get('nome')||'').trim(), papel: fd.get('papel'), conexao: fd.get('conexao') || null};
+  EXTRAS.forEach(([k]) => c[k] = !!fd.get(k));
+  if (!/^\S+@\S+\.\S+$/.test(c.email)) { toast('Confira o e-mail.'); return; }
+  if (ehEquipe(c) && !c.conexao) { toast('Escolha a conexão.'); return; }
+  if (Object.values(S.pessoas).some(p => (p.email||'').toLowerCase() === c.email)) { toast('Essa pessoa já está cadastrada: ajuste o acesso dela em Pessoas e permissões.'); return; }
+  const b = e.target.querySelector('[type=submit]'); b.disabled = true;
+  try {
+    const r = await sb.from('convites').upsert(c); if (r.error) throw r.error;
+    await logar('criou', 'config', 'Convite por e-mail: ' + (c.nome ? primeiro(c.nome) : c.email) + ' (' + descConvite(c) + ')', null, null);
+    location.href = mailtoConvite(c);
+    toast('Convite salvo. Agora é só enviar o e-mail.'); await carregarPessoas(); render();
+  } catch(err){ falhaEscrita(err); }
+  finally { b.disabled = false; }
+});
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-cancelar-convite]'); if (!t || !isAdm()) return;
+  const em = t.dataset.cancelarConvite;
+  if (!await confirmar('Cancelar o convite de ' + em + '?\n\nSe a pessoa entrar, ela vai precisar da sua aprovação normal.')) return;
+  try { const r = await sb.from('convites').delete().eq('email', em); if (r.error) throw r.error; await logar('excluiu', 'config', 'Convite cancelado: ' + em, null, null); toast('Convite cancelado'); await carregarPessoas(); render(); }
+  catch(err){ falhaEscrita(err); }
+});
+
 // Status: não é escolhido numa lista. Fica Pendente até o administrador tocar em "Confirmar aprovação"
 // (ou "Reativar", para quem foi removido) e salvar.
 // E-mail vem do login (não é digitado): acessos, pessoas ou cadastro, o que tiver.

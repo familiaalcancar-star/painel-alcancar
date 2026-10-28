@@ -280,3 +280,7 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .st-marcado{background:#0d2b40;color:var(--night)}
 .st-btn{margin-top:6px;white-space:nowrap}
 .relogio{display:block;font-size:12px;color:var(--muted);margin-top:-2px}
+
+/* ---------- Painel 2.0: convites por e-mail ---------- */
+.conv-l{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);font-size:14px}
+.conv-b{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
