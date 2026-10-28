@@ -19,6 +19,8 @@
   const el = document.getElementById('relogio'); if (!el) return;
   const tic = () => { const d = new Date(); const t = d.toLocaleDateString('pt-BR', {weekday:'long', day:'2-digit', month:'2-digit'}) + ' · ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}); el.textContent = t.charAt(0).toUpperCase() + t.slice(1); };
   tic(); setInterval(tic, 15000);
+  const b = document.createElement('button'); b.className = 'atualizar'; b.type = 'button'; b.textContent = '↻ Atualizar'; b.setAttribute('aria-label', 'Atualizar o painel');
+  b.addEventListener('click', () => location.reload()); el.insertAdjacentElement('afterend', b);
 })();
 const sb = window.supabase.createClient(window.PAINEL.url, window.PAINEL.chave, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' }
@@ -184,7 +186,7 @@ function renderWho(){
   const w = $('#who'); if (!w) return;
   const n = podeChat() ? naoLidas() : 0;
   w.innerHTML = S.uid ? (podeChat() ? '<button class="chat-btn" data-chat>💬 Bate-papo'+(n ? '<span class="badge">'+(n > 99 ? '99+' : n)+'</span>' : '')+'</button>' : '')
-      + '<span class="eu"><span>'+esc(nome(S.uid) === 'Alguém' ? S.email : nome(S.uid))+'</span><button class="sair" data-sair>Sair</button></span>'
+      + '<span class="eu"><span>'+esc(nome(S.uid) === 'Alguém' ? S.email : nome(S.uid))+'</span><span class="eu-acoes">'+(PUSH.estado !== 'fora' ? '<button class="sino'+(PUSH.estado === 'ativo' ? ' on' : '')+'" data-sino aria-label="Notificações">'+(PUSH.estado === 'ativo' ? '🔔' : '🔕')+'</button>' : '')+'<button class="sair" data-sair>Sair</button></span></span>'
     : '<button class="entrar" data-entrar>Entrar</button>';
 }
 const urlVolta = () => location.origin + location.pathname;
@@ -503,7 +505,7 @@ async function ativarPush(){
     const reg = await swReg(); await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) { const {chave} = await (await fetch(PUSH.fn)).json(); sub = await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64u8(chave)}); }
-    PUSH.salvo = null; await salvarSub(sub); PUSH.estado = 'ativo'; render();
+    PUSH.salvo = null; await salvarSub(sub); PUSH.estado = 'ativo'; renderWho(); render();
     toast('Pronto! Este celular vai receber as notificações.');
   } catch(e){ console.warn(e); toast('Não consegui ativar agora. Tente de novo em instantes.'); }
 }
@@ -527,7 +529,11 @@ function cardPush(sempre){
     + (sempre ? '' : '<button type="button" class="btn ghost" data-push-depois>Agora não</button>') + (e === 'inativo' ? '<button type="button" class="btn" data-push-ativar>Ativar notificações</button>' : '') + '</div></section>';
 }
 document.addEventListener('click', e => {
-  if (e.target.closest('[data-push-ativar]')) ativarPush();
+  if (e.target.closest('[data-push-ativar]')) { const d = $('#dlg'); if (d.open) d.close(); ativarPush(); }
+  if (e.target.closest('[data-sino]')) abrir('<form><h2>🔔 Notificações</h2>'+(cardPush(true) || '<p>Entre com uma conta aprovada para receber notificações.</p>')
+    + (PUSH.estado === 'ativo' ? '<button type="button" class="btn big" data-push-teste>Enviar notificação de teste</button>' : '')
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Fechar</button></div></form>', async () => true);
+  if (e.target.closest('[data-push-teste]')) navigator.serviceWorker.ready.then(r => r.showNotification('Família Alcançar', {body:'Teste: as notificações estão funcionando neste celular.', icon:'icone-192.png', badge:'icone-192.png'})).catch(x => toast('Não consegui mostrar o teste.'));
   if (e.target.closest('[data-push-depois]')) { try { localStorage.setItem('pushDepois:'+S.uid, String(Date.now() + 30*864e5)); } catch(x){} render(); }
 });
 // Toque na notificação com o painel aberto: vai para a aba certa (ou abre o bate-papo).
