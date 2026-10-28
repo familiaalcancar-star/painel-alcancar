@@ -1258,7 +1258,7 @@ function viewAjustes(){
   else html += '<div class="card tbl-wrap"><table class="lead"><thead><tr><th>Pessoa</th><th>Status</th><th>Pediu</th><th>Função</th><th>Conexão</th><th>Extras</th><th></th></tr></thead><tbody>'
     + ids.map(id => { const atual = S.pessoas[id]; const ped = (S.cadastros||{})[id]; const base = atual || ped || {papel:'leitura', conexao:''};
       const wpp = base.whatsapp || (ped && ped.whatsapp) || '';
-      return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+(S.emails[id] && nomeComp(id)!==S.emails[id]?'<br><span class="meta">'+esc(S.emails[id])+'</span>':'')+(wpp?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(wpp).replace(/\D/g,'').length<=11?'55':'')+String(wpp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(wpp)+'</a>':'')+'</td><td>'+celulaStatus(id)+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
+      return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+(emailDe(id) && nomeComp(id)!==emailDe(id)?'<br><span class="meta">✉️ '+esc(emailDe(id))+'</span>':'')+(wpp?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(wpp).replace(/\D/g,'').length<=11?'55':'')+String(wpp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(wpp)+'</a>':'')+'</td><td>'+celulaStatus(id)+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
         + '<td><select class="inp" data-p-papel="'+esc(id)+'">'+opts(Object.entries(PAPEIS).map(([k,v])=>({id:k,nome:v})), base.papel)+'</select></td>'
         + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; }).join('')
     + '</tbody></table><div class="end"><button class="btn" data-salvar-pessoas>Salvar pessoas</button></div></div>';
@@ -1267,6 +1267,8 @@ function viewAjustes(){
 }
 // Status: não é escolhido numa lista. Fica Pendente até o administrador tocar em "Confirmar aprovação"
 // (ou "Reativar", para quem foi removido) e salvar.
+// E-mail vem do login (não é digitado): acessos, pessoas ou cadastro, o que tiver.
+const emailDe = id => S.emails[id] || (S.pessoas[id]||{}).email || ((S.cadastros||{})[id]||{}).email || '';
 const ROT_STATUS = {pendente:'Pendente', aprovado:'Aprovado', removido:'Removido'};
 function celulaStatus(id){
   const st = statusDe(id);
