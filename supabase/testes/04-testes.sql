@@ -1,4 +1,8 @@
-select t('anon lê escalas','anon','select * from escalas','ok');
+select t('anon NÃO lê nomes da escala','anon','select * from escalas','bloq');
+select t('anon lê escala pública','anon',$q$select 1/count(*)::int from escalas_publicas('2026-01-01','2026-12-31')$q$,'ok');
+select t('Escala pública sem nomes','anon',$q$select 1/(count(*) filter (where d ? 'funcoes'))::int from escalas_publicas('2026-01-01','2026-12-31')$q$,'bloq');
+select t('Não aprovado NÃO lê nomes da escala','99','select * from escalas','bloq');
+select t('Aprovado lê nomes de qualquer conexão','b1',$q$select * from escalas where id='2026-11-01_noite_superkids'$q$,'ok');
 select t('anon lê config','anon','select * from config','ok');
 select t('anon NÃO lê pessoas','anon','select * from pessoas','bloq');
 select t('anon NÃO lê nomes','anon','select * from pessoas_nomes()','bloq');

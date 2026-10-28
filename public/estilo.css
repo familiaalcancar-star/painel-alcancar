@@ -290,3 +290,9 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .eu-acoes{display:flex;align-items:center;gap:8px}
 .sino{background:none;border:0;padding:0;font-size:15px;line-height:1;opacity:.75}
 .sino.on{opacity:1}
+
+/* Visitante: a área aparece sem abrir (sem nomes) */
+.area.fechada{padding:12px 2px}
+.area.fechada .an{display:block;font-weight:600}
+.area.fechada .ac{display:block;font-size:14px;opacity:.8}
+.cell.fechada{display:block;cursor:default}

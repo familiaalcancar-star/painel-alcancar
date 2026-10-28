@@ -71,6 +71,8 @@ const STATUS = {pendente:'Pendente', aprovado:'Aprovado', removido:'Removido'};
 const statusDe = id => S.pessoas[id] ? (S.pessoas[id].status || 'aprovado') : 'pendente';
 const aprovado = id => !!S.pessoas[id] && statusDe(id) === 'aprovado';
 const banco = () => !!(S.pessoas[S.uid]||{}).banco;
+// Nomes de quem serve: só para quem entrou e foi aprovado. Visitantes veem só conexões e se a equipe está definida.
+const veEquipes = () => !!S.uid && aprovado(S.uid);
 const consultaRestrita = () => banco() || (!!S.pessoas[S.uid] && !aprovado(S.uid));
 const podeExportar = () => !!S.uid && !consultaRestrita();
 const pendentes = () => [...new Set([...Object.keys(S.cadastros||{}), ...Object.keys(S.pessoas||{})])].filter(id => statusDe(id) === 'pendente');
@@ -156,12 +158,14 @@ async function carregarPessoas(){
   if (S.email) S.emails[S.uid] = S.email;
 }
 const linhas = r => { if (r.error) console.warn(r.error); return (r.data||[]).map(doRow); };
-async function carregarProx(){ S.prox = linhas(await sb.from('escalas').select('id,d').gte('data', hoje()).order('data').limit(400)); }
-async function carregarMes(){ const m = S.mes; const l = linhas(await sb.from('escalas').select('id,d').gte('data', m+'-01').lte('data', m+'-31').order('data')); if (m === S.mes) S.mesEsc = l; }
+const lerEscalas = (de, ate, lim) => veEquipes() ? sb.from('escalas').select('id,d').gte('data', de).lte('data', ate).order('data').limit(lim)
+  : sb.rpc('escalas_publicas', {p_de:de, p_ate:ate});
+async function carregarProx(){ S.prox = linhas(await lerEscalas(hoje(), '9999-12-31', 400)); }
+async function carregarMes(){ const m = S.mes; const l = linhas(await lerEscalas(m+'-01', m+'-31', 400)); if (m === S.mes) S.mesEsc = l; }
 async function carregarAvisos(){ S.avisos = linhas(await sb.from('avisos').select('id,d,autor').order('criado_em', {ascending:false}).limit(60)); }
 async function carregarEventos(){ S.eventos = linhas(await sb.from('eventos').select('id,d,autor').order('data').limit(300)); }
 function assinarMes(){ carregarMes().then(render); }
-async function carregarPrivado(){ await Promise.all([carregarPessoas(), carregarConfig()]); await carregarChat(); await pushEstado(); if (!podeChat()) fecharChat(); renderWho(); renderTabs(); render(); }
+async function carregarPrivado(){ await Promise.all([carregarPessoas(), carregarConfig()]); await Promise.all([carregarChat(), carregarProx(), carregarMes()]); await pushEstado(); if (!podeChat()) fecharChat(); renderWho(); renderTabs(); render(); }
 
 // Tempo real: quando algo muda no banco, recarrega só aquela parte.
 const RECARGA = {
@@ -314,7 +318,7 @@ async function init(){
   sb.auth.onAuthStateChange((ev, session) => { setTimeout(() => aplicarSessao(session), 0); if (ev === 'PASSWORD_RECOVERY') setTimeout(formNovaSenha, 600); });
   erroNaUrl();
   try { await carregarConfig(); S.mes = proxCulto().slice(0,7);
-    await Promise.all([carregarPessoas(), carregarProx(), carregarMes(), carregarAvisos(), carregarEventos()]); await carregarChat(); }
+    await carregarPessoas(); await Promise.all([carregarProx(), carregarMes(), carregarAvisos(), carregarEventos()]); await carregarChat(); }
   catch(e){ console.warn(e); }
   await pushEstado();
   S.pronto = true;
@@ -349,6 +353,10 @@ function blocoArea(lista, c, a){
   let resumo;
   if (a.porConexao) resumo = conexoesDe(x).length ? (conexoesDe(x).length>1?'Conexões ':'Conexão ')+esc(conexoesTxt(x)) : '<span class="pend">A definir</span>';
   else { const n = x ? (x.funcoes||[]).reduce((s,f)=>s+(f.pessoas||[]).length,0) : 0; resumo = n ? (a.funcoes.length===1 && n<=2 ? esc((x.funcoes[0].pessoas||[]).join(' e ')) : 'Ver equipe ('+n+')') : (x && x.obs ? esc(x.obs) : '<span class="pend">A definir</span>'); }
+  if (!veEquipes()) {
+    if (!a.porConexao) { const n = x ? (x.qtd || 0) : 0; resumo = n ? 'Equipe escalada' : (x && x.obs ? esc(x.obs) : '<span class="pend">A definir</span>'); }
+    return '<div class="area fechada"><span><span class="an">'+esc(a.nome)+'</span><span class="ac">'+resumo+'</span></span></div>';
+  }
   const fx = a.funcoes.map(f => {
     const salvo = x ? ((x.funcoes||[]).find(g=>g.nome===f.nome)||{}).pessoas || [] : [];
     const total = f.vagas ? Math.max(f.vagas, salvo.length) : salvo.length;
@@ -427,12 +435,13 @@ function celula(lista, c, a){
   if (a.porConexao) txt = conexoesTxt(x);
   else { const ps = x ? (x.funcoes||[]).flatMap(f => f.pessoas||[]) : []; txt = ps.length ? (a.funcoes.length===1 && ps.length<=2 ? ps.join(' e ') : 'Equipe ('+ps.length+')') : ''; }
   if (!txt && x && x.obs) txt = x.obs;
+  if (!veEquipes()) { if (!a.porConexao) txt = x && x.qtd ? 'Equipe escalada' : (x && x.obs) || ''; return '<td><span class="cell fechada'+(txt?'':' vazio')+'">'+(txt?esc(txt):'A definir')+'</span></td>'; }
   return '<td><button class="cell'+(txt?'':' vazio')+'" data-det="'+c.data+'|'+esc(c.culto)+'|'+esc(a.id)+'">'+(txt?esc(txt):'A definir')+'</button></td>';
 }
 function tabelaEscala(lista){
   return '<div class="tbl-wrap"><table class="esc"><thead><tr><th>Data</th>'+areas().map(a=>'<th>'+esc(a.nome)+'</th>').join('')+(temGestao()?'<th>Check-in PDF</th><th>Check-in Excel</th>':'')+'</tr></thead><tbody>'
     + lista.map(c => { const ci = cultoInfo(c.culto); return '<tr class="'+(/noite/i.test(ci.nome)?'noite':'manha')+'"><th scope="row"><span class="dt">'+dataBR(c.data)+'</span><span class="ct">'+esc(ci.nome)+(ci.hora?' · '+esc(ci.hora):'')+'</span></th>'+areas().map(a => celula(S.mesEsc, c, a)).join('')+(temGestao()?'<td><button class="cell dl" data-ck-pdf="'+c.data+'|'+esc(c.culto)+'">Baixar PDF</button></td><td><button class="cell dl" data-ck-xls="'+c.data+'|'+esc(c.culto)+'">Baixar Excel</button></td>':'')+'</tr>'; }).join('')
-    + '</tbody></table></div><p class="hint">Toque no nome para ver quem está escalado em cada função.</p>';
+    + '</tbody></table></div><p class="hint">'+(veEquipes() ? 'Toque no nome para ver quem está escalado em cada função.' : 'Para ver quem vai servir, toque em <b>Entrar</b> (só para cadastrados aprovados).')+'</p>';
 }
 function viewDetalhe(){
   const {data, culto, area} = S.det; const a = areaInfo(area); const ci = cultoInfo(culto);
