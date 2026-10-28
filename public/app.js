@@ -586,7 +586,7 @@ function viewInicio(){
   html += '<h2 class="section-title">Eventos</h2>';
   html += evs.length ? '<div class="card lst">' + evs.map(ev => '<button class="li" data-ir="avisos|ev-'+esc(ev.id)+'">'+dLin(ev.data)+'<span class="lt">'+esc(ev.titulo)+'</span><span class="lh">'+esc(ev.hora||'')+'</span><span class="la" aria-hidden="true">›</span></button>').join('') + '</div>'
     : '<div class="empty">Nenhum evento marcado daqui para frente.</div>';
-  if (avs.length) html += '<h2 class="section-title">Avisos</h2><div class="card lst">' + avs.map(a => '<button class="li" data-ir="avisos|av-'+esc(a.id)+'">'+dLin(String(a.criadoEm||'').slice(0,10))+'<span class="lt">'+esc(a.titulo)+'</span><span class="lh"></span><span class="la" aria-hidden="true">›</span></button>').join('') + '</div>';
+  if (avs.length) html += '<h2 class="section-title">Avisos</h2><div class="card lst">' + avs.map(a => '<button class="li li-aviso" data-ir="avisos|av-'+esc(a.id)+'"><span class="lt">'+esc(a.titulo)+'</span><span class="lh"></span><span class="la" aria-hidden="true">›</span></button>').join('') + '</div>';
   if (fixos.length) html += '<h2 class="section-title">Para você</h2>' + fixos.map(a => { const b = (a.botoes||[]).find(x => x && urlOk(x.link)) || (urlOk(a.link) ? {rotulo:'Abrir', link:a.link} : null);
     return '<article class="card">'+imgTag(a.img,'banner')+'<h3>'+esc(a.titulo)+'</h3>'+(b?'<a class="btn big" href="'+esc(b.link)+'" target="_blank" rel="noopener">'+esc(b.rotulo||'Abrir')+'</a>':'')+'</article>'; }).join('');
   html += blocoRedes();
@@ -1208,9 +1208,9 @@ function viewAvisos(){
   const lista = [...avisosComuns()].sort((x, y) => (x.fixoFim||0) - (y.fixoFim||0));
   let h = nav + titulo('sec-avisos', 'Avisos', '<button class="btn" data-novo-aviso>+ Novo aviso</button>');
   h += lista.length ? lista.map(a => { const pode = isAdm() || (temAvisos() && !!S.uid && a.autor===S.uid);
-    const quem = a.autor && (S.pessoas[a.autor] || S.names[a.autor]) ? nome(a.autor)+' · ' : '';
+    const quem = a.autor && (S.pessoas[a.autor] || S.names[a.autor]) ? nome(a.autor) : '';
     return '<article class="card" id="av-'+esc(a.id)+'">'+imgTag(a.img,'banner')+'<h3>'+esc(a.titulo)+'<span class="tag">'+esc(a.fixoFim?'Fixo':(a.conexao?conexaoNome(a.conexao):'Geral'))+'</span></h3>'
-      + '<div class="meta">'+esc(quem)+esc(fmtQuando(a.criadoEm))+'</div>'+txtLongo(a.texto)+btnLink(a.link)+btnLinks(a.botoes)
+      + (quem ? '<div class="meta">'+esc(quem)+'</div>' : '')+txtLongo(a.texto)+btnLink(a.link)+btnLinks(a.botoes)
       + (pode?'<div class="bar" style="margin:10px 0 0"><button class="link" data-edit-aviso="'+esc(a.id)+'">Editar</button><button class="link" data-del-aviso="'+esc(a.id)+'">Excluir</button></div>':'')+'</article>'; }).join('')
     : '<div class="empty">Nenhum aviso publicado ainda.</div>';
   h += titulo('sec-semana', 'Agenda da semana', '<button class="btn" data-nova-semana>+ Agenda da semana</button>');
