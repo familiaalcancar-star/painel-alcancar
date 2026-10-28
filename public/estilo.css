@@ -265,3 +265,9 @@ header.top .who{flex-direction:column;align-items:flex-end;gap:6px}
 .imp-l input{margin-top:3px;width:18px;height:18px;flex:none}
 .tag-sub{background:var(--gold-soft);color:var(--yellow)}
 .imp-avisos{margin:0;padding-left:18px;font-size:13px;color:var(--muted);max-height:20vh;overflow-y:auto}
+
+/* Status e permissões: os controles não se sobrepõem em telas estreitas. */
+body:has(#cfgForm) .wrap{max-width:1120px}
+table.lead{min-width:1000px}
+table.lead select.inp{min-width:140px}
+table.lead .status-pessoa + small{display:block;margin-top:5px}

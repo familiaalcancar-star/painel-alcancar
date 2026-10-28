@@ -59,10 +59,16 @@ const conexoesTxt = x => conexoesDe(x).map(conexaoNome).filter(Boolean).join(' e
 const cultoInfo = id => cultos().find(c=>c.id===id) || {id, nome:id, hora:''};
 const areaInfo = id => areas().find(a=>a.id===id) || {id, nome:id, porConexao:false, funcoes:[{nome:'Equipe',vagas:0}]};
 const PAPEIS = {admin:'Administrador', lider:'Líder', auxiliar:'Auxiliar', organizacao:'Organização', leitura:'Só consulta'};
-const pendentes = () => Object.keys(S.cadastros||{}).filter(id => !S.pessoas[id]);
-const ADM_WPP = () => (S.whatsAdm || '5511958800779').replace(/\D/g,'');
+const STATUS = {pendente:'Pendente', aprovado:'Aprovado', removido:'Removido'};
+const statusDe = id => S.pessoas[id] ? (S.pessoas[id].status || 'aprovado') : 'pendente';
+const aprovado = id => !!S.pessoas[id] && statusDe(id) === 'aprovado';
+const banco = () => !!(S.pessoas[S.uid]||{}).banco;
+const consultaRestrita = () => banco() || (!!S.pessoas[S.uid] && !aprovado(S.uid));
+const podeExportar = () => !!S.uid && !consultaRestrita();
+const pendentes = () => [...new Set([...Object.keys(S.cadastros||{}), ...Object.keys(S.pessoas||{})])].filter(id => statusDe(id) === 'pendente');
+const ADM_WPP = () => (S.whatsAdm || '').replace(/\D/g,'');
 const ehEquipe = p => !!p && ['lider','auxiliar','organizacao'].includes(p.papel);
-const pessoaDe = id => (id && S.pessoas[id]) || null;
+const pessoaDe = id => aprovado(id) && !S.pessoas[id].banco ? S.pessoas[id] : null;
 const isAdm = () => (pessoaDe(S.uid)||{}).papel === 'admin';
 const minhas = () => { const p = pessoaDe(S.uid); return p && ehEquipe(p) && p.conexao ? [p.conexao] : []; };
 const podeConexao = cid => isAdm() || minhas().includes(cid);
@@ -74,9 +80,9 @@ const temMinistro = () => !!(pessoaDe(S.uid)||{}).ministro;
 const temEscala = () => !!(pessoaDe(S.uid)||{}).escala;
 const podeArea = (a, x) => isAdm() || (ehLouvor(a.nome) && (podeLouvor() || temMinistro())) || (a.porConexao && !!x && (temEscala() || conexoesDe(x).some(c => minhas().includes(c))));
 const temAvisos = () => isAdm() || !!(pessoaDe(S.uid)||{}).avisos;
-const papelTexto = () => { if (!S.uid) return 'Somente visualização'; if (isAdm()) return 'Administrador'; const p = pessoaDe(S.uid);
+const papelTexto = () => { if (!S.uid) return 'Somente visualização'; if (statusDe(S.uid) === 'removido') return 'Acesso removido · Somente visualização'; if (banco() && aprovado(S.uid)) return 'Banco · Somente visualização'; if (isAdm()) return 'Administrador'; const p = pessoaDe(S.uid);
   if (ehEquipe(p)) return PAPEIS[p.papel]+' · Conexão '+conexaoNome(p.conexao);
-  if (!p && S.meuCad) return 'Cadastro aguardando aprovação'; return 'Modo leitura'; };
+  if (!p && (S.meuCad || S.pessoas[S.uid])) return 'Cadastro aguardando aprovação'; return 'Modo leitura'; };
 
 /* ---------- banco (Supabase) ---------- */
 const doRow = r => ({...(r.d||{}), id:r.id, ...(r.autor !== undefined ? {autor:r.autor} : {})});
@@ -150,7 +156,7 @@ async function carregarPrivado(){ await Promise.all([carregarPessoas(), carregar
 
 // Tempo real: quando algo muda no banco, recarrega só aquela parte.
 const RECARGA = {
-  config: () => carregarConfig(), pessoas: () => carregarPessoas(), cadastros: () => carregarPessoas(),
+  config: () => carregarConfig(), pessoas: async () => { await carregarPessoas(); fecharChat(); if ($('#dlg').open) $('#dlg').close(); }, cadastros: () => carregarPessoas(),
   escalas: () => Promise.all([carregarProx(), carregarMes(), S.ckD ? ckCarregarDocs() : null]),
   avisos: () => carregarAvisos(), eventos: () => carregarEventos(), checkin_marcas: () => S.ckD ? ckCarregarMarcas() : null,
   chat: () => carregarChat().then(chatAtualizado) };
@@ -433,8 +439,8 @@ function viewDetalhe(){
     + (pode ? '<button class="btn" data-esc="1" data-d="'+data+'" data-c="'+esc(culto)+'" data-a="'+esc(area)+'">'+(x?'Editar escala':'Preencher escala')+'</button>' : '');
   return h;
 }
-const botoesDia = d => S.uid ? '<div class="bar" style="margin:6px 0 12px">'+(temGestao()?'<button class="btn ghost small" data-dia-ficha="'+d+'">Check-in do dia</button>':'')+'<button class="btn ghost small" data-dia-csv="'+d+'">Planilha do dia</button></div>' : '';
-const bannerCadastro = () => (!S.uid || S.tab==='inicio' || S.tab==='ajuda' || isAdm() || !S.cfg || pessoaDe(S.uid) || S.meuCad) ? '' : '<div class="notice"><b>É líder, auxiliar ou da organização da conexão?</b> Faça seu cadastro para poder preencher a escala da sua conexão.<div style="margin-top:8px"><button class="btn small" data-go="inicio">Fazer meu cadastro</button></div></div>';
+const botoesDia = d => podeExportar() ? '<div class="bar" style="margin:6px 0 12px">'+(temGestao()?'<button class="btn ghost small" data-dia-ficha="'+d+'">Check-in do dia</button>':'')+'<button class="btn ghost small" data-dia-csv="'+d+'">Planilha do dia</button></div>' : '';
+const bannerCadastro = () => (!S.uid || S.tab==='inicio' || S.tab==='ajuda' || isAdm() || !S.cfg || S.pessoas[S.uid] || S.meuCad) ? '' : '<div class="notice"><b>É líder, auxiliar ou da organização da conexão?</b> Faça seu cadastro para poder preencher a escala da sua conexão.<div style="margin-top:8px"><button class="btn small" data-go="inicio">Fazer meu cadastro</button></div></div>';
 const msgAprovacao = () => 'Olá! Acabei de fazer meu cadastro no painel da Família Alcançar: '+((S.meuCad||{}).nome||'')+' · '+(PAPEIS[(S.meuCad||{}).papel]||'')+' da conexão '+conexaoNome((S.meuCad||{}).conexao)+'. Pode aprovar, por favor?';
 // Logo depois do cadastro: janela com o botão verde para avisar o administrador.
 function avisarAdmin(){
@@ -445,6 +451,9 @@ function avisarAdmin(){
 }
 document.addEventListener('click', e => { if (e.target.closest('[data-avisou]')) setTimeout(() => { const d = $('#dlg'); if (d.open) d.close(); }, 300); });
 function cardCadastro(){
+  if (S.uid && statusDe(S.uid) === 'removido') return '<div class="notice">Seu acesso foi removido. Você pode consultar as informações públicas. Para solicitar a reativação, fale com um administrador.</div>';
+  if (S.uid && aprovado(S.uid)) return '';
+  if (S.uid && S.pessoas[S.uid] && !S.meuCad) return '<div class="notice">Seu acesso está pendente. Aguarde a aprovação de um administrador.</div>';
   if (!S.uid || isAdm() || pessoaDe(S.uid) || !S.cfg) return '';
   if (S.meuCad) { const msg = msgAprovacao();
     return '<div class="notice">Cadastro enviado: '+esc(S.meuCad.nome||'')+' · '+esc(PAPEIS[S.meuCad.papel]||'')+' da conexão '+esc(conexaoNome(S.meuCad.conexao))+'. Agora é só aguardar a aprovação de um administrador. Para agilizar, avise pelo WhatsApp:<a class="btn" style="display:block;text-align:center;margin-top:12px;text-decoration:none;background:#25D366;color:#fff" href="https://wa.me/'+ADM_WPP()+'?text='+encodeURIComponent(msg)+'" target="_blank" rel="noopener">Avisar o administrador pelo WhatsApp</a></div>'; }
@@ -541,7 +550,7 @@ function viewEscala(){
   const chips = '<div class="chips" role="group" aria-label="Filtrar por conexão">' + [{id:'todas',nome:'Todas'}, ...conexoes()].map(c =>
     '<button class="chip" data-filtro="'+esc(c.id)+'" aria-pressed="'+(S.filtro===c.id)+'">'+esc(c.nome)+'</button>').join('') + '</div>';
   if (!S.perDe) { const [yy,mm] = S.mes.split('-').map(Number); S.perDe = S.mes+'-01'; S.perAte = isoLocal(new Date(yy, mm+2, 0)); }
-  const exp = !S.uid ? '' : '<h2 class="section-title">Exportar</h2><div class="card"><div class="meta">Deste mês</div><div class="bar" style="margin:8px 0 0"><button class="btn ghost small" data-exp="csv">Planilha do mês</button>'+(temGestao()?'<button class="btn ghost small" data-exp="ficha">Check-in do mês</button>':'')+'</div>'
+  const exp = !podeExportar() ? '' : '<h2 class="section-title">Exportar</h2><div class="card"><div class="meta">Deste mês</div><div class="bar" style="margin:8px 0 0"><button class="btn ghost small" data-exp="csv">Planilha do mês</button>'+(temGestao()?'<button class="btn ghost small" data-exp="ficha">Check-in do mês</button>':'')+'</div>'
     + '<div class="meta" style="margin-top:18px">Planilha personalizada</div><div class="row"><div><label class="f" for="xDe">De</label><input class="inp" id="xDe" type="date" value="'+esc(S.perDe)+'"></div><div><label class="f" for="xAte">Até</label><input class="inp" id="xAte" type="date" value="'+esc(S.perAte)+'"></div></div>'
     + '<label class="f" for="xTipo">O que exportar</label><select class="inp" id="xTipo">'+opts(temGestao() ? [{id:'escala',nome:'Planilha da escala'},{id:'checkin',nome:'Check-in (com assinaturas)'}] : [{id:'escala',nome:'Planilha da escala'}], temGestao() ? (S.perTipo||'escala') : 'escala')+'</select>'
     + '<div class="bar" style="margin:12px 0 0"><button class="btn small" data-per="xlsx">Baixar Excel</button><button class="btn ghost small" data-per="pdf">Baixar PDF</button></div><p class="hint">Escolha qualquer período, por exemplo de novembro a março. O filtro de conexão lá de cima também vale aqui.</p></div>';
@@ -640,6 +649,7 @@ function linhasDe(lista){
 }
 const TIPOS = {csv:'text/csv;charset=utf-8', html:'text/html;charset=utf-8', pdf:'application/pdf', xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', zip:'application/zip'};
 async function baixar(filename, data){
+  if (!podeExportar()) { toast('Seu acesso permite apenas visualizar, sem exportar arquivos.'); return; }
   try {
     const ext = filename.split('.').pop().toLowerCase();
     const url = URL.createObjectURL(new Blob([data], {type: TIPOS[ext] || 'application/octet-stream'}));
@@ -1202,7 +1212,7 @@ function viewAjuda(){
   h += passo('7. Avisos e agenda', ['Na aba <b>Avisos</b> ficam os comunicados, e na <b>Agenda</b> ficam os eventos com data.', 'Quando houver, toque em <b>Fazer inscrição</b> ou no botão do WhatsApp.', 'Quem tem a permissão <b>Avisos/Eventos</b> publica pelo botão <b>+</b>.']);
   if (isAdm()) {
     h += passo('8. Histórico', ['A aba <b>Histórico</b> mostra tudo o que foi criado, editado ou excluído: quem fez, o quê, e a data e a hora.']);
-    h += passo('9. Para administradores', ['Em <b>Ajustes</b>, aprove os cadastros em <b>Pessoas e permissões</b>: escolha a função e a conexão e toque em <b>Salvar pessoas</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, Word, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
+    h += passo('9. Para administradores', ['Em <b>Ajustes</b>, aprove os cadastros em <b>Pessoas e permissões</b>: escolha a função, a conexão e o status <b>Aprovado</b>, depois toque em <b>Salvar pessoas</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, Word, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
   }
   h += '<div class="end" style="justify-content:center;margin:18px 0"><button class="btn" data-go="inicio">Começar a usar</button></div>';
   return h;
@@ -1227,7 +1237,7 @@ function viewAjustes(){
     + '<label class="f" for="cYt">Link do YouTube</label><input class="inp" id="cYt" name="youtube" type="url" value="'+esc(((c.redes||{}).youtube)||'')+'">'
     + '<label class="f" for="cDs">Postagens em destaque (opcional)</label><textarea class="inp" id="cDs" name="destaques" placeholder="Título | link do post ou vídeo">'+esc(((c.destaques)||[]).map(d=>d.titulo+' | '+d.link).join('\n'))+'</textarea><div class="hint">Uma por linha, no formato Título | link. Aparecem na tela inicial, em “Redes sociais”.</div>'
     + '<label class="f">Dias de culto</label><div class="chips">'+DIAS.map((d,i)=>'<label class="chip"><input type="checkbox" name="dia" value="'+i+'"'+(diasCulto().includes(i)?' checked':'')+'> '+d+'</label>').join('')+'</div>'
-    + '<label class="f" for="cW">WhatsApp do administrador (recebe os avisos de cadastro)</label><input class="inp" id="cW" name="whatsAdm" type="tel" inputmode="tel" value="'+esc(S.whatsAdm||'5511958800779')+'"><div class="hint">Com DDI e DDD, só números. Ex.: 5511999999999</div>'
+    + '<label class="f" for="cW">WhatsApp do administrador (recebe os avisos de cadastro)</label><input class="inp" id="cW" name="whatsAdm" type="tel" inputmode="tel" value="'+esc(S.whatsAdm||'')+'"><div class="hint">Com DDI e DDD, só números. Ex.: 5511999999999</div>'
     + '<div class="end"><button type="submit" class="btn">Salvar ajustes</button></div></form></div>';
   html += '<h2 class="section-title">Áreas da escala</h2><div class="card">' + areas().map(a => '<p class="fn" style="margin:0 0 10px"><strong>'+esc(a.nome)+'</strong>'+(a.porConexao?'<span class="tag">por conexão</span>':'')+'<br><span class="meta">'+a.funcoes.map(f=>esc(f.nome)+(f.vagas?' ('+f.vagas+')':' (livre)')).join(', ')+'</span></p>').join('') + '<p class="hint">Para mudar áreas, funções ou quantidade de vagas, é só pedir ao Claude.</p></div>';
   html += '<h2 class="section-title">Convidar pelo WhatsApp</h2><div class="card"><p class="meta" style="margin:0">Mande para a pessoa o link do painel e o passo a passo para entrar e se cadastrar.</p>'
@@ -1235,18 +1245,19 @@ function viewAjustes(){
     + '<div class="end"><a class="btn zap" id="cvLink" target="_blank" rel="noopener" href="'+esc(waUrl('', msgConvite('')))+'">Enviar passo a passo no WhatsApp</a></div>'
     + '<p class="hint">Sem número, o WhatsApp abre para você escolher o contato ou um grupo.</p></div>';
   html += '<h2 class="section-title">Backup do banco de dados</h2><div class="card"><p class="meta" style="margin:0">Baixa tudo o que está no banco (configuração, pessoas, cadastros, escalas, avisos, eventos, check-in, histórico e bate-papo) num arquivo .zip. Contém WhatsApp e e-mails: guarde em lugar seguro e não compartilhe.</p><div class="end"><button class="btn" data-backup>Baixar backup (.zip)</button></div></div>';
-  html += '<h2 class="section-title">Pessoas e permissões</h2>';
+  html += '<h2 class="section-title">Pessoas e permissões</h2><p class="hint">Escolha o status e toque em <b>Salvar pessoas</b>. Pendente aguarda aprovação; Aprovado libera as permissões; Removido revoga o acesso e mantém o registro. <b>Banco</b> permite apenas visualizar e prevalece sobre a função e todos os extras.</p>';
   const ids = [...new Set([...S.membros, ...Object.keys(S.cadastros||{}), ...Object.keys(S.pessoas||{})])].filter(id => id && id!==S.uid);
-  const nAdm = Object.values(S.pessoas||{}).filter(p=>p.papel==='admin' && p.id!==S.uid).length;
+  const nAdm = Object.values(S.pessoas||{}).filter(p=>p.papel==='admin' && aprovado(p.id) && !p.banco && p.id!==S.uid).length;
   if (!ids.length) html += '<div class="empty">Ninguém além de você entrou no painel ainda. Quando cada pessoa entrar e enviar o cadastro, ela aparece aqui para você aprovar.</div>';
-  else html += '<div class="card tbl-wrap"><table class="lead"><thead><tr><th>Pessoa</th><th>Pediu</th><th>Função</th><th>Conexão</th><th>Extras</th><th></th></tr></thead><tbody>'
+  else html += '<div class="card tbl-wrap"><table class="lead"><thead><tr><th>Pessoa</th><th>Pediu</th><th>Status</th><th>Função</th><th>Conexão</th><th>Extras</th><th></th></tr></thead><tbody>'
     + ids.map(id => { const atual = S.pessoas[id]; const ped = (S.cadastros||{})[id]; const base = atual || ped || {papel:'leitura', conexao:''};
       const wpp = base.whatsapp || (ped && ped.whatsapp) || '';
       return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+(S.emails[id] && nomeComp(id)!==S.emails[id]?'<br><span class="meta">'+esc(S.emails[id])+'</span>':'')+(wpp?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(wpp).replace(/\D/g,'').length<=11?'55':'')+String(wpp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(wpp)+'</a>':'')+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
+        + '<td><select class="inp status-pessoa" aria-label="Status de '+esc(nomeComp(id))+'" data-p-status="'+esc(id)+'">'+opts(Object.entries(STATUS).map(([id,nome])=>({id,nome})), statusDe(id))+'</select><small class="meta">Atual: '+STATUS[statusDe(id)]+'</small></td>'
         + '<td><select class="inp" data-p-papel="'+esc(id)+'">'+opts(Object.entries(PAPEIS).map(([k,v])=>({id:k,nome:v})), base.papel)+'</select></td>'
-        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'">Remover</button></td></tr>'; }).join('')
+        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; }).join('')
     + '</tbody></table><div class="end"><button class="btn" data-salvar-pessoas>Salvar pessoas</button></div></div>';
-  html += '<p class="hint">Administradores podem tudo (hoje: '+(nAdm+1)+' contando você; o ideal é até 5). Líder, Auxiliar e Organização preenchem a Direção do culto e o Super Kids nos dias em que a conexão deles está escalada; se a conexão for Flechas, Forasteiros ou Heróis, também o Louvor. <b>Extras:</b> Gestão vê a aba Check-in e imprime o check-in (PDF e Excel); Ministro pode editar a escala de Louvor; Avisos/Eventos pode publicar avisos e eventos (e editar ou excluir os que publicou); Escala pode preencher os nomes da Direção do culto e do Super Kids de qualquer conexão. Os extras valem junto com qualquer função.</p>';
+  html += '<p class="hint">Administradores podem tudo (hoje: '+(nAdm+1)+' contando você; o ideal é até 5). Líder, Auxiliar e Organização preenchem a Direção do culto e o Super Kids nos dias em que a conexão deles está escalada; se a conexão for Flechas, Forasteiros ou Heróis, também o Louvor. <b>Extras:</b> Gestão vê a aba Check-in e imprime o check-in (PDF e Excel); Ministro pode editar a escala de Louvor; Avisos/Eventos pode publicar avisos e eventos (e editar ou excluir os que publicou); Escala pode preencher os nomes da Direção do culto e do Super Kids de qualquer conexão. Banco bloqueia alterações, cadastros, envio de mensagens, importações e exportações, mesmo que outros extras estejam marcados.</p>';
   return html;
 }
 document.addEventListener('submit', async e => {
@@ -1270,12 +1281,14 @@ document.addEventListener('submit', async e => {
 document.addEventListener('click', async e => {
   const t = e.target.closest('button[data-rm-pessoa]'); if (!t || !isAdm()) return;
   const id = t.dataset.rmPessoa; const quem = nomeComp(id), quemCurto = nome(id);
-  if (!await confirmar('Remover o cadastro de '+quem+'?\n\nA função, a permissão, a conexão, o nome, o apelido, o WhatsApp e o pedido de cadastro serão apagados. Se a pessoa entrar de novo, ela volta para o modo consulta e precisa fazer o cadastro outra vez.')) return;
+  if (!await confirmar('Remover o acesso de '+quem+'?\n\nA pessoa ficará com status Removido e perderá as permissões. O cadastro e o histórico serão preservados.')) return;
   t.disabled = true;
   try {
-    for (const tab of ['pessoas','cadastros','acessos']) { const r = await sb.from(tab).delete().eq('id', id); if (r.error) throw r.error; }
-    await logar('excluiu', 'config', 'Cadastro removido: '+quemCurto, null, null);
-    toast('Cadastro de '+quem+' removido');
+    const ant = S.pessoas[id] || {}; const ped = S.cadastros[id] || {};
+    const registro = {id, email:ant.email || ped.email || S.emails[id] || null, nome:ant.nome || ped.nome || '', apelido:ant.apelido || ped.apelido || '', whatsapp:ant.whatsapp || ped.whatsapp || '', conexao:ant.conexao || ped.conexao || null, papel:ant.papel || ped.papel || 'leitura', status:'removido', banco:!!ant.banco};
+    const r = await sb.from('pessoas').upsert(registro); if (r.error) throw r.error;
+    await logar('editou', 'config', 'Acesso removido: '+quemCurto, {status:statusDe(id)}, {status:'removido'});
+    toast('Acesso removido; cadastro preservado');
     await carregarPessoas(); renderTabs(); render();
   } catch(err){ falhaEscrita(err); }
   finally { t.disabled = false; }
@@ -1285,17 +1298,17 @@ document.addEventListener('click', async e => {
   const pessoas = {};
   document.querySelectorAll('[data-p-papel]').forEach(sel => { const id = sel.dataset.pPapel; const con = document.querySelector('[data-p-con="'+id+'"]').value;
     const ant = S.pessoas[id] || {}; const ped = (S.cadastros||{})[id] || {};
-    pessoas[id] = {id, email: ant.email || ped.email || S.emails[id] || null, papel: sel.value, conexao: con || null, nome: ant.nome || ped.nome || (S.names[id]||{}).nome || '', apelido: ant.apelido || ped.apelido || '', whatsapp: ant.whatsapp || ped.whatsapp || '', gestao: !!(document.querySelector('[data-p-gestao="'+id+'"]')||{}).checked, ministro: !!(document.querySelector('[data-p-min="'+id+'"]')||{}).checked, avisos: !!(document.querySelector('[data-p-av="'+id+'"]')||{}).checked, escala: !!(document.querySelector('[data-p-esc="'+id+'"]')||{}).checked}; });
-  const falta = Object.entries(pessoas).filter(([id,p]) => ehEquipe(p) && !p.conexao);
+    pessoas[id] = {id, status:document.querySelector('[data-p-status="'+id+'"]').value, banco:!!document.querySelector('[data-p-banco="'+id+'"]').checked, email: ant.email || ped.email || S.emails[id] || null, papel: sel.value, conexao: con || null, nome: ant.nome || ped.nome || (S.names[id]||{}).nome || '', apelido: ant.apelido || ped.apelido || '', whatsapp: ant.whatsapp || ped.whatsapp || '', gestao: !!(document.querySelector('[data-p-gestao="'+id+'"]')||{}).checked, ministro: !!(document.querySelector('[data-p-min="'+id+'"]')||{}).checked, avisos: !!(document.querySelector('[data-p-av="'+id+'"]')||{}).checked, escala: !!(document.querySelector('[data-p-esc="'+id+'"]')||{}).checked}; });
+  const falta = Object.entries(pessoas).filter(([id,p]) => p.status==='aprovado' && !p.banco && ehEquipe(p) && !p.conexao);
   if (falta.length) { toast('Escolha a conexão de '+falta.map(([id])=>nome(id)).join(', ')+'.'); return; }
-  const nAdm = Object.values(pessoas).filter(p=>p.papel==='admin').length;
+  const nAdm = Object.values(pessoas).filter(p=>p.papel==='admin' && p.status==='aprovado' && !p.banco).length;
   if (nAdm > 4 && !await confirmar('Serão '+(nAdm+1)+' administradores contando você. O ideal é até 5. Confirmar?')) return;
-  const resumo = 'Pessoas: ' + (Object.entries(pessoas).filter(([,p])=>p.papel!=='leitura').map(([id,p]) => (p.apelido || primeiro(p.nome) || nome(id))+' ('+PAPEIS[p.papel]+(p.conexao&&p.papel!=='admin'?' · '+conexaoNome(p.conexao):'')+')').join('; ') || 'só consulta');
+  const resumo = 'Pessoas: ' + (Object.entries(pessoas).map(([id,p]) => (p.apelido || primeiro(p.nome) || nome(id))+' ('+STATUS[p.status]+' · '+(p.banco?'Banco · ':'')+PAPEIS[p.papel]+(p.conexao&&p.papel!=='admin'?' · '+conexaoNome(p.conexao):'')+')').join('; ') || 'só consulta');
   t.disabled = true;
   try {
     const lista = Object.values(pessoas); if (!lista.length) return;
     const r = await sb.from('pessoas').upsert(lista); if (r.error) throw r.error;
-    await logar('editou', 'config', resumo, null, null);
+    await logar('editou', 'config', resumo, Object.fromEntries(Object.keys(pessoas).map(id=>[id,{status:statusDe(id),banco:!!(S.pessoas[id]||{}).banco}])), Object.fromEntries(Object.entries(pessoas).map(([id,p])=>[id,{status:p.status,banco:p.banco}])));
     toast('Pessoas salvas'); await carregarPessoas(); renderTabs(); render();
   } catch(err){ falhaEscrita(err); }
   finally { t.disabled = false; }
@@ -1304,7 +1317,8 @@ document.addEventListener('click', async e => {
 /* ---------- BATE-PAPO ---------- */
 // Só para pessoas aprovadas (com linha em "pessoas"). O banco também garante isso (RLS).
 const CHAT = { msgs:[], aberto:false };
-const podeChat = () => !!S.uid && !!pessoaDe(S.uid);
+const podeChat = () => !!S.uid && aprovado(S.uid);
+const podeEscreverChat = () => podeChat() && !banco();
 const chaveVisto = () => 'chatVisto:'+S.uid;
 const chatVisto = () => { try { return localStorage.getItem(chaveVisto()) || ''; } catch(e){ return ''; } };
 const marcarVisto = () => { const u = CHAT.msgs[CHAT.msgs.length-1]; if (u) try { localStorage.setItem(chaveVisto(), u.em); } catch(e){} };
@@ -1324,7 +1338,7 @@ function desenharMensagens(){
   let dia = '', h = '';
   CHAT.msgs.forEach(m => {
     const d = isoLocal(new Date(m.em)); if (d !== dia) { dia = d; h += '<div class="dia-sep">'+esc(rotuloDia(d))+'</div>'; }
-    const minha = m.por === S.uid, apaga = minha || isAdm();
+    const minha = m.por === S.uid, apaga = podeEscreverChat() && (minha || isAdm());
     h += '<div class="msg'+(minha?' minha':'')+'">'+(minha ? '' : '<div class="de">'+esc(m.por ? nome(m.por) : 'Alguém')+'</div>')
       + '<div class="tx">'+linkify(m.texto)+'</div><div class="h">'+(apaga ? '<button class="apagar" data-apagar-msg="'+esc(m.id)+'">apagar</button>' : '')+'<span>'+esc(horaDe(m.em))+'</span></div></div>';
   });
@@ -1338,7 +1352,7 @@ function abrirChat(){
   const o = document.createElement('div'); o.id = 'chat'; o.className = 'chatbox'; o.setAttribute('role','dialog'); o.setAttribute('aria-label','Bate-papo');
   o.innerHTML = '<div class="chat-top"><button class="btn ghost small" data-fechar-chat>‹ Voltar</button><h2>💬 Bate-papo</h2></div>'
     + '<div class="chat-lista" id="chatLista"></div>'
-    + '<form class="chat-form" id="chatForm"><textarea class="inp" id="chatTx" name="texto" rows="1" maxlength="1000" placeholder="Mensagem" aria-label="Mensagem"></textarea><button type="submit" class="btn" aria-label="Enviar">➤</button></form>';
+    + (podeEscreverChat() ? '<form class="chat-form" id="chatForm"><textarea class="inp" id="chatTx" name="texto" rows="1" maxlength="1000" placeholder="Mensagem" aria-label="Mensagem"></textarea><button type="submit" class="btn" aria-label="Enviar">➤</button></form>' : '<p class="meta" style="padding:16px">Banco: somente visualização.</p>');
   document.body.appendChild(o); document.body.style.overflow = 'hidden';
   try { history.pushState({chat:1}, '', location.hash || '#'+S.tab); } catch(e){}
   desenharMensagens(); marcarVisto(); renderWho();
@@ -1350,6 +1364,7 @@ function fecharChat(){
 }
 window.addEventListener('popstate', () => fecharChat());
 async function enviarChat(){
+  if (!podeEscreverChat()) return;
   const tx = $('#chatTx'); const texto = tx.value.trim();
   if (!texto) return;
   if (texto.length > 1000) { toast('A mensagem pode ter até 1000 caracteres.'); return; }
@@ -1362,7 +1377,7 @@ document.addEventListener('click', async e => {
   if (e.target.closest('[data-chat]')) abrirChat();
   if (e.target.closest('[data-fechar-chat]')) { if (history.state && history.state.chat) history.back(); else fecharChat(); }
   const b = e.target.closest('[data-apagar-msg]');
-  if (b && await confirmar('Apagar esta mensagem?')) {
+  if (b && podeEscreverChat() && await confirmar('Apagar esta mensagem?')) {
     try { const r = await sb.from('chat').delete().eq('id', b.dataset.apagarMsg).select('id'); if (r.error) throw r.error; if (!r.data || !r.data.length) throw {code:'42501'}; await carregarChat(); chatAtualizado(); }
     catch(err){ falhaEscrita(err); }
   }
