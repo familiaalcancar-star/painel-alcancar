@@ -314,3 +314,8 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .sem-arte{margin-top:10px}
 .sem-arte summary{cursor:pointer;color:var(--yellow);font-weight:600;padding:6px 0}
 .sem-arte img.arte{width:100%;height:auto;border-radius:12px;margin-top:8px}
+
+/* Aviso/evento aberto (janela) */
+.item-aberto .txt-full{white-space:pre-line;margin:10px 0}
+.item-aberto h2 .tag{font-size:12px;vertical-align:middle}
+.item-aberto img.banner{width:100%;border-radius:12px;margin-bottom:12px}
