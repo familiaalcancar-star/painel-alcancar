@@ -4,6 +4,8 @@
 set -e
 cd "$(dirname "$0")/.."
 TMP=$(mktemp -d)
+# Parte sempre do gh-pages que está no GitHub (alguém pode ter publicado por outro lugar).
+git fetch -q origin gh-pages 2>/dev/null && git branch -f gh-pages origin/gh-pages 2>/dev/null || true
 git worktree add -f "$TMP" gh-pages 2>/dev/null || { git worktree add --detach "$TMP"; (cd "$TMP" && git checkout --orphan gh-pages && git rm -rqf .); }
 find "$TMP" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 cp -R public/. "$TMP"/
