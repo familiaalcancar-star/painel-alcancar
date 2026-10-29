@@ -581,12 +581,11 @@ function viewInicio(){
   const evs = S.eventos.filter(e => (e.dataFim || e.data) >= hoje());
   const avs = avisosComuns().filter(a => !a.fixoFim);
   const fixos = avisosComuns().filter(a => a.fixoFim).sort((x, y) => x.fixoFim - y.fixoFim);
-  const dLin = d => { const x = new Date(d+'T12:00:00'); return '<span class="ld"><b>'+String(x.getDate()).padStart(2,'0')+'/'+String(x.getMonth()+1).padStart(2,'0')+'</b>'+esc(x.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.',''))+'</span>'; };
   html += blocoSemanaInicio(dLin);
   html += '<h2 class="section-title">Eventos</h2>';
-  html += evs.length ? '<div class="card lst">' + evs.map(ev => '<button class="li" data-ir="avisos|ev-'+esc(ev.id)+'">'+dLin(ev.data)+'<span class="lt">'+esc(ev.titulo)+'</span><span class="lh">'+esc(ev.hora||'')+'</span><span class="la" aria-hidden="true">›</span></button>').join('') + '</div>'
+  html += evs.length ? '<div class="card lst">' + evs.map(linhaEvento).join('') + '</div>'
     : '<div class="empty">Nenhum evento marcado daqui para frente.</div>';
-  if (avs.length) html += '<h2 class="section-title">Avisos</h2><div class="card lst">' + avs.map(a => '<button class="li li-aviso" data-ir="avisos|av-'+esc(a.id)+'"><span class="lt">'+esc(a.titulo)+'</span><span class="lh"></span><span class="la" aria-hidden="true">›</span></button>').join('') + '</div>';
+  if (avs.length) html += '<h2 class="section-title">Avisos</h2><div class="card lst">' + avs.map(linhaAviso).join('') + '</div>';
   if (fixos.length) html += '<h2 class="section-title">Para você</h2>' + fixos.map(a => { const b = (a.botoes||[]).find(x => x && urlOk(x.link)) || (urlOk(a.link) ? {rotulo:'Abrir', link:a.link} : null);
     return '<article class="card">'+imgTag(a.img,'banner')+'<h3>'+esc(a.titulo)+'</h3>'+(b?'<a class="btn big" href="'+esc(b.link)+'" target="_blank" rel="noopener">'+esc(b.rotulo||'Abrir')+'</a>':'')+'</article>'; }).join('');
   html += blocoRedes();
@@ -1180,6 +1179,26 @@ async function baixarBackup(btn){
 document.addEventListener('click', e => { const b = e.target.closest('[data-backup]'); if (b) baixarBackup(b); });
 
 /* ---------- AVISOS (avisos, agenda da semana e eventos) ---------- */
+const dLin = d => { const x = new Date(d+'T12:00:00'); return '<span class="ld"><b>'+String(x.getDate()).padStart(2,'0')+'/'+String(x.getMonth()+1).padStart(2,'0')+'</b>'+esc(x.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.',''))+'</span>'; };
+// Listas compactas (só o título); tocar abre o aviso ou o evento completo, com a imagem.
+const linhaAviso = a => '<button class="li li-aviso" data-abrir="av|'+esc(a.id)+'"><span class="lt">'+esc(a.titulo)+'</span><span class="lh"></span><span class="la" aria-hidden="true">›</span></button>';
+const linhaEvento = ev => '<button class="li" data-abrir="ev|'+esc(ev.id)+'">'+dLin(ev.data)+'<span class="lt">'+esc(ev.titulo)+'</span><span class="lh">'+esc(ev.hora||'')+'</span><span class="la" aria-hidden="true">›</span></button>';
+function abrirItem(tipo, id){
+  let corpo = '';
+  if (tipo === 'av') { const a = S.avisos.find(x => x.id === id); if (!a) return; const pode = isAdm() || (temAvisos() && !!S.uid && a.autor===S.uid);
+    const quem = a.autor && (S.pessoas[a.autor] || S.names[a.autor]) ? nome(a.autor) : '';
+    corpo = imgTag(a.img,'banner')+'<h2>'+esc(a.titulo)+' <span class="tag">'+esc(a.fixoFim?'Fixo':(a.conexao?conexaoNome(a.conexao):'Geral'))+'</span></h2>'
+      + (quem ? '<div class="meta">'+esc(quem)+'</div>' : '')+'<p class="txt-full">'+linkify(a.texto)+'</p>'+btnLink(a.link)+btnLinks(a.botoes)
+      + (pode?'<div class="bar" style="margin:10px 0 0"><button type="button" class="link" data-edit-aviso="'+esc(a.id)+'">Editar</button><button type="button" class="link" data-del-aviso="'+esc(a.id)+'">Excluir</button></div>':'');
+  } else { const ev = S.eventos.find(x => x.id === id); if (!ev) return; const d = new Date(ev.data+'T12:00:00'); const pode = isAdm() || (temAvisos() && !!S.uid && ev.autor===S.uid);
+    corpo = imgTag(ev.img,'banner')+'<div class="ev"><div class="date"><b>'+d.getDate()+'</b>'+esc(d.toLocaleDateString('pt-BR',{month:'short'}).replace('.',''))+'</div><div>'
+      + '<h2>'+esc(ev.titulo)+'</h2><div class="meta">'+esc(d.toLocaleDateString('pt-BR',{weekday:'long'}))+(ev.hora?' · '+esc(ev.hora):'')+(ev.local?' · '+esc(ev.local):'')+'</div>'
+      + (ev.descricao?'<p class="txt-full">'+linkify(ev.descricao)+'</p>':'')+btnLink(ev.link)+btnZap(ev.contatos)
+      + (pode?'<div class="bar" style="margin:8px 0 0"><button type="button" class="link" data-edit-evento="'+esc(ev.id)+'">Editar</button><button type="button" class="link" data-del-evento="'+esc(ev.id)+'">Excluir</button></div>':'')+'</div></div>';
+  }
+  abrir('<form class="item-aberto">'+corpo+'<div class="end"><button type="button" class="btn ghost" data-cancel>Fechar</button></div></form>', async () => true);
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-abrir]'); if (!b) return; const [t, id] = b.dataset.abrir.split('|'); abrirItem(t, id); });
 // A agenda da semana fica na tabela de avisos com tipo "semana" (mesma permissão Avisos/Eventos).
 const avisosComuns = () => S.avisos.filter(a => a.tipo !== 'semana');
 const semanas = () => S.avisos.filter(a => a.tipo === 'semana' && (a.ate || '') >= hoje() && (a.itens||[]).some(i => i.data >= hoje())).sort((x, y) => (x.de || '').localeCompare(y.de || ''));
@@ -1206,11 +1225,7 @@ function viewAvisos(){
   const titulo = (id, t, btn) => '<div class="bar" id="'+id+'"><h2 style="font-size:22px">'+t+'</h2><span style="flex:1"></span>'+(temAvisos() ? btn : '')+'</div>';
   const lista = [...avisosComuns()].sort((x, y) => (x.fixoFim||0) - (y.fixoFim||0));
   let h = nav + titulo('sec-avisos', 'Avisos', '<button class="btn" data-novo-aviso>+ Novo aviso</button>');
-  h += lista.length ? lista.map(a => { const pode = isAdm() || (temAvisos() && !!S.uid && a.autor===S.uid);
-    const quem = a.autor && (S.pessoas[a.autor] || S.names[a.autor]) ? nome(a.autor) : '';
-    return '<article class="card" id="av-'+esc(a.id)+'">'+imgTag(a.img,'banner')+'<h3>'+esc(a.titulo)+'<span class="tag">'+esc(a.fixoFim?'Fixo':(a.conexao?conexaoNome(a.conexao):'Geral'))+'</span></h3>'
-      + (quem ? '<div class="meta">'+esc(quem)+'</div>' : '')+txtLongo(a.texto)+btnLink(a.link)+btnLinks(a.botoes)
-      + (pode?'<div class="bar" style="margin:10px 0 0"><button class="link" data-edit-aviso="'+esc(a.id)+'">Editar</button><button class="link" data-del-aviso="'+esc(a.id)+'">Excluir</button></div>':'')+'</article>'; }).join('')
+  h += lista.length ? '<div class="card lst">' + lista.map(linhaAviso).join('') + '</div>'
     : '<div class="empty">Nenhum aviso publicado ainda.</div>';
   h += titulo('sec-semana', 'Agenda da semana', '<button class="btn" data-nova-semana>+ Agenda da semana</button>');
   h += semanas().length ? semanas().map(cardSemana).join('') : '<div class="empty">A agenda desta semana ainda não foi publicada.</div>';
@@ -1267,11 +1282,7 @@ function formAviso(a){
 function viewEventos(){
   const prox = S.eventos.filter(e => (e.dataFim || e.data) >= hoje());
   if (!prox.length) return '<div class="empty">Nenhum evento marcado daqui para frente.</div>';
-  return prox.map(ev => { const d = new Date(ev.data+'T12:00:00'); const pode = isAdm() || (temAvisos() && !!S.uid && ev.autor===S.uid);
-    return '<article class="card" id="ev-'+esc(ev.id)+'">'+imgTag(ev.img,'banner')+'<div class="ev"><div class="date"><b>'+d.getDate()+'</b>'+esc(d.toLocaleDateString('pt-BR',{month:'short'}).replace('.',''))+'</div><div>'
-      + '<h3>'+esc(ev.titulo)+'</h3><div class="meta">'+esc(d.toLocaleDateString('pt-BR',{weekday:'long'}))+(ev.hora?' · '+esc(ev.hora):'')+(ev.local?' · '+esc(ev.local):'')+'</div>'
-      + (ev.descricao?txtLongo(ev.descricao):'')+btnLink(ev.link)+btnZap(ev.contatos)
-      + (pode?'<div class="bar" style="margin:8px 0 0"><button class="link" data-edit-evento="'+esc(ev.id)+'">Editar</button><button class="link" data-del-evento="'+esc(ev.id)+'">Excluir</button></div>':'')+'</div></div></article>'; }).join('');
+  return '<div class="card lst">' + prox.map(linhaEvento).join('') + '</div>';
 }
 function formEvento(ev){
   abrir('<form><h2>'+(ev?'Editar evento':'Novo evento')+'</h2><label class="f" for="eT">Nome do evento</label><input class="inp" id="eT" name="titulo" required maxlength="120" value="'+esc(ev?ev.titulo:'')+'">'
@@ -1293,6 +1304,7 @@ document.addEventListener('click', async e => {
   const t = e.target.closest('button'); if (!t) return;
   if ('novoAviso' in t.dataset && temAvisos()) formAviso();
   if (t.dataset.editAviso) formAviso(S.avisos.find(a=>a.id===t.dataset.editAviso));
+  if ((t.dataset.delAviso || t.dataset.delEvento) && $('#dlg').open) $('#dlg').close();
   if (t.dataset.delAviso) { const a=S.avisos.find(x=>x.id===t.dataset.delAviso); if (a && await confirmar('Excluir o aviso “'+a.titulo+'”?')) { if (await excluir(ref('avisos', a.id), semId(a), 'aviso', a.titulo)) { toast('Aviso excluído'); await carregarAvisos(); render(); } } }
   if ('novoEvento' in t.dataset && temAvisos()) formEvento();
   if (t.dataset.editEvento) formEvento(S.eventos.find(a=>a.id===t.dataset.editEvento));
