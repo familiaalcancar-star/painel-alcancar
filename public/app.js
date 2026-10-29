@@ -1182,17 +1182,16 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-back
 /* ---------- AVISOS (avisos, agenda da semana e eventos) ---------- */
 // A agenda da semana fica na tabela de avisos com tipo "semana" (mesma permissão Avisos/Eventos).
 const avisosComuns = () => S.avisos.filter(a => a.tipo !== 'semana');
-const semanas = () => S.avisos.filter(a => a.tipo === 'semana' && (a.ate || '') >= hoje()).sort((x, y) => (x.de || '').localeCompare(y.de || ''));
+const semanas = () => S.avisos.filter(a => a.tipo === 'semana' && (a.ate || '') >= hoje() && (a.itens||[]).some(i => i.data >= hoje())).sort((x, y) => (x.de || '').localeCompare(y.de || ''));
 const periodoSemana = w => dataBR(w.de).slice(0,5) + ' a ' + dataBR(w.ate).slice(0,5);
 const diaSemana = d => new Date(d+'T12:00:00').toLocaleDateString('pt-BR', {weekday:'long'});
 function cardSemana(w){
   const pode = isAdm() || (temAvisos() && !!S.uid && w.autor === S.uid);
-  const dias = [...new Set((w.itens||[]).map(i => i.data))].sort();
+  const dias = [...new Set((w.itens||[]).map(i => i.data))].filter(d => d >= hoje()).sort();
   return '<article class="card semana" id="sem-'+esc(w.id)+'"><h3>'+esc(w.titulo || 'Agenda da semana')+'<span class="tag">'+esc(periodoSemana(w))+'</span></h3>'
-    + dias.map(d => '<div class="sem-dia'+(d < hoje() ? ' passou' : '')+(d === hoje() ? ' hoje' : '')+'"><div class="sem-d"><b>'+esc(diaSemana(d).slice(0,3).toUpperCase())+'</b>'+esc(dataBR(d).slice(0,5))+'</div><div class="sem-l">'
+    + dias.map(d => '<div class="sem-dia'+(d === hoje() ? ' hoje' : '')+'"><div class="sem-d"><b>'+esc(diaSemana(d).slice(0,3).toUpperCase())+'</b>'+esc(dataBR(d).slice(0,5))+'</div><div class="sem-l">'
       + w.itens.filter(i => i.data === d).map(i => '<div class="sem-i"><b>'+esc(i.titulo)+'</b><span class="meta">'+[i.hora, i.local].filter(Boolean).map(esc).join(' · ')+'</span></div>').join('') + '</div></div>').join('')
     + (w.texto ? txtLongo(w.texto) : '')
-    + (w.img ? '<details class="sem-arte"><summary>Ver a arte da semana</summary>'+imgTag(w.img, 'arte')+'</details>' : '')
     + (pode ? '<div class="bar" style="margin:10px 0 0"><button class="link" data-edit-semana="'+esc(w.id)+'">Editar</button><button class="link" data-del-aviso="'+esc(w.id)+'">Excluir</button></div>' : '') + '</article>';
 }
 // Na Início: o que ainda falta acontecer na semana atual (ou a próxima semana já publicada).
@@ -1234,14 +1233,13 @@ function formSemana(w){
     + '<label class="f" for="sI">Programação</label><textarea class="inp" id="sI" name="itens" required style="min-height:180px" placeholder="26/10 | Conexão Shalom | 20h00 | Nos lares&#10;27/10 | Ensaio do coro | 19h30 | Auditório">'+esc(w?(w.itens||[]).map(i => [dataBR(i.data).slice(0,5), i.titulo, i.hora, i.local].join(' | ')).join('\n'):'')+'</textarea>'
     + '<div class="hint">Uma atividade por linha: <b>data | nome | horário | local</b>. Horário e local são opcionais.</div>'
     + '<label class="f" for="sX">Observação (opcional)</label><textarea class="inp" id="sX" name="texto" style="min-height:60px">'+esc(w?w.texto||'':'')+'</textarea>'
-    + campoImg(w) + '<div class="hint">A imagem é a arte da agenda (opcional). Ela aparece em "Ver a arte da semana".</div>'
     + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Publicar agenda</button></div></form>',
   async fd => {
     const de = String(fd.get('de')), ate = String(fd.get('ate')); if (ate < de) { toast('A data "Até" precisa vir depois de "De".'); return false; }
     const linhasTxt = String(fd.get('itens')||'').split('\n').filter(l => l.trim()); const itens = lerItensSemana(fd.get('itens'), de);
     const ruins = linhasTxt.length - itens.filter(Boolean).length;
     if (ruins) { toast(ruins+' linha'+(ruins>1?'s':'')+' fora do formato "dd/mm | nome | horário | local".'); return false; }
-    const data = {tipo:'semana', titulo:'Agenda da semana', de, ate, itens: itens.sort((x, y) => x.data.localeCompare(y.data)), texto:String(fd.get('texto')||'').trim(), img: await lerImg(fd, w),
+    const data = {tipo:'semana', titulo:'Agenda da semana', de, ate, itens: itens.sort((x, y) => x.data.localeCompare(y.data)), texto:String(fd.get('texto')||'').trim(), img:'',
       fixoFim:0, criadoEm: w ? w.criadoEm : new Date().toISOString(), atualizadoEm:new Date().toISOString()};
     const ok = await salvar(ref('avisos', w ? w.id : 'semana-'+de), data, {acao:w?'editou':'criou', tipo:'aviso', resumo:'Agenda da semana '+periodoSemana(data), antes:w?semId(w):null});
     if (ok) { toast(w?'Agenda atualizada':'Agenda da semana publicada'); await carregarAvisos(); } return ok;
@@ -1358,7 +1356,7 @@ function viewAjuda(){
   h += passo('4. Ver a escala', ['Toque na aba <b>Escala</b>, embaixo.', 'Cada linha é um culto: a data fica à esquerda, com manhã ou noite logo abaixo.', 'As colunas são as áreas: Direção do culto, Super Kids, Mídia, Staff, Ministração e Louvor. No celular, deslize a tabela para o lado.', 'Toque em qualquer nome para abrir a página com cada função e quem está nela.', 'Use as setas ‹ › ao lado do mês para ver outros meses.']);
   h += passo('5. Preencher a escala da sua conexão', ['Na aba <b>Escala</b>, encontre o domingo em que a sua conexão está na Direção do culto ou no Super Kids.', 'Toque no nome da sua conexão e depois em <b>Preencher escala</b> (ou <b>Editar escala</b>).', 'Digite os nomes em cada função. Vaga vazia aparece como “vaga aberta”.', 'Toque em <b>Salvar escala</b>. Pronto, todo mundo já vê.', 'Você só consegue editar os dias da sua conexão. As conexões Flechas, Forasteiros e Heróis também preenchem o Louvor. Quem tem a permissão <b>Escala</b> preenche a Direção do culto e o Super Kids de qualquer conexão.']);
   h += passo('6. Imprimir o check-in (Gestão)', ['Na aba <b>Escala</b>, no final de cada linha, toque em <b>Baixar PDF</b> ou <b>Baixar Excel</b>.', 'Na tela inicial também há o botão <b>Check-in do dia</b>.', 'A folha sai com Função, Nome, Check-in e as assinaturas de retirada e de devolução do equipamento e do crachá.', 'No dia, use a aba <b>Check-in</b> para marcar quem chegou, quem retirou e quem devolveu. As marcações aparecem na hora em todos os celulares.']);
-  h += passo('7. Avisos, agenda da semana e eventos', ['Na aba <b>Avisos</b> ficam, nesta ordem: os <b>avisos</b>, a <b>agenda da semana</b> e os <b>eventos</b>. Use os botões no topo para ir direto a cada parte.', 'A agenda da semana também aparece na <b>Início</b>, com o que ainda falta acontecer.', 'Quando houver, toque em <b>Fazer inscrição</b> ou no botão do WhatsApp.', 'Quem tem a permissão <b>Avisos/Eventos</b> publica pelo botão <b>+</b>. Na agenda da semana, escreva uma atividade por linha: <b>data | nome | horário | local</b> (ex.: 27/10 | Ensaio do coro | 19h30 | Auditório) e, se quiser, anexe a arte.']);
+  h += passo('7. Avisos, agenda da semana e eventos', ['Na aba <b>Avisos</b> ficam, nesta ordem: os <b>avisos</b>, a <b>agenda da semana</b> e os <b>eventos</b>. Use os botões no topo para ir direto a cada parte.', 'A agenda da semana também aparece na <b>Início</b>, com o que ainda falta acontecer.', 'Quando houver, toque em <b>Fazer inscrição</b> ou no botão do WhatsApp.', 'Quem tem a permissão <b>Avisos/Eventos</b> publica pelo botão <b>+</b>. Na agenda da semana, escreva uma atividade por linha: <b>data | nome | horário | local</b> (ex.: 27/10 | Ensaio do coro | 19h30 | Auditório) Cada dia some sozinho quando passa.']);
   if (isAdm()) {
     h += passo('8. Histórico', ['A aba <b>Histórico</b> mostra tudo o que foi criado, editado ou excluído: quem fez, o quê, e a data e a hora.']);
     h += passo('9. Para administradores', ['Em <b>Ajustes</b> → <b>Pessoas e permissões</b>, toque em <b>Aprovar</b> na pessoa, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Sem tocar em Aprovar, ela continua <b>Pendente</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, Word, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
