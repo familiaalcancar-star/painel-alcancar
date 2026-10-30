@@ -694,13 +694,23 @@ const blocoPreencher = () => '<details class="preencher"><summary>⚡ Preencher 
   + '<input class="inp" id="pArq" type="file" accept=".docx,.xlsx,.csv,.txt,.pdf" aria-label="Arquivo preenchido" style="margin-top:6px">'
   + '<div class="end" style="margin-top:6px"><button type="button" class="btn small" data-preencher>Preencher</button></div><p class="hint" id="pRes"></p></details>';
 const normF = t => semAcento(t).replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+// Modelo do dia: manhã e noite no mesmo texto, cada culto com as suas funções.
 function textoModelo(){
-  const f = $('#dlgBody form'); const c = {data:f.data.value, culto:f.culto.value, area:f.area.value}; const a = areaInfo(c.area);
-  const x = todasEscalas().find(e => e.id === docId(c.data, c.culto, c.area));
-  return [a.nome.toUpperCase()+' · '+fmtDia(c.data)+' · Culto da '+cultoInfo(c.culto).nome.toLowerCase()+(cultoInfo(c.culto).hora ? ' ('+cultoInfo(c.culto).hora+')' : ''),
-    a.porConexao && conexoesTxt(x) ? 'Conexão: '+conexoesTxt(x) : '',
-    'Escreva os nomes depois dos dois-pontos. Mais de um nome: separe por vírgula.', '',
-    ...a.funcoes.map(fn => fn.nome+': '), 'Observação: '].filter((l, i) => l || i === 3).join('\n');
+  const f = $('#dlgBody form'); const c = {data:f.data.value, area:f.area.value}; const a = areaInfo(c.area);
+  const blocos = cultos().map(cu => { const x = todasEscalas().find(e => e.id === docId(c.data, cu.id, c.area));
+    return [(/noite/i.test(cu.nome) ? '🌙' : '☀️')+' CULTO DA '+cu.nome.toUpperCase()+(cu.hora ? ' ('+cu.hora+')' : ''),
+      ...(a.porConexao && conexoesTxt(x) ? ['Conexão: '+conexoesTxt(x)] : []), ...a.funcoes.map(fn => fn.nome+': '), 'Observação: '].join('\n'); });
+  return [a.nome.toUpperCase()+' · '+fmtDia(c.data), 'Escreva os nomes depois dos dois-pontos. Mais de um nome: separe por vírgula.', '', blocos.join('\n\n')].join('\n');
+}
+// Separa o texto por culto: linhas como "CULTO DA MANHÃ" ou "Noite" abrem a parte daquele culto.
+function separarCultos(txt){
+  const partes = {}; let atual = '';
+  String(txt||'').split(/\r?\n/).forEach(l => {
+    const n = normF(l); const cu = !l.includes(':') && n.length <= 40 ? cultos().find(c => new RegExp('(^| )('+normF(c.nome)+'|'+normF(c.id)+')( |$)').test(n)) : null;
+    if (cu) { atual = cu.id; return; }
+    partes[atual] = (partes[atual] || '') + l + '\n';
+  });
+  return partes;
 }
 // Arquivo → linhas de texto ("primeira célula: demais células").
 async function textoDoArquivo(file){
@@ -729,19 +739,30 @@ function lerModelo(txt, a){
   });
   return {res, obs, fora};
 }
+const PRE = {outros:[], ctx:null};
 async function preencherEscala(){
   const f = $('#dlgBody form'); const a = areaInfo(f.area.value); let txt = $('#pTxt').value;
   const arq = $('#pArq').files[0];
   if (arq) { try { txt += '\n' + await textoDoArquivo(arq); } catch(e){ console.warn(e); toast('Não consegui ler esse arquivo. Tente Word (.docx), Excel (.xlsx), PDF ou cole o texto.'); return; } }
   if (!txt.trim()) { toast('Cole o texto preenchido ou escolha o arquivo.'); return; }
-  const {res, obs, fora} = lerModelo(txt, a); let n = 0;
+  const partes = separarCultos(txt), cultoAqui = f.culto.value;
+  // Texto com as partes de cada culto: usa a deste culto; sem divisão, usa o texto todo.
+  const temPartes = Object.keys(partes).some(k => k);
+  const {res, obs, fora} = lerModelo(temPartes ? (partes[cultoAqui] || '') : txt, a); let n = 0;
+  PRE.outros = [];
+  if (temPartes) cultos().filter(cu => cu.id !== cultoAqui && partes[cu.id]).forEach(cu => {
+    const r = lerModelo(partes[cu.id], a); const x2 = todasEscalas().find(e => e.id === docId(f.data.value, cu.id, a.id));
+    if (Object.values(r.res).some(ps => ps.length) && podeArea(a, x2) && (x2 || isAdm())) PRE.outros.push({culto:cu.id, res:r.res, obs:r.obs});
+  });
+  PRE.ctx = {data:f.data.value, area:a.id, culto:cultoAqui};
   Object.entries(res).forEach(([i, ps]) => { const fn = a.funcoes[i]; if (!ps.length) return; n++;
     if (fn.vagas) { const grade = f.querySelector('[name="f'+i+'_0"]').parentNode;
       while (grade.children.length < ps.length) { const el = document.createElement('input'); el.className = 'inp'; el.name = 'f'+i+'_'+grade.children.length; el.placeholder = 'Nome '+(grade.children.length+1); grade.appendChild(el); }
       [...grade.children].forEach((el, j) => { el.value = ps[j] || ''; });
     } else f.querySelector('[name="f'+i+'"]').value = ps.join('\n'); });
   if (obs !== null && obs !== '') f.obs.value = obs;
-  $('#pRes').innerHTML = n ? '✅ Preenchi <b>'+n+'</b> '+(n>1?'funções':'função')+'. Confira abaixo e toque em <b>Salvar escala</b>.'+(fora.length ? '<br>Não reconheci: '+fora.slice(0,6).map(esc).join(' · ') : '') : 'Não encontrei nenhuma função conhecida no texto. Use o modelo (Copiar modelo).';
+  const extra = PRE.outros.map(o => '<br>➕ Também encontrei o <b>culto da '+esc(cultoInfo(o.culto).nome.toLowerCase())+'</b>: ele será salvo junto quando você tocar em Salvar escala.').join('');
+  $('#pRes').innerHTML = n || PRE.outros.length ? (n ? '✅ Preenchi <b>'+n+'</b> '+(n>1?'funções':'função')+' deste culto. Confira abaixo e toque em <b>Salvar escala</b>.' : '') + extra+(fora.length ? '<br>Não reconheci: '+fora.slice(0,6).map(esc).join(' · ') : '') : 'Não encontrei nenhuma função conhecida no texto. Use o modelo (Copiar modelo).';
   toast(n ? 'Nomes colocados nos campos. Confira e salve.' : 'Nada reconhecido.');
 }
 document.addEventListener('click', e => { const b = e.target.closest('button'); if (!b || !$('#dlg').open) return;
@@ -777,7 +798,16 @@ function formEscala(ctx){
     if (a.porConexao && !cs.length) { toast('Marque pelo menos uma conexão.'); return false; }
     if (!podeArea(a, x)) { toast('Você só pode preencher a escala dos dias da sua conexão.'); return false; }
     const ok = await salvar(r, data, {acao:x?'editou':'criou', tipo:'escala', resumo:resumoEscala(data), antes:x?semId(x):null});
-    if (ok) { toast(x?'Escala atualizada':'Escala salva'); await RECARGA.escalas(); }
+    let mais = 0;
+    if (ok && PRE.ctx && PRE.ctx.data === c.data && PRE.ctx.area === c.area && PRE.ctx.culto === c.culto) {
+      for (const o of PRE.outros) { const x2 = existente({data:c.data, culto:o.culto, area:c.area}); if (!podeArea(a, x2)) continue;
+        const d2 = {data:c.data, culto:o.culto, area:c.area, conexoes: x2 ? conexoesDe(x2) : cs, conexao: x2 ? (conexoesDe(x2)[0]||null) : (cs[0]||null),
+          funcoes: a.funcoes.map((fn, i) => ({nome:fn.nome, pessoas: (o.res[i] && o.res[i].length) ? o.res[i] : ((x2 && ((x2.funcoes||[]).find(g => g.nome === fn.nome)||{}).pessoas) || [])})),
+          obs: o.obs ? o.obs : (x2 ? x2.obs || '' : ''), atualizadoEm:new Date().toISOString()};
+        if (await salvar(ref('escalas', docId(c.data, o.culto, c.area)), d2, {acao:x2?'editou':'criou', tipo:'escala', resumo:resumoEscala(d2), antes:x2?semId(x2):null})) mais++; }
+    }
+    PRE.outros = []; PRE.ctx = null;
+    if (ok) { toast((x?'Escala atualizada':'Escala salva') + (mais ? ' (e também o outro culto)' : '')); await RECARGA.escalas(); }
     return ok;
   },
   body => {
