@@ -319,3 +319,7 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .item-aberto .txt-full{white-space:pre-line;margin:10px 0}
 .item-aberto h2 .tag{font-size:12px;vertical-align:middle}
 .item-aberto img.banner{width:100%;border-radius:12px;margin-bottom:12px}
+
+/* Preencher a escala por modelo */
+.preencher{border:1px dashed var(--line);border-radius:12px;padding:8px 12px;margin:12px 0 4px}
+.preencher summary{cursor:pointer;font-weight:600;color:var(--yellow);padding:4px 0}
