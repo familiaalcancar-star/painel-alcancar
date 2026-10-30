@@ -333,6 +333,23 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   await p.screenshot({ path: path.join(SAIDA, '40-avisos-lista.png') });
   await p.context().close();
 
+  console.log('Preencher escala por modelo');
+  p = await abrir('admin', '#escala'); await p.setViewportSize({ width: 1280, height: 900 });
+  await p.click('button.cell[data-det="2026-11-01|manha|superkids"]'); await p.click('[data-esc]'); await p.waitForSelector('#dlg[open] .preencher');
+  await p.click('.preencher summary');
+  await p.evaluate(() => { window.__copiado = null; navigator.clipboard.writeText = async t => { window.__copiado = t; }; });
+  await p.click('[data-modelo-copiar]'); await p.waitForTimeout(100);
+  const modelo = await p.evaluate(() => window.__copiado || '');
+  conferir(modelo.startsWith('SUPER KIDS') && modelo.includes('\nOração – Abertura: ') && modelo.includes('Observação: '), 'modelo do Super Kids com uma função por linha');
+  await p.fill('#pTxt', modelo.replace('Oração – Abertura: ', 'Oração – Abertura: Joana').replace('Louvor 1: ', 'Louvor 1: Bia e Carla').replace('Observação: ', 'Observação: Teste modelo'));
+  await p.click('[data-preencher]'); await p.waitForTimeout(150);
+  const v = await p.evaluate(() => { const f = document.querySelector('#dlgBody form'); const i = n => [...f.querySelectorAll('[name^="f'+n+'_"]')].map(e => e.value); return {a:i(0), b:i(1), obs:f.obs.value}; });
+  conferir(v.a[0] === 'Joana' && v.b.join('|') === 'Bia|Carla' && v.obs === 'Teste modelo', 'preencher coloca cada nome no campo certo (e cria vaga a mais quando precisa)');
+  await p.locator('#dlg').screenshot({ path: path.join(SAIDA, '41-preencher.png') });
+  await p.click('#dlg [type=submit]:not([data-limpar])'); await p.waitForTimeout(400);
+  conferir(await p.evaluate(() => JSON.stringify(window.__TABELAS.escalas.find(e => e.id === '2026-11-01_manha_superkids').d.funcoes[1].pessoas)) === '["Bia","Carla"]', 'salvar grava os nomes preenchidos');
+  await p.context().close();
+
   console.log('Notificações');
   p = await abrir('admin');
   conferir((await p.textContent('.push-card')).includes('bloqueadas'), 'notificação bloqueada: explica como liberar');

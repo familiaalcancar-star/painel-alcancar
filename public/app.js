@@ -683,8 +683,72 @@ function camposArea(a, x){
     h += '</fieldset>';
   });
   h += '<label class="f" for="fObs">Observação (opcional)</label><input class="inp" id="fObs" name="obs" value="'+esc(x?x.obs||'':'')+'">';
-  return h;
+  return blocoPreencher() + h;
 }
+/* ---------- preencher a escala por modelo (texto, Word, Excel ou PDF) ---------- */
+// Modelo: uma função por linha, "Função: nome, nome". A organizadora preenche e devolve; o painel coloca cada nome no campo certo.
+const blocoPreencher = () => '<details class="preencher"><summary>⚡ Preencher automaticamente</summary>'
+  + '<p class="hint" style="margin-top:6px">1. Toque em <b>Copiar modelo</b> e envie para quem vai preencher.<br>2. Quando voltar preenchido, cole o texto abaixo ou escolha o arquivo (Word, Excel, PDF ou texto) e toque em <b>Preencher</b>.<br>3. Confira os nomes e toque em <b>Salvar escala</b>.</p>'
+  + '<div class="bar" style="margin:6px 0"><button type="button" class="btn ghost small" data-modelo-copiar>📋 Copiar modelo</button><button type="button" class="btn ghost small" data-modelo-zap>WhatsApp</button></div>'
+  + '<textarea class="inp" id="pTxt" style="min-height:110px" placeholder="Oração – Abertura: Ana&#10;Louvor 1: Ana, Bia"></textarea>'
+  + '<input class="inp" id="pArq" type="file" accept=".docx,.xlsx,.csv,.txt,.pdf" aria-label="Arquivo preenchido" style="margin-top:6px">'
+  + '<div class="end" style="margin-top:6px"><button type="button" class="btn small" data-preencher>Preencher</button></div><p class="hint" id="pRes"></p></details>';
+const normF = t => semAcento(t).replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+function textoModelo(){
+  const f = $('#dlgBody form'); const c = {data:f.data.value, culto:f.culto.value, area:f.area.value}; const a = areaInfo(c.area);
+  const x = todasEscalas().find(e => e.id === docId(c.data, c.culto, c.area));
+  return [a.nome.toUpperCase()+' · '+fmtDia(c.data)+' · Culto da '+cultoInfo(c.culto).nome.toLowerCase()+(cultoInfo(c.culto).hora ? ' ('+cultoInfo(c.culto).hora+')' : ''),
+    a.porConexao && conexoesTxt(x) ? 'Conexão: '+conexoesTxt(x) : '',
+    'Escreva os nomes depois dos dois-pontos. Mais de um nome: separe por vírgula.', '',
+    ...a.funcoes.map(fn => fn.nome+': '), 'Observação: '].filter((l, i) => l || i === 3).join('\n');
+}
+// Arquivo → linhas de texto ("primeira célula: demais células").
+async function textoDoArquivo(file){
+  if (/\.txt$/i.test(file.name)) return file.text();
+  const tabs = await lerArquivo(file);
+  return tabs.flatMap(t => t.rows.map(r => r.map(c => c.t).filter(Boolean))).map(cs => cs.length > 1 && !/[:=]\s*$/.test(cs[0]) && !cs[0].includes(':') ? cs[0]+': '+cs.slice(1).join(', ') : cs.join(' ')).join('\n');
+}
+// Lê "Função: nomes" (também "Função - nomes", "Função | nomes" ou a função numa linha e os nomes nas linhas de baixo).
+function lerModelo(txt, a){
+  const fns = a.funcoes.map((f, i) => ({i, n:normF(f.nome)})).sort((x, y) => y.n.length - x.n.length);
+  const achar = rotulo => { const r = normF(rotulo); if (r.length < 3) return null;
+    return fns.find(f => f.n === r) || fns.find(f => r.length >= 5 && (f.n.startsWith(r) || r.startsWith(f.n))) || null; };
+  const res = {}, fora = []; let obs = null, atual = null;
+  const nomes = v => v.split(/\s*(?:,|;|\/|&|\se\s|\n)\s*/).map(t => t.replace(/^[•*\-–—\s]+|[_.\s]+$/g, '').trim()).filter(t => t && !/^[-–—_.]+$/.test(t));
+  String(txt||'').split(/\r?\n/).forEach(l0 => {
+    const l = l0.replace(/^\s*(?:\d{1,2}[.)]|[•*·\-])\s+/, '').trim(); if (!l) { atual = null; return; }
+    // Escolhe o separador que deixa à esquerda o nome exato de uma função ("Oração – Abertura: Ana" → corta no ":").
+    const cortes = [...l.matchAll(/\s*(:|=|\||\t| [-–—] )\s*/g)].map(x => ({rot:l.slice(0, x.index), val:l.slice(x.index + x[0].length), dois:x[1] === ':'}));
+    const m = cortes.find(c => fns.some(f => f.n === normF(c.rot))) || cortes.find(c => c.dois) || cortes[0] || null;
+    const rot = m ? m.rot : l, val = m ? m.val : '';
+    if (/^observa/i.test(semAcento(rot))) { obs = val.trim(); atual = null; return; }
+    const f = achar(rot) || (m ? null : achar(l));
+    if (f) { res[f.i] = [...(res[f.i] || []), ...nomes(val)]; atual = f; return; }
+    if (atual && !m) { res[atual.i] = [...(res[atual.i] || []), ...nomes(l)]; return; }
+    if (m && !/^(conexao|data|culto|escreva)/.test(semAcento(rot))) fora.push(l);
+  });
+  return {res, obs, fora};
+}
+async function preencherEscala(){
+  const f = $('#dlgBody form'); const a = areaInfo(f.area.value); let txt = $('#pTxt').value;
+  const arq = $('#pArq').files[0];
+  if (arq) { try { txt += '\n' + await textoDoArquivo(arq); } catch(e){ console.warn(e); toast('Não consegui ler esse arquivo. Tente Word (.docx), Excel (.xlsx), PDF ou cole o texto.'); return; } }
+  if (!txt.trim()) { toast('Cole o texto preenchido ou escolha o arquivo.'); return; }
+  const {res, obs, fora} = lerModelo(txt, a); let n = 0;
+  Object.entries(res).forEach(([i, ps]) => { const fn = a.funcoes[i]; if (!ps.length) return; n++;
+    if (fn.vagas) { const grade = f.querySelector('[name="f'+i+'_0"]').parentNode;
+      while (grade.children.length < ps.length) { const el = document.createElement('input'); el.className = 'inp'; el.name = 'f'+i+'_'+grade.children.length; el.placeholder = 'Nome '+(grade.children.length+1); grade.appendChild(el); }
+      [...grade.children].forEach((el, j) => { el.value = ps[j] || ''; });
+    } else f.querySelector('[name="f'+i+'"]').value = ps.join('\n'); });
+  if (obs !== null && obs !== '') f.obs.value = obs;
+  $('#pRes').innerHTML = n ? '✅ Preenchi <b>'+n+'</b> '+(n>1?'funções':'função')+'. Confira abaixo e toque em <b>Salvar escala</b>.'+(fora.length ? '<br>Não reconheci: '+fora.slice(0,6).map(esc).join(' · ') : '') : 'Não encontrei nenhuma função conhecida no texto. Use o modelo (Copiar modelo).';
+  toast(n ? 'Nomes colocados nos campos. Confira e salve.' : 'Nada reconhecido.');
+}
+document.addEventListener('click', e => { const b = e.target.closest('button'); if (!b || !$('#dlg').open) return;
+  if ('modeloCopiar' in b.dataset) { const t = textoModelo(); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Modelo copiado. Cole no WhatsApp e envie.'), () => { $('#pTxt').value = t; toast('Não consegui copiar: o modelo está na caixa de texto.'); }); }
+  if ('modeloZap' in b.dataset) window.open('https://wa.me/?text='+encodeURIComponent(textoModelo()), '_blank', 'noopener');
+  if ('preencher' in b.dataset) preencherEscala();
+});
 function formEscala(ctx){
   const editaveis = isAdm() ? areas() : areas().filter(a => podeArea(a, todasEscalas().find(x => x.id === docId(ctx.data, ctx.culto, a.id))));
   const atual = () => { const f = $('#dlgBody form'); return {data:f.data.value, culto:f.culto.value, area:f.area.value}; };
