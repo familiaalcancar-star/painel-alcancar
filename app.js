@@ -86,6 +86,17 @@ const LOUVOR_CON = ['flechas','forasteiros','herois'];
 const semAcento = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase();
 const podeLouvor = () => { const p = pessoaDe(S.uid); return ehEquipe(p) && LOUVOR_CON.includes(semAcento(conexaoNome(p.conexao))); };
 const temGestao = () => isAdm() || !!(pessoaDe(S.uid)||{}).gestao;
+// Quem está escalado no Staff, função Check-in, em algum culto de hoje até daqui a 6 dias, também faz o check-in (só desse dia).
+// Ligação pelo nome escrito na escala: igual ao apelido, igual ao nome completo ou todas as palavras dentro do nome completo.
+const normNome = t => semAcento(t).replace(/[^a-z0-9]+/g, ' ').trim();
+const nomeBate = (escrito, p) => { const e = normNome(escrito); if (!e || !p) return false; const n = normNome(p.nome), ws = n.split(' ');
+  return e === normNome(p.apelido) || e === n || e.split(' ').every(w => ws.includes(w)); };
+const datasCheckin = () => { const p = pessoaDe(S.uid); if (!p) return [];
+  const fim = somaDias(hoje(), 6);
+  return [...new Set(S.prox.filter(x => x.area === 'staff' && x.data >= hoje() && x.data <= fim
+    && (x.funcoes||[]).some(f => normNome(f.nome) === 'check in' && (f.pessoas||[]).some(n => nomeBate(n, p)))).map(x => x.data))].sort(); };
+const ckEscalado = () => !temGestao() && datasCheckin().length > 0;
+const veCheckin = () => temGestao() || ckEscalado();
 const temMinistro = () => !!(pessoaDe(S.uid)||{}).ministro;
 const temEscala = () => !!(pessoaDe(S.uid)||{}).escala;
 const podeArea = (a, x) => isAdm() || (ehLouvor(a.nome) && (podeLouvor() || temMinistro())) || (a.porConexao && !!x && (temEscala() || conexoesDe(x).some(c => minhas().includes(c))));
@@ -372,7 +383,7 @@ const cultoTitulo = c => { const i = cultoInfo(c.culto); return 'Culto da '+i.no
 
 /* ---------- navegação ---------- */
 function renderTabs(){
-  $('#tabs').innerHTML = TABS.filter(t=>!t.hidden && (!t.owner || isAdm()) && (!t.gestao || temGestao())).map(t =>
+  $('#tabs').innerHTML = TABS.filter(t=>!t.hidden && (!t.owner || isAdm()) && (!t.gestao || veCheckin())).map(t =>
     '<button data-tab="'+t.id+'"'+(S.tab===t.id?' aria-current="page"':'')+'><span class="ic" aria-hidden="true">'+t.ic+'</span>'+t.label+(t.id==='ajustes' && isAdm() && pendentes().length ? '<span class="badge">'+pendentes().length+'</span>' : '')+'</button>').join('');
 }
 $('#tabs').addEventListener('click', e => { const b=e.target.closest('button[data-tab]'); if(!b) return; S.tab=b.dataset.tab; S.det=null; history.replaceState(null,'','#'+S.tab); renderTabs(); render(); window.scrollTo(0,0); });
@@ -386,7 +397,7 @@ function render(){
   const v = $('#view');
   if (!S.cfgLoaded) { v.innerHTML='<div class="empty">Carregando o painel…</div>'; return; }
   const t = TABS.find(x => x.id === S.tab);
-  if (!t || (t.owner && !isAdm()) || (t.gestao && !temGestao())) S.tab = 'inicio';
+  if (!t || (t.owner && !isAdm()) || (t.gestao && !veCheckin())) S.tab = 'inicio';
   if (!S.cfg && S.tab!=='ajustes') { v.innerHTML = isAdm() ? '<div class="empty">O painel ainda não está configurado.<br><br><button class="btn" data-go="ajustes">Configurar agora</button></div>' : '<div class="empty">Não foi possível carregar o painel agora. Confira a internet e tente de novo.</div>'; return; }
   const fns = {inicio:viewInicio, escala:viewEscala, checkin:viewCheckin, avisos:viewAvisos, historico:viewHistorico, ajustes:viewAjustes, ajuda:viewAjuda};
   v.innerHTML = bannerCadastro() + fns[S.tab]();
@@ -962,6 +973,7 @@ async function ckCarregarMarcas(){ const d = S.ckD, c = S.ckC; const r = await s
   if (r.error) { console.warn(r.error); return; } if (d !== S.ckD || c !== S.ckC) return;
   const m = {}; (r.data||[]).forEach(x => m[x.chave] = {...x, _v:1}); S.ckMarks = m; }
 function ckAbrir(){
+  if (ckEscalado()) S.ckD = datasCheckin()[0];
   if (!S.ckD) S.ckD = proxCulto();
   if (!S.ckC || !cultos().some(c => c.id===S.ckC)) S.ckC = (cultos()[0]||{}).id;
   const chave = S.ckD+'_'+S.ckC; if (S.ckChave === chave) return; S.ckChave = chave;
@@ -969,10 +981,11 @@ function ckAbrir(){
   Promise.all([ckCarregarDocs(), ckCarregarMarcas()]).catch(e => console.warn(e)).finally(() => { S.ckOk = true; if (S.tab==='checkin') render(); });
 }
 function viewCheckin(){
-  if (!temGestao()) return '<div class="empty">Só administradores e a Gestão acessam o check-in.</div>';
-  ckAbrir();
+  if (!veCheckin()) return '<div class="empty">Só administradores, a Gestão e quem está escalado no check-in acessam esta aba.</div>';
+  ckAbrir(); const fixo = ckEscalado();
   let h = '<div class="bar"><h2 style="font-size:22px">Check-in</h2></div>'
-    + '<div class="card"><label class="f" for="ckD" style="margin-top:0">Data do culto</label><input class="inp" type="date" id="ckD" value="'+esc(S.ckD)+'">'
+    + '<div class="card">'+(fixo ? '<div class="meta" style="margin:0">Você está escalado no check-in de</div><b class="ck-dia">'+esc(fmtDia(S.ckD))+'</b>'
+      : '<label class="f" for="ckD" style="margin-top:0">Data do culto</label><input class="inp" type="date" id="ckD" value="'+esc(S.ckD)+'">')
     + '<div class="chips" style="margin-top:10px">'+cultos().map(c => '<button class="chip" aria-pressed="'+(c.id===S.ckC)+'" data-ck-culto="'+esc(c.id)+'">'+esc(c.nome)+(c.hora?' · '+esc(c.hora):'')+'</button>').join('')+'</div></div>';
   if (!S.ckOk) return h + '<div class="empty">Carregando…</div>';
   const b = blocosCheckin(S.ckD, S.ckC);
@@ -989,11 +1002,11 @@ function viewCheckin(){
         + box('ci','Check-in') + box('ret','Retirou equipamento/crachá') + box('dev','Devolveu equipamento/crachá') + '</div>'; });
     h += '</div>';
   });
-  h += '<div class="bar" style="margin-top:6px"><button class="btn ghost small" data-ck-pdf="'+esc(S.ckD)+'|'+esc(S.ckC)+'">Baixar ficha em PDF</button></div>';
+  if (!fixo) h += '<div class="bar" style="margin-top:6px"><button class="btn ghost small" data-ck-pdf="'+esc(S.ckD)+'|'+esc(S.ckC)+'">Baixar ficha em PDF</button></div>';
   return h;
 }
 async function ckSalvar(k, campo, valor){
-  if (!temGestao()) return;
+  if (!temGestao() && !(ckEscalado() && datasCheckin().includes(S.ckD))) return;
   const b = blocosCheckin(S.ckD, S.ckC);
   let row = null, g0 = null; b.grupos.forEach(g => g.rows.forEach(r => { if (r.k===k) { row = r; g0 = g; } }));
   const ant = (S.ckMarks||{})[k] || {};
@@ -1003,7 +1016,7 @@ async function ckSalvar(k, campo, valor){
 }
 document.addEventListener('change', e => {
   const t = e.target;
-  if (t.id === 'ckD' && t.value) { S.ckD = t.value; render(); return; }
+  if (t.id === 'ckD' && t.value && temGestao()) { S.ckD = t.value; render(); return; }
   if (t.dataset && t.dataset.ckk) { ckSalvar(t.dataset.ckk, t.dataset.campo, t.checked); t.closest('.ckrow') && t.dataset.campo==='ci' && t.closest('.ckrow').classList.toggle('feito', t.checked); return; }
   if (t.dataset && t.dataset.cknome) ckSalvar(t.dataset.cknome, 'nome', t.value.trim());
 });
