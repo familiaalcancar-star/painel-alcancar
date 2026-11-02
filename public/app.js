@@ -683,6 +683,9 @@ function abrir(html, onSubmit, onReady){
   $('#dlgBody').querySelector('form').onsubmit = async ev => { ev.preventDefault(); const b = ev.target.querySelector('[type=submit]:not([data-limpar])') || ev.target.querySelector('[type=submit]'); b.disabled = true; const ok = await onSubmit(new FormData(ev.target), ev.submitter); b.disabled = false; if (ok && $('#dlgBody').firstChild === ev.target) d.close(); };
   if (onReady) onReady($('#dlgBody'));
 }
+const slotNome = (f, i, j, v) => '<input class="inp" name="f'+i+'_'+j+'" aria-label="'+esc(f.nome)+' '+(j+1)+'" placeholder="Nome '+(j+1)+'" value="'+esc(v||'')+'">';
+document.addEventListener('click', e => { const b = e.target.closest('[data-mais]'); if (!b) return; const grade = b.previousElementSibling; const i = b.dataset.mais, j = grade.children.length;
+  grade.insertAdjacentHTML('beforeend', '<input class="inp" name="f'+i+'_'+j+'" placeholder="Nome '+(j+1)+'">'); grade.lastElementChild.focus(); });
 function camposArea(a, x){
   const minhasCon = conexoes();
   let h = '';
@@ -691,8 +694,9 @@ function camposArea(a, x){
   a.funcoes.forEach((f, i) => {
     const salvo = x ? ((x.funcoes||[]).find(g=>g.nome===f.nome)||{}).pessoas || [] : [];
     h += '<fieldset class="fs"><legend>'+esc(f.nome)+(f.vagas?' · '+f.vagas+(f.vagas>1?' pessoas':' pessoa'):'')+'</legend>';
-    if (f.vagas) h += '<div class="slotgrid">'+Array.from({length:Math.max(f.vagas, salvo.length)}, (_,j) => '<input class="inp" name="f'+i+'_'+j+'" aria-label="'+esc(f.nome)+' '+(j+1)+'" placeholder="Nome '+(j+1)+'" value="'+esc(salvo[j]||'')+'">').join('')+'</div>';
-    else h += '<textarea class="inp" name="f'+i+'" aria-label="'+esc(f.nome)+'" placeholder="Um nome por linha">'+esc(salvo.join('\n'))+'</textarea>';
+    // Uma caixa por pessoa; o botão "+" acrescenta mais uma, mesmo além do número de vagas.
+    h += '<div class="slotgrid">'+Array.from({length:Math.max(f.vagas||1, salvo.length)}, (_,j) => slotNome(f, i, j, salvo[j])).join('')+'</div>'
+      + '<button type="button" class="btn ghost small mais" data-mais="'+i+'">+ Mais uma pessoa</button>';
     h += '</fieldset>';
   });
   h += '<label class="f" for="fObs">Observação (opcional)</label><input class="inp" id="fObs" name="obs" value="'+esc(x?x.obs||'':'')+'">';
@@ -769,10 +773,9 @@ async function preencherEscala(){
   });
   PRE.ctx = {data:f.data.value, area:a.id, culto:cultoAqui};
   Object.entries(res).forEach(([i, ps]) => { const fn = a.funcoes[i]; if (!ps.length) return; n++;
-    if (fn.vagas) { const grade = f.querySelector('[name="f'+i+'_0"]').parentNode;
-      while (grade.children.length < ps.length) { const el = document.createElement('input'); el.className = 'inp'; el.name = 'f'+i+'_'+grade.children.length; el.placeholder = 'Nome '+(grade.children.length+1); grade.appendChild(el); }
-      [...grade.children].forEach((el, j) => { el.value = ps[j] || ''; });
-    } else f.querySelector('[name="f'+i+'"]').value = ps.join('\n'); });
+    const grade = f.querySelector('[name="f'+i+'_0"]').parentNode;
+    while (grade.children.length < ps.length) { const el = document.createElement('input'); el.className = 'inp'; el.name = 'f'+i+'_'+grade.children.length; el.placeholder = 'Nome '+(grade.children.length+1); grade.appendChild(el); }
+    [...grade.children].forEach((el, j) => { el.value = ps[j] || ''; }); });
   if (obs !== null && obs !== '') f.obs.value = obs;
   const extra = PRE.outros.map(o => '<br>➕ Também encontrei o <b>culto da '+esc(cultoInfo(o.culto).nome.toLowerCase())+'</b>: ele será salvo junto quando você tocar em Salvar escala.').join('');
   $('#pRes').innerHTML = n || PRE.outros.length ? (n ? '✅ Preenchi <b>'+n+'</b> '+(n>1?'funções':'função')+' deste culto. Confira abaixo e toque em <b>Salvar escala</b>.' : '') + extra+(fora.length ? '<br>Não reconheci: '+fora.slice(0,6).map(esc).join(' · ') : '') : 'Não encontrei nenhuma função conhecida no texto. Use o modelo (Copiar modelo).';
@@ -804,9 +807,7 @@ function formEscala(ctx){
     if (sub && 'limpar' in sub.dataset) { if (!x || !await confirmar('Apagar a escala de '+a.nome+' deste culto?')) return false; const ok = await excluir(r, semId(x), 'escala', resumoEscala(x)); if (ok) { toast('Escala apagada'); await RECARGA.escalas(); } return ok; }
     const cs = a.porConexao ? (isAdm() ? fd.getAll('conexoes') : conexoesDe(x)) : [];
     const data = { data:c.data, culto:c.culto, area:c.area, conexoes: cs, conexao: cs[0]||null,
-      funcoes: a.funcoes.map((f,i) => ({nome:f.nome, pessoas: f.vagas
-        ? [...$('#dlgBody form').querySelectorAll('[name^="f'+i+'_"]')].map(el=>el.value.trim()).filter(Boolean)
-        : String(fd.get('f'+i)||'').split('\n').map(s=>s.trim()).filter(Boolean)})),
+      funcoes: a.funcoes.map((f,i) => ({nome:f.nome, pessoas: [...$('#dlgBody form').querySelectorAll('[name^="f'+i+'_"]')].map(el=>el.value.trim()).filter(Boolean)})),
       obs: String(fd.get('obs')||'').trim(), atualizadoEm:new Date().toISOString() };
     if (a.porConexao && !cs.length) { toast('Marque pelo menos uma conexão.'); return false; }
     if (!podeArea(a, x, c.data)) { toast('Você só pode preencher a escala dos dias da sua conexão.'); return false; }
