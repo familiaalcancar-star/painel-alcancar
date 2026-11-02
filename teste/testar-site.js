@@ -356,7 +356,10 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
 
   console.log('Check-in por quem está escalado');
   {
-    const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,10); };
+    // Datas no horário de Brasília (o mesmo do navegador do teste).
+    const hojeBR = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) + 'T12:00:00Z');
+    const DOM = (7 - hojeBR.getUTCDay()) % 7; // próximo domingo (hoje, se for domingo)
+    const iso = n => { const d = new Date(hojeBR); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); };
     const extra = (dias, nomes) => ({id: iso(dias)+'_manha_staff', d:{data:iso(dias), culto:'manha', area:'staff', funcoes:[{nome:'Check-in', pessoas:nomes},{nome:'Checagem', pessoas:['Fulano']},{nome:'Gestão de culto', pessoas:['Ciclano']}]}});
     const abrirCom = async (papel, ex) => { const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
       await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
@@ -364,18 +367,33 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
       await pg.addInitScript(([pp, e]) => { localStorage.setItem('mockPapel', pp); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); }, [papel, ex]);
       await pg.goto('http://localhost:8123/'); await pg.waitForSelector('#tabs button'); await pg.waitForTimeout(300); return pg; };
     p = await abrirCom('betel', extra(2, ['lider']));
-    conferir(JSON.stringify(await abas(p)).includes('Check-in'), 'líder escalado no Check-in (nome parcial, sem acento) vê a aba Check-in');
+    conferir(!JSON.stringify(await abas(p)).includes('Check-in'), 'só o primeiro nome ("lider") não basta');
+    await p.context().close();
+    p = await abrirCom('betel', extra(DOM, ['betel LIDER']));
+    conferir(JSON.stringify(await abas(p)).includes('Check-in'), 'escalado com nome e sobrenome (sem acento, outra ordem) vê a aba Check-in');
     await p.click('#tabs [data-tab="checkin"]'); await p.waitForTimeout(400);
     conferir(!(await p.$('#ckD')) && (await p.textContent('#view')).includes('Você está escalado no check-in') && !(await p.$('[data-ck-pdf]')), 'data fixa no dia escalado e sem PDF');
     await p.screenshot({ path: path.join(SAIDA, '42-checkin-escalado.png'), fullPage: true });
     await p.locator('[data-campo="ci"]').first().check(); await p.waitForTimeout(300);
     conferir(await p.evaluate(() => window.__TABELAS.checkin_marcas.some(m => m.ci)), 'escalado marca o check-in');
+    await p.click('#tabs [data-tab="inicio"]'); await p.waitForTimeout(200);
+    const dia = iso(DOM);
+    await p.click('#tabs [data-tab="escala"]'); await p.waitForTimeout(300);
+    await p.setViewportSize({ width: 1280, height: 900 });
+    if (!(await p.$('button.cell[data-det="'+dia+'|manha|midia"]'))) { await p.click('[data-mes="1"]'); await p.waitForTimeout(400); }
+    await p.click('button.cell[data-det="'+dia+'|manha|midia"]'); await p.waitForTimeout(200);
+    conferir(!!(await p.$('[data-esc]')), 'escalado no Check-in edita a Mídia daquele dia');
+    await p.click('[data-voltar]'); await p.click('button.cell[data-det="'+dia+'|manha|louvor"]'); await p.waitForTimeout(200);
+    conferir(!!(await p.$('[data-esc]')), 'e o Louvor daquele dia');
     conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
     await p.context().close();
     p = await abrirCom('betel', extra(9, ['Líder Betel']));
     conferir(!JSON.stringify(await abas(p)).includes('Check-in'), 'escalado só daqui a 9 dias ainda não vê a aba');
     await p.context().close();
-    p = await abrirCom('flechas', extra(2, ['lider']));
+    p = await abrirCom('gestao', extra(2, ['Gestora Silva']));
+    conferir(!(await p.textContent('#view')).includes('escalado no check-in'), 'só consulta (com Gestão) não ganha pelo nome');
+    await p.context().close();
+    p = await abrirCom('flechas', extra(2, ['Líder Betel']));
     conferir(!JSON.stringify(await abas(p)).includes('Check-in'), 'quem não está escalado no Check-in não vê a aba');
     await p.context().close();
   }

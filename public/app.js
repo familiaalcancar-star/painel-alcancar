@@ -87,11 +87,12 @@ const semAcento = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').tri
 const podeLouvor = () => { const p = pessoaDe(S.uid); return ehEquipe(p) && LOUVOR_CON.includes(semAcento(conexaoNome(p.conexao))); };
 const temGestao = () => isAdm() || !!(pessoaDe(S.uid)||{}).gestao;
 // Quem está escalado no Staff, função Check-in, em algum culto de hoje até daqui a 6 dias, também faz o check-in (só desse dia).
-// Ligação pelo nome escrito na escala: igual ao apelido, igual ao nome completo ou todas as palavras dentro do nome completo.
+// Ligação pelo nome escrito na escala: NOME E SOBRENOME (2 palavras ou mais), todas dentro do nome completo do cadastro.
+// Só para quem é admin, líder, auxiliar ou organização (quem é só consulta não ganha). Mesma regra do banco (nome_bate).
 const normNome = t => semAcento(t).replace(/[^a-z0-9]+/g, ' ').trim();
-const nomeBate = (escrito, p) => { const e = normNome(escrito); if (!e || !p) return false; const n = normNome(p.nome), ws = n.split(' ');
-  return e === normNome(p.apelido) || e === n || e.split(' ').every(w => ws.includes(w)); };
-const datasCheckin = () => { const p = pessoaDe(S.uid); if (!p) return [];
+const nomeBate = (escrito, p) => { const e = normNome(escrito).split(' ').filter(Boolean); if (e.length < 2 || !p) return false;
+  const ws = normNome(p.nome).split(' '); return e.every(w => ws.includes(w)); };
+const datasCheckin = () => { const p = pessoaDe(S.uid); if (!p || !['admin','lider','auxiliar','organizacao'].includes(p.papel)) return [];
   const fim = somaDias(hoje(), 6);
   return [...new Set(S.prox.filter(x => x.area === 'staff' && x.data >= hoje() && x.data <= fim
     && (x.funcoes||[]).some(f => normNome(f.nome) === 'check in' && (f.pessoas||[]).some(n => nomeBate(n, p)))).map(x => x.data))].sort(); };
@@ -99,7 +100,8 @@ const ckEscalado = () => !temGestao() && datasCheckin().length > 0;
 const veCheckin = () => temGestao() || ckEscalado();
 const temMinistro = () => !!(pessoaDe(S.uid)||{}).ministro;
 const temEscala = () => !!(pessoaDe(S.uid)||{}).escala;
-const podeArea = (a, x) => isAdm() || (ehLouvor(a.nome) && (podeLouvor() || temMinistro())) || (a.porConexao && !!x && (temEscala() || conexoesDe(x).some(c => minhas().includes(c))));
+// Quem está escalado no Check-in da data também edita os nomes de todas as áreas daquele dia (área por conexão: só se a escala já existe).
+const podeArea = (a, x, d) => isAdm() || (!!(d || (x && x.data)) && datasCheckin().includes(d || x.data) && (!a.porConexao || !!x)) || (ehLouvor(a.nome) && (podeLouvor() || temMinistro())) || (a.porConexao && !!x && (temEscala() || conexoesDe(x).some(c => minhas().includes(c))));
 const temAvisos = () => isAdm() || !!(pessoaDe(S.uid)||{}).avisos;
 const papelTexto = () => { if (!S.uid) return 'Somente visualização'; if (statusDe(S.uid) === 'removido') return 'Acesso removido · Somente visualização'; if (banco() && aprovado(S.uid)) return 'Banco · Somente visualização'; if (isAdm()) return 'Administrador'; const p = pessoaDe(S.uid);
   if (ehEquipe(p)) return PAPEIS[p.papel]+' · Conexão '+conexaoNome(p.conexao);
@@ -360,7 +362,7 @@ const docId = (data, culto, area) => data+'_'+culto+'_'+area;
 
 function blocoArea(lista, c, a){
   const x = escalaDe(lista, c.data, c.culto, a.id);
-  const pode = podeArea(a, x);
+  const pode = podeArea(a, x, c.data);
   let resumo;
   if (a.porConexao) resumo = conexoesDe(x).length ? (conexoesDe(x).length>1?'Conexões ':'Conexão ')+esc(conexoesTxt(x)) : '<span class="pend">A definir</span>';
   else { const n = x ? (x.funcoes||[]).reduce((s,f)=>s+(f.pessoas||[]).length,0) : 0; resumo = n ? (a.funcoes.length===1 && n<=2 ? esc((x.funcoes[0].pessoas||[]).join(' e ')) : 'Ver equipe ('+n+')') : (x && x.obs ? esc(x.obs) : '<span class="pend">A definir</span>'); }
@@ -457,7 +459,7 @@ function tabelaEscala(lista){
 function viewDetalhe(){
   const {data, culto, area} = S.det; const a = areaInfo(area); const ci = cultoInfo(culto);
   const x = escalaDe(todasEscalas(), data, culto, area);
-  const pode = podeArea(a, x);
+  const pode = podeArea(a, x, data);
   let h = '<button class="btn ghost small" data-voltar>‹ Voltar para a escala</button>'
     + '<h2 class="section-title" style="margin-top:16px">'+esc(a.nome)+'</h2><div class="meta" style="font-size:15px">'+esc(fmtDia(data))+' · Culto da '+esc(ci.nome.toLowerCase())+(ci.hora?' · '+esc(ci.hora):'')+'</div>';
   if (a.porConexao) h += '<p style="margin:10px 0 0"><span class="tag" style="margin:0;font-size:14px;padding:3px 12px">'+esc(conexoesTxt(x) || 'Conexão a definir')+'</span></p>';
@@ -763,7 +765,7 @@ async function preencherEscala(){
   PRE.outros = [];
   if (temPartes) cultos().filter(cu => cu.id !== cultoAqui && partes[cu.id]).forEach(cu => {
     const r = lerModelo(partes[cu.id], a); const x2 = todasEscalas().find(e => e.id === docId(f.data.value, cu.id, a.id));
-    if (Object.values(r.res).some(ps => ps.length) && podeArea(a, x2) && (x2 || isAdm())) PRE.outros.push({culto:cu.id, res:r.res, obs:r.obs});
+    if (Object.values(r.res).some(ps => ps.length) && podeArea(a, x2, f.data.value) && (x2 || isAdm() || !a.porConexao)) PRE.outros.push({culto:cu.id, res:r.res, obs:r.obs});
   });
   PRE.ctx = {data:f.data.value, area:a.id, culto:cultoAqui};
   Object.entries(res).forEach(([i, ps]) => { const fn = a.funcoes[i]; if (!ps.length) return; n++;
@@ -782,7 +784,7 @@ document.addEventListener('click', e => { const b = e.target.closest('button'); 
   if ('preencher' in b.dataset) preencherEscala();
 });
 function formEscala(ctx){
-  const editaveis = isAdm() ? areas() : areas().filter(a => podeArea(a, todasEscalas().find(x => x.id === docId(ctx.data, ctx.culto, a.id))));
+  const editaveis = isAdm() ? areas() : areas().filter(a => podeArea(a, todasEscalas().find(x => x.id === docId(ctx.data, ctx.culto, a.id)), ctx.data));
   const atual = () => { const f = $('#dlgBody form'); return {data:f.data.value, culto:f.culto.value, area:f.area.value}; };
   const existente = c => todasEscalas().find(x => x.id === docId(c.data, c.culto, c.area));
   const x0 = existente(ctx);
@@ -807,11 +809,11 @@ function formEscala(ctx){
         : String(fd.get('f'+i)||'').split('\n').map(s=>s.trim()).filter(Boolean)})),
       obs: String(fd.get('obs')||'').trim(), atualizadoEm:new Date().toISOString() };
     if (a.porConexao && !cs.length) { toast('Marque pelo menos uma conexão.'); return false; }
-    if (!podeArea(a, x)) { toast('Você só pode preencher a escala dos dias da sua conexão.'); return false; }
+    if (!podeArea(a, x, c.data)) { toast('Você só pode preencher a escala dos dias da sua conexão.'); return false; }
     const ok = await salvar(r, data, {acao:x?'editou':'criou', tipo:'escala', resumo:resumoEscala(data), antes:x?semId(x):null});
     let mais = 0;
     if (ok && PRE.ctx && PRE.ctx.data === c.data && PRE.ctx.area === c.area && PRE.ctx.culto === c.culto) {
-      for (const o of PRE.outros) { const x2 = existente({data:c.data, culto:o.culto, area:c.area}); if (!podeArea(a, x2)) continue;
+      for (const o of PRE.outros) { const x2 = existente({data:c.data, culto:o.culto, area:c.area}); if (!podeArea(a, x2, c.data)) continue;
         const d2 = {data:c.data, culto:o.culto, area:c.area, conexoes: x2 ? conexoesDe(x2) : cs, conexao: x2 ? (conexoesDe(x2)[0]||null) : (cs[0]||null),
           funcoes: a.funcoes.map((fn, i) => ({nome:fn.nome, pessoas: (o.res[i] && o.res[i].length) ? o.res[i] : ((x2 && ((x2.funcoes||[]).find(g => g.nome === fn.nome)||{}).pessoas) || [])})),
           obs: o.obs ? o.obs : (x2 ? x2.obs || '' : ''), atualizadoEm:new Date().toISOString()};
