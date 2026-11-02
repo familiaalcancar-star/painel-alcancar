@@ -22,6 +22,8 @@ const T = {
   chat:[{id:'m1', texto:'Bom dia, pessoal! Escala de domingo fechada?', por:U.betel, em:'2026-10-25T12:00:00.000Z'},
         {id:'m2', texto:'Falta só a recepção da noite.', por:U.gestao, em:new Date(Date.now()-3600e3).toISOString()},
         {id:'m3', texto:'Combinado, eu vejo isso.', por:U.admin, em:new Date(Date.now()-1800e3).toISOString()}] };
+// Teste do check-in por escalado: uma escala do Staff a mais, gravada antes de abrir a página.
+try { const ex = JSON.parse(localStorage.getItem('mockEscalaExtra') || 'null'); if (ex) { T.escalas = T.escalas.filter(e => e.id !== ex.id); T.escalas.push({id:ex.id, d:ex.d}); } } catch(e){}
 window.__TABELAS = T;
 const derivados = (t, r) => { if (t==='escalas' || t==='eventos') r.data = r.d && r.d.data; if (t==='escalas') { r.culto = r.d.culto; r.area = r.d.area; } return r; };
 Object.keys(T).forEach(t => T[t].forEach(r => derivados(t, r)));

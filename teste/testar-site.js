@@ -354,6 +354,32 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   conferir(noite[0].pessoas.join() === 'Noemi' && JSON.stringify(noite.slice(1).flatMap(f => f.pessoas)) === JSON.stringify(JSON.parse(noiteAntes).flatMap(f => f.pessoas)), 'o culto da noite do mesmo texto é salvo junto (sem apagar o que não veio)');
   await p.context().close();
 
+  console.log('Check-in por quem está escalado');
+  {
+    const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,10); };
+    const extra = (dias, nomes) => ({id: iso(dias)+'_manha_staff', d:{data:iso(dias), culto:'manha', area:'staff', funcoes:[{nome:'Check-in', pessoas:nomes},{nome:'Checagem', pessoas:['Fulano']},{nome:'Gestão de culto', pessoas:['Ciclano']}]}});
+    const abrirCom = async (papel, ex) => { const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
+      await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+      const pg = await ctx.newPage(); pg.erros = []; pg.on('pageerror', e => pg.erros.push(e.message));
+      await pg.addInitScript(([pp, e]) => { localStorage.setItem('mockPapel', pp); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); }, [papel, ex]);
+      await pg.goto('http://localhost:8123/'); await pg.waitForSelector('#tabs button'); await pg.waitForTimeout(300); return pg; };
+    p = await abrirCom('betel', extra(2, ['lider']));
+    conferir(JSON.stringify(await abas(p)).includes('Check-in'), 'líder escalado no Check-in (nome parcial, sem acento) vê a aba Check-in');
+    await p.click('#tabs [data-tab="checkin"]'); await p.waitForTimeout(400);
+    conferir(!(await p.$('#ckD')) && (await p.textContent('#view')).includes('Você está escalado no check-in') && !(await p.$('[data-ck-pdf]')), 'data fixa no dia escalado e sem PDF');
+    await p.screenshot({ path: path.join(SAIDA, '42-checkin-escalado.png'), fullPage: true });
+    await p.locator('[data-campo="ci"]').first().check(); await p.waitForTimeout(300);
+    conferir(await p.evaluate(() => window.__TABELAS.checkin_marcas.some(m => m.ci)), 'escalado marca o check-in');
+    conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    await p.context().close();
+    p = await abrirCom('betel', extra(9, ['Líder Betel']));
+    conferir(!JSON.stringify(await abas(p)).includes('Check-in'), 'escalado só daqui a 9 dias ainda não vê a aba');
+    await p.context().close();
+    p = await abrirCom('flechas', extra(2, ['lider']));
+    conferir(!JSON.stringify(await abas(p)).includes('Check-in'), 'quem não está escalado no Check-in não vê a aba');
+    await p.context().close();
+  }
+
   console.log('Notificações');
   p = await abrir('admin');
   conferir((await p.textContent('.push-card')).includes('bloqueadas'), 'notificação bloqueada: explica como liberar');
