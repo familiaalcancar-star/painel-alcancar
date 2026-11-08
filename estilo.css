@@ -326,3 +326,28 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 
 /* Botão "+ Mais uma pessoa" na edição da escala */
 .fs .mais{margin-top:8px;padding:4px 12px;font-size:13px}
+
+/* Checklist da Mídia */
+.mk-eu{background:var(--yellow);color:#000;border-radius:14px;padding:12px 14px;margin:0 0 12px;font-size:16px}
+.mk-eu small{font-size:13px}
+.mk-fn.minha{border-color:var(--yellow)}
+.mk-fn h3 .tag{margin-left:6px}
+.mk-prog{display:flex;align-items:center;gap:10px;margin:10px 0 4px;font-size:14px}
+.mk-barra{flex:1;height:10px;border-radius:999px;background:var(--line);overflow:hidden}
+.mk-barra i{display:block;height:100%;background:#3DAA35;border-radius:999px;transition:width .2s}
+.mk-bloco{font:600 14px Figtree,sans-serif;color:var(--yellow);margin:14px 0 4px;text-transform:none}
+.mk-item{display:flex;align-items:flex-start;gap:12px;padding:12px 2px;border-top:1px solid var(--line);cursor:pointer;min-height:52px}
+.mk-item input{position:absolute;opacity:0;width:1px;height:1px}
+.mk-caixa{flex:0 0 30px;height:30px;border:2px solid var(--muted);border-radius:8px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.mk-item.feito .mk-caixa{background:#3DAA35;border-color:#3DAA35}
+.mk-item.feito .mk-caixa::after{content:'✓';color:#fff;font-weight:700;font-size:18px}
+.mk-item input:focus-visible + .mk-caixa{outline:2px solid var(--yellow);outline-offset:2px}
+.mk-item.trava{cursor:default}
+.mk-item.trava:not(.feito) .mk-caixa{opacity:.4}
+.mk-txt{flex:1;font-size:16px;line-height:1.35}
+.mk-txt small{display:block;color:#3DAA35;font-size:13px;margin-top:3px}
+.mk-ed{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.mk-ed span:first-child{flex:1}
+.mk-ed-b{display:flex;gap:4px}
+.mid-apoio{border:1px dashed var(--line);border-radius:12px;padding:6px 10px;margin:12px 0}
+.mid-apoio summary{cursor:pointer;color:var(--muted);font-size:14px;padding:6px 0}

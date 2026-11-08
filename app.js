@@ -30,7 +30,7 @@ const S = { pronto:false, sessao:undefined, uid:null, email:'', cfg:null, cfgLoa
   mes: new Date().toISOString().slice(0,7) };
 const TABS = [
   {id:'inicio', label:'Início', ic:'🏠'}, {id:'escala', label:'Escala', ic:'📋'}, {id:'avisos', label:'Avisos', ic:'📣'},
-  {id:'checkin', label:'Check-in', ic:'✅', gestao:true}, {id:'historico', label:'Histórico', ic:'🕘', owner:true},
+  {id:'checkin', label:'Check-in', ic:'✅', gestao:true}, {id:'midia', label:'Checklist', ic:'🎬', midia:true}, {id:'historico', label:'Histórico', ic:'🕘', owner:true},
   {id:'ajustes', label:'Ajustes', ic:'⚙️', owner:true}, {id:'ajuda', label:'Ajuda', ic:'❓', hidden:true}];
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -86,6 +86,7 @@ const LOUVOR_CON = ['flechas','forasteiros','herois'];
 const semAcento = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase();
 const podeLouvor = () => { const p = pessoaDe(S.uid); return ehEquipe(p) && LOUVOR_CON.includes(semAcento(conexaoNome(p.conexao))); };
 const temGestao = () => isAdm() || !!(pessoaDe(S.uid)||{}).gestao;
+const temMidia = () => isAdm() || !!(pessoaDe(S.uid)||{}).midia;
 // Quem está escalado no Staff, função Check-in, em algum culto de hoje até daqui a 6 dias, também faz o check-in (só desse dia).
 // Ligação pelo nome escrito na escala: NOME E SOBRENOME (2 palavras ou mais), todas dentro do nome completo do cadastro.
 // Só para quem é admin, líder, auxiliar ou organização (quem é só consulta não ganha). Mesma regra do banco (nome_bate).
@@ -183,8 +184,9 @@ async function carregarPrivado(){ await Promise.all([carregarPessoas(), carregar
 // Tempo real: quando algo muda no banco, recarrega só aquela parte.
 const RECARGA = {
   config: () => carregarConfig(), pessoas: async () => { await carregarPessoas(); fecharChat(); if ($('#dlg').open) $('#dlg').close(); }, cadastros: () => carregarPessoas(),
-  escalas: () => Promise.all([carregarProx(), carregarMes(), S.ckD ? ckCarregarDocs() : null]),
+  escalas: () => Promise.all([carregarProx(), carregarMes(), S.ckD ? ckCarregarDocs() : null, MK.data ? mkCarregarEscala() : null]),
   avisos: () => carregarAvisos(), eventos: () => carregarEventos(), checkin_marcas: () => S.ckD ? ckCarregarMarcas() : null,
+  checklist_marcas: () => MK.data ? mkCarregarMarcas() : null, checklist_itens: () => MK.itens ? mkCarregarItens() : null,
   chat: () => carregarChat().then(chatAtualizado) };
 const pendRecarga = {};
 function agendarRecarga(tabela){
@@ -317,7 +319,7 @@ async function aplicarSessao(session){
     try { await sb.from('acessos').upsert({id:uid, email:S.email, visto:new Date().toISOString()}); } catch(e){}
     try { if (!localStorage.getItem('tutorialVisto')) { S.tab = 'ajuda'; localStorage.setItem('tutorialVisto', '1'); } } catch(e){}
   } else if (!TABS.some(t => t.id===S.tab && !t.owner && !t.gestao)) S.tab = 'inicio';
-  histCache = null;
+  histCache = null; MK.itens = null; MK.chave = null; MK.editar = false;
   if (!uid) { fecharChat(); CHAT.msgs = []; }
   if (S.pronto) await carregarPrivado();
 }
@@ -385,7 +387,7 @@ const cultoTitulo = c => { const i = cultoInfo(c.culto); return 'Culto da '+i.no
 
 /* ---------- navegação ---------- */
 function renderTabs(){
-  $('#tabs').innerHTML = TABS.filter(t=>!t.hidden && (!t.owner || isAdm()) && (!t.gestao || veCheckin())).map(t =>
+  $('#tabs').innerHTML = TABS.filter(t=>!t.hidden && (!t.owner || isAdm()) && (!t.gestao || veCheckin()) && (!t.midia || temMidia())).map(t =>
     '<button data-tab="'+t.id+'"'+(S.tab===t.id?' aria-current="page"':'')+'><span class="ic" aria-hidden="true">'+t.ic+'</span>'+t.label+(t.id==='ajustes' && isAdm() && pendentes().length ? '<span class="badge">'+pendentes().length+'</span>' : '')+'</button>').join('');
 }
 $('#tabs').addEventListener('click', e => { const b=e.target.closest('button[data-tab]'); if(!b) return; S.tab=b.dataset.tab; S.det=null; history.replaceState(null,'','#'+S.tab); renderTabs(); render(); window.scrollTo(0,0); });
@@ -394,14 +396,14 @@ function render(){
   if (!S.pronto) return;
   if (document.querySelector('#dlg[open]')) return;
   const abertos = [...document.querySelectorAll('details.area[open]')].map(d => d.dataset.k);
-  $('#subtitle').textContent = papelTexto() + (!isAdm() && pessoaDe(S.uid) ? [pessoaDe(S.uid).gestao?' · Gestão':'', pessoaDe(S.uid).ministro?' · Ministro':'', pessoaDe(S.uid).avisos?' · Avisos/Eventos':'', pessoaDe(S.uid).escala?' · Escala':''].join('') : '');
+  $('#subtitle').textContent = papelTexto() + (!isAdm() && pessoaDe(S.uid) ? [pessoaDe(S.uid).gestao?' · Gestão':'', pessoaDe(S.uid).ministro?' · Ministro':'', pessoaDe(S.uid).avisos?' · Avisos/Eventos':'', pessoaDe(S.uid).escala?' · Escala':'', pessoaDe(S.uid).midia?' · Mídia':''].join('') : '');
   renderWho();
   const v = $('#view');
   if (!S.cfgLoaded) { v.innerHTML='<div class="empty">Carregando o painel…</div>'; return; }
   const t = TABS.find(x => x.id === S.tab);
-  if (!t || (t.owner && !isAdm()) || (t.gestao && !veCheckin())) S.tab = 'inicio';
+  if (!t || (t.owner && !isAdm()) || (t.gestao && !veCheckin()) || (t.midia && !temMidia())) S.tab = 'inicio';
   if (!S.cfg && S.tab!=='ajustes') { v.innerHTML = isAdm() ? '<div class="empty">O painel ainda não está configurado.<br><br><button class="btn" data-go="ajustes">Configurar agora</button></div>' : '<div class="empty">Não foi possível carregar o painel agora. Confira a internet e tente de novo.</div>'; return; }
-  const fns = {inicio:viewInicio, escala:viewEscala, checkin:viewCheckin, avisos:viewAvisos, historico:viewHistorico, ajustes:viewAjustes, ajuda:viewAjuda};
+  const fns = {inicio:viewInicio, escala:viewEscala, checkin:viewCheckin, midia:viewMidia, avisos:viewAvisos, historico:viewHistorico, ajustes:viewAjustes, ajuda:viewAjuda};
   v.innerHTML = bannerCadastro() + fns[S.tab]();
   let k = 0; document.querySelectorAll('details.area').forEach(d => { d.dataset.k = S.tab+(k++); if (abertos.includes(d.dataset.k)) d.open = true; });
   if (S.tab==='historico' && isAdm()) carregarHistorico();
@@ -686,7 +688,8 @@ function abrir(html, onSubmit, onReady){
 const slotNome = (f, i, j, v) => '<input class="inp" name="f'+i+'_'+j+'" aria-label="'+esc(f.nome)+' '+(j+1)+'" placeholder="Nome '+(j+1)+'" value="'+esc(v||'')+'">';
 document.addEventListener('click', e => { const b = e.target.closest('[data-mais]'); if (!b) return; const grade = b.previousElementSibling; const i = b.dataset.mais, j = grade.children.length;
   grade.insertAdjacentHTML('beforeend', '<input class="inp" name="f'+i+'_'+j+'" placeholder="Nome '+(j+1)+'">'); grade.lastElementChild.focus(); });
-const midiaFixos = () => Array.isArray(S.cfg && S.cfg.midiaFixos) ? S.cfg.midiaFixos : ['Pedro Morais', 'Augusto'];
+// Mídia: Apoio 1 e Apoio 2 têm pessoa fixa (config.midiaFixos); o trio do culto fica em Projeção, Transmissão e Câmera.
+const midiaFixos = () => { const f = S.cfg && S.cfg.midiaFixos; return f && !Array.isArray(f) && typeof f === 'object' ? f : {'Apoio 1':'Pedro Morais', 'Apoio 2':'Augusto Cantuaria'}; };
 function camposArea(a, x){
   const minhasCon = conexoes();
   let h = '';
@@ -694,14 +697,17 @@ function camposArea(a, x){
   else if (a.porConexao) h += '<label class="f">Conexões responsáveis</label><div class="chips" style="flex-wrap:wrap">'+minhasCon.map(c => '<label class="chip"><input type="checkbox" name="conexoes" value="'+esc(c.id)+'"'+(conexoesDe(x).includes(c.id)?' checked':'')+'> '+esc(c.nome)+'</label>').join('')+'</div><div class="hint">Marque mais de uma quando servirem juntas.</div>';
   a.funcoes.forEach((f, i) => {
     let salvo = x ? ((x.funcoes||[]).find(g=>g.nome===f.nome)||{}).pessoas || [] : [];
-    // Mídia: as pessoas fixas (Ajustes → midiaFixos) já aparecem preenchidas; o banco também garante isso ao salvar.
-    if (a.id === 'midia' && i === 0) salvo = [...salvo, ...midiaFixos().filter(n => !salvo.some(p => normNome(p) === normNome(n)))];
+    // Mídia: Apoio 1 e Apoio 2 já vêm com a pessoa fixa (o banco também garante); ficam recolhidos, para trocar só se alguém faltar.
+    const fixo = a.id === 'midia' ? midiaFixos()[f.nome] : null;
+    if (fixo && !salvo.some(n => String(n).trim())) salvo = [fixo];
+    if (fixo && !h.includes('mid-apoio')) h += '<details class="mid-apoio"><summary>Apoio 1 e Apoio 2 (fixos: '+esc(Object.values(midiaFixos()).join(' e '))+') · trocar só se alguém faltar</summary>';
     h += '<fieldset class="fs"><legend>'+esc(f.nome)+(f.vagas?' · '+f.vagas+(f.vagas>1?' pessoas':' pessoa'):'')+'</legend>';
     // Uma caixa por pessoa; o botão "+" acrescenta mais uma, mesmo além do número de vagas.
     h += '<div class="slotgrid">'+Array.from({length:Math.max(f.vagas||1, salvo.length)}, (_,j) => slotNome(f, i, j, salvo[j])).join('')+'</div>'
       + '<button type="button" class="btn ghost small mais" data-mais="'+i+'">+ Mais uma pessoa</button>';
     h += '</fieldset>';
   });
+  if (h.includes('mid-apoio')) h += '</details>';
   h += '<label class="f" for="fObs">Observação (opcional)</label><input class="inp" id="fObs" name="obs" value="'+esc(x?x.obs||'':'')+'">';
   return blocoPreencher() + h;
 }
@@ -986,6 +992,131 @@ function ckAbrir(){
   S.ckMarks = {}; S.ckOk = false;
   Promise.all([ckCarregarDocs(), ckCarregarMarcas()]).catch(e => console.warn(e)).finally(() => { S.ckOk = true; if (S.tab==='checkin') render(); });
 }
+/* ---------- CHECKLIST DA MÍDIA ---------- */
+// Itens (checklist_itens) por função e bloco; marcações (checklist_marcas) por culto (data + culto).
+// Quem pode marcar é decidido no banco (RLS); aqui a tela só bloqueia as caixas e explica o porquê.
+const MID_FUNCOES = ['Projeção', 'Transmissão', 'Câmera', 'Apoio 1', 'Apoio 2'];
+const MK = { data:null, culto:null, chave:null, ok:false, itens:null, marcas:{}, esc:null, editar:false, fnEd:'Projeção' };
+const horaSP = iso => new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo'});
+// Mesma regra do banco (midia_nome_bate): apelido igual, nome completo igual, ou nome e sobrenome dentro do nome completo.
+const midiaNomeBate = (n, p) => { const e = normNome(n); if (!e || !p) return false; return (normNome(p.apelido) && e === normNome(p.apelido)) || e === normNome(p.nome) || nomeBate(n, p); };
+const mkFuncoesDe = esc => MID_FUNCOES.map(nome => ({nome, pessoas: (((esc && esc.funcoes)||[]).find(f => normNome(f.nome) === normNome(nome))||{}).pessoas || []}));
+const mkMinhas = () => { const p = pessoaDe(S.uid); if (!p || !(p.midia || isAdm())) return []; return mkFuncoesDe(MK.esc).filter(f => f.pessoas.some(n => midiaNomeBate(n, p))).map(f => f.nome); };
+const mkPodeMarcar = fn => isAdm() || (temMidia() && MK.data === hoje() && mkMinhas().includes(fn));
+function mkPadrao(){
+  const hj = cultos().filter(c => !horaPassou(hoje(), c.hora));
+  if (diasCulto().includes(new Date(hoje()+'T12:00:00').getDay()) && hj.length) return {data:hoje(), culto:hj[0].id};
+  let d = somaDias(hoje(), 1); for (let i = 0; i < 14 && !diasCulto().includes(new Date(d+'T12:00:00').getDay()); i++) d = somaDias(d, 1);
+  return {data:d, culto:(cultos()[0]||{}).id};
+}
+async function mkCarregarItens(){ const r = await sb.from('checklist_itens').select('*').order('ordem'); if (r.error) { console.warn(r.error); MK.itens = MK.itens || []; return; } MK.itens = r.data || []; }
+async function mkCarregarMarcas(){ const d = MK.data, c = MK.culto; const r = await sb.from('checklist_marcas').select('*').eq('data', d).eq('culto', c);
+  if (r.error) { console.warn(r.error); return; } if (d !== MK.data || c !== MK.culto) return; const m = {}; (r.data||[]).forEach(x => m[x.item] = x); MK.marcas = m; }
+async function mkCarregarEscala(){ const d = MK.data, c = MK.culto; const r = linhas(await sb.from('escalas').select('id,d').eq('data', d).eq('culto', c).eq('area', 'midia')); if (d === MK.data && c === MK.culto) MK.esc = r[0] || null; }
+function mkAbrir(){
+  if (!MK.data) { const p = mkPadrao(); MK.data = p.data; MK.culto = p.culto; }
+  const chave = MK.data+'_'+MK.culto; if (MK.chave === chave) return; MK.chave = chave; MK.ok = false; MK.marcas = {}; MK.esc = null;
+  Promise.all([MK.itens ? null : mkCarregarItens(), mkCarregarMarcas(), mkCarregarEscala()]).catch(e => console.warn(e)).finally(() => { MK.ok = true; if (S.tab === 'midia') render(); });
+}
+// Itens a mostrar num culto: os ativos + os já removidos que tenham marcação nele (histórico).
+const mkItensDe = fn => (MK.itens||[]).filter(i => i.funcao === fn && (i.ativo || MK.marcas[i.id])).sort((a, b) => a.ordem - b.ordem);
+const mkBlocos = itens => { const bs = []; itens.forEach(i => { let b = bs.find(x => x.nome === i.bloco); if (!b) bs.push(b = {nome:i.bloco, itens:[]}); b.itens.push(i); }); return bs; };
+function viewMidia(){
+  if (!temMidia()) return '<div class="empty">Só quem tem o cargo Mídia (e os administradores) vê esta aba.</div>';
+  if (MK.editar && isAdm()) return viewMidiaEditar();
+  mkAbrir();
+  let h = '<div class="bar"><h2 style="font-size:22px">Checklist da Mídia</h2><span style="flex:1"></span>'+(isAdm() ? '<button class="btn ghost small" data-mk-editar>✏️ Editar itens</button>' : '')+'</div>'
+    + '<div class="card"><label class="f" for="mkD" style="margin-top:0">Culto</label><input class="inp" type="date" id="mkD" value="'+esc(MK.data)+'">'
+    + '<div class="chips" style="margin-top:10px">'+cultos().map(c => '<button class="chip" aria-pressed="'+(c.id===MK.culto)+'" data-mk-culto="'+esc(c.id)+'">'+esc(c.nome)+(c.hora?' · '+esc(c.hora):'')+'</button>').join('')+'</div>'
+    + '<div class="meta" style="margin-top:8px">'+esc(fmtDia(MK.data))+(MK.data === hoje() ? ' · <b>hoje</b>' : '')+'</div></div>';
+  if (!MK.ok) return h + '<div class="empty">Carregando…</div>';
+  const minhas = mkMinhas();
+  if (minhas.length) h += '<div class="mk-eu">Sua função neste culto: <b>'+minhas.map(esc).join(' e ')+'</b>'+(MK.data !== hoje() ? '<br><small>Você poderá marcar no dia do culto.</small>' : '')+'</div>';
+  else if (isAdm()) h += '<div class="notice">Administrador: você vê todos os checklists e pode marcar ou desmarcar qualquer item.</div>';
+  else h += '<div class="notice">Você não está escalado(a) neste culto. Pode ver os checklists, mas não marcar.</div>';
+  if (!MK.esc) h += '<div class="notice">A escala da Mídia deste culto ainda não foi montada.</div>';
+  const ordem = [...minhas, ...MID_FUNCOES.filter(f => !minhas.includes(f))];
+  ordem.forEach(fn => {
+    const itens = mkItensDe(fn), feitos = itens.filter(i => MK.marcas[i.id]).length, quem = (mkFuncoesDe(MK.esc).find(f => f.nome === fn)||{}).pessoas || [];
+    const pode = mkPodeMarcar(fn), minha = minhas.includes(fn);
+    h += '<section class="card mk-fn'+(minha ? ' minha' : '')+'"><h3>'+esc(fn)+(minha ? ' <span class="tag">você</span>' : '')+'</h3><div class="meta">'+(quem.length ? esc(quem.join(', ')) : 'Ninguém escalado')+'</div>';
+    if (!itens.length) { h += '<p class="empty" style="margin:10px 0 0;padding:12px">Checklist ainda não cadastrado.</p></section>'; return; }
+    h += '<div class="mk-prog"><div class="mk-barra"><i style="width:'+Math.round(100*feitos/itens.length)+'%"></i></div><b>'+esc(fn)+' '+feitos+'/'+itens.length+'</b></div>';
+    mkBlocos(itens).forEach(b => {
+      h += '<h4 class="mk-bloco">'+esc(b.nome)+'</h4>';
+      b.itens.forEach(i => { const m = MK.marcas[i.id]; const trava = !pode || (m && !(isAdm() || m.por === S.uid));
+        h += '<label class="mk-item'+(m ? ' feito' : '')+(trava ? ' trava' : '')+'"><input type="checkbox" data-mk="'+esc(i.id)+'"'+(m ? ' checked' : '')+(trava ? ' disabled' : '')+'><span class="mk-caixa" aria-hidden="true"></span>'
+          + '<span class="mk-txt">'+esc(i.texto)+(m ? '<small>✔ '+esc(m.por_nome || 'Alguém')+' · '+esc(horaSP(m.em))+'</small>' : '')+'</span></label>'; });
+    });
+    h += '</section>';
+  });
+  return h;
+}
+async function mkMarcar(id, marcar){
+  const i = (MK.itens||[]).find(x => x.id === id); if (!i) return;
+  if (!mkPodeMarcar(i.funcao)) { toast(MK.data === hoje() ? 'Você não está escalado(a) nesta função neste culto.' : 'Só dá para marcar no dia do culto.'); render(); return; }
+  const ant = MK.marcas[id];
+  if (marcar) MK.marcas = {...MK.marcas, [id]: {item:id, por:S.uid, por_nome:nome(S.uid), em:new Date().toISOString()}};
+  else { const m = {...MK.marcas}; delete m[id]; MK.marcas = m; }
+  render();
+  try {
+    const r = marcar ? await sb.from('checklist_marcas').insert({data:MK.data, culto:MK.culto, item:id})
+      : await sb.from('checklist_marcas').delete().eq('data', MK.data).eq('culto', MK.culto).eq('item', id).select('item');
+    if (r.error) throw r.error;
+    if (!marcar && !(r.data||[]).length) throw new Error('Só quem marcou ou um administrador pode desmarcar.');
+  } catch(e){ console.warn(e); toast(/desmarcar/.test(e.message||'') ? e.message : 'Não foi possível salvar. Confira se você está escalado(a) neste culto.'); const m = {...MK.marcas}; if (ant) m[id] = ant; else delete m[id]; MK.marcas = m; }
+  await mkCarregarMarcas(); render();
+}
+document.addEventListener('change', e => { const t = e.target;
+  if (t.dataset && t.dataset.mk) { mkMarcar(t.dataset.mk, t.checked); return; }
+  if (t.id === 'mkD' && t.value) { MK.data = t.value; render(); } });
+document.addEventListener('click', e => { const c = e.target.closest('[data-mk-culto]'); if (c) { MK.culto = c.dataset.mkCulto; render(); }
+  if (e.target.closest('[data-mk-editar]')) { MK.editar = true; render(); window.scrollTo(0,0); }
+  if (e.target.closest('[data-mk-voltar]')) { MK.editar = false; render(); } });
+
+// Administrador: adicionar, editar, reordenar e remover itens.
+function viewMidiaEditar(){
+  if (!MK.itens) { mkCarregarItens().then(render); return '<div class="empty">Carregando…</div>'; }
+  const fn = MK.fnEd, itens = (MK.itens||[]).filter(i => i.funcao === fn && i.ativo).sort((a, b) => a.ordem - b.ordem), blocos = mkBlocos(itens);
+  let h = '<button class="btn ghost small" data-mk-voltar>‹ Voltar ao checklist</button><h2 style="font-size:22px;margin-top:12px">Editar itens do checklist</h2>'
+    + '<div class="chips" style="flex-wrap:wrap">'+MID_FUNCOES.map(f => '<button class="chip" aria-pressed="'+(f===fn)+'" data-mk-fn="'+esc(f)+'">'+esc(f)+'</button>').join('')+'</div>';
+  if (!itens.length) h += '<div class="empty">'+esc(fn)+': nenhum item ainda.</div>';
+  blocos.forEach(b => { h += '<section class="card"><h3>'+esc(b.nome)+'</h3>' + b.itens.map(i => { const k = itens.indexOf(i);
+    return '<div class="mk-ed"><span>'+esc(i.texto)+'</span><span class="mk-ed-b"><button class="icon-btn" data-mk-sobe="'+esc(i.id)+'"'+(k===0?' disabled':'')+' aria-label="Subir">↑</button><button class="icon-btn" data-mk-desce="'+esc(i.id)+'"'+(k===itens.length-1?' disabled':'')+' aria-label="Descer">↓</button><button class="icon-btn" data-mk-edita="'+esc(i.id)+'" aria-label="Editar">✏️</button><button class="icon-btn" data-mk-remove="'+esc(i.id)+'" aria-label="Remover">🗑</button></span></div>'; }).join('') + '</section>'; });
+  h += '<section class="card"><h3>Adicionar item em '+esc(fn)+'</h3><form id="mkNovo"><label class="f" for="mkB">Bloco</label><input class="inp" id="mkB" name="bloco" required list="mkBlocos" placeholder="Ex.: Bloco 1 – Backgrounds">'
+    + '<datalist id="mkBlocos">'+blocos.map(b => '<option value="'+esc(b.nome)+'">').join('')+'</datalist>'
+    + '<label class="f" for="mkT">Item</label><input class="inp" id="mkT" name="texto" required maxlength="300">'
+    + '<div class="end"><button class="btn" type="submit">Adicionar</button></div><p class="hint">Escolha um bloco que já existe (aparece na lista) ou escreva o nome de um bloco novo. O item entra no fim do bloco.</p></form></section>';
+  return h;
+}
+async function mkSalvarItem(id, dados, resumo){
+  const r = id ? await sb.from('checklist_itens').update(dados).eq('id', id) : await sb.from('checklist_itens').insert(dados);
+  if (r.error) { falhaEscrita(r.error); return false; }
+  await logar(id ? 'editou' : 'criou', 'checklist', resumo, null, null); await mkCarregarItens(); render(); return true;
+}
+document.addEventListener('click', async e => { if (!isAdm()) return; const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.mkFn) { MK.fnEd = b.dataset.mkFn; render(); return; }
+  const lista = () => (MK.itens||[]).filter(i => i.funcao === MK.fnEd && i.ativo).sort((a, b) => a.ordem - b.ordem);
+  const mover = async (id, dir) => { const l = lista(), k = l.findIndex(i => i.id === id), o = l[k + dir]; if (!o) return; const a = l[k];
+    // Troca de lugar com o vizinho; se mudar de bloco, o item passa para o bloco do vizinho.
+    const r1 = await sb.from('checklist_itens').update({ordem:o.ordem, bloco:o.bloco}).eq('id', a.id), r2 = await sb.from('checklist_itens').update({ordem:a.ordem}).eq('id', o.id);
+    if (r1.error || r2.error) { falhaEscrita(r1.error || r2.error); return; } await mkCarregarItens(); render(); };
+  if (b.dataset.mkSobe) await mover(b.dataset.mkSobe, -1);
+  if (b.dataset.mkDesce) await mover(b.dataset.mkDesce, 1);
+  if (b.dataset.mkRemove) { const i = lista().find(x => x.id === b.dataset.mkRemove); if (i && await confirmar('Remover o item "'+i.texto+'" de '+i.funcao+'?\nAs marcações dos cultos anteriores continuam no histórico.')) await mkSalvarItem(i.id, {ativo:false}, 'Checklist da Mídia · '+i.funcao+': removeu "'+i.texto+'"'); }
+  if (b.dataset.mkEdita) { const i = lista().find(x => x.id === b.dataset.mkEdita); if (!i) return;
+    abrir('<form><h2>Editar item</h2><label class="f" for="mkEB">Bloco</label><input class="inp" id="mkEB" name="bloco" required value="'+esc(i.bloco)+'"><label class="f" for="mkET">Item</label><input class="inp" id="mkET" name="texto" required maxlength="300" value="'+esc(i.texto)+'">'
+      + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Salvar</button></div></form>',
+      async fd => mkSalvarItem(i.id, {bloco:String(fd.get('bloco')).trim(), texto:String(fd.get('texto')).trim()}, 'Checklist da Mídia · '+i.funcao+': editou "'+i.texto+'"')); }
+});
+document.addEventListener('submit', async e => { if (e.target.id !== 'mkNovo' || !isAdm()) return; e.preventDefault();
+  const fd = new FormData(e.target), bloco = String(fd.get('bloco')).trim(), texto = String(fd.get('texto')).trim(); if (!bloco || !texto) return;
+  const l = (MK.itens||[]).filter(i => i.funcao === MK.fnEd && i.ativo).sort((a, b) => a.ordem - b.ordem), doBloco = l.filter(i => i.bloco === bloco);
+  let ordem; if (doBloco.length) { const ult = doBloco[doBloco.length-1], prox = l[l.indexOf(ult)+1]; ordem = prox ? (Number(ult.ordem) + Number(prox.ordem)) / 2 : Number(ult.ordem) + 10; }
+  else ordem = (l.length ? Number(l[l.length-1].ordem) : 0) + 10;
+  if (await mkSalvarItem(null, {funcao:MK.fnEd, bloco, texto, ordem}, 'Checklist da Mídia · '+MK.fnEd+': adicionou "'+texto+'"')) toast('Item adicionado.');
+});
+
 function viewCheckin(){
   if (!veCheckin()) return '<div class="empty">Só administradores, a Gestão e quem está escalado no check-in acessam esta aba.</div>';
   ckAbrir(); const fixo = ckEscalado();
@@ -1222,6 +1353,7 @@ async function planejar(itens){
       const p = plano.get(id); p.d.funcoes = p.d.funcoes || [];
       if (a.porConexao) { const {ok, fora:f} = lerConexoes(i.valor); f.forEach(t => fora.push(fmtCurto(i.data)+' · '+a.nome+': "'+t+'"'));
         if (ok.length) { const mudou = JSON.stringify(conexoesDe(p.d)) !== JSON.stringify(ok); p.d.conexoes = ok; p.d.conexao = ok[0]; if (mudou && p.x && conexoesDe(p.x).length) p.d.funcoes = a.funcoes.map(f => ({nome:f.nome, pessoas:[]})); } }
+      else if (a.id === 'midia' && !i.funcao) { const ns = lerNomes(i.valor); if (ns.length) p.d.funcoes = [{nome:'Mídia', pessoas:ns}]; } // o banco distribui: fixos nos Apoios, os outros em Projeção, Transmissão e Câmera
       else { const fn = i.funcao || (a.funcoes[0]||{}).nome; let g = p.d.funcoes.find(f => f.nome === fn); if (!g) { g = {nome:fn, pessoas:[]}; p.d.funcoes.push(g); } const ns = lerNomes(i.valor); if (ns.length) g.pessoas = ns; }
     });
   });
@@ -1428,7 +1560,7 @@ document.addEventListener('click', async e => {
 let histCache = null, histCarregando = false, histTipo = 'todos';
 function viewHistorico(){
   if (!isAdm()) return '<div class="empty">Só administradores acessam o histórico.</div>';
-  const tipos = [{id:'todos',nome:'Tudo'},{id:'escala',nome:'Escalas'},{id:'aviso',nome:'Avisos'},{id:'evento',nome:'Agenda'},{id:'config',nome:'Ajustes e pessoas'}];
+  const tipos = [{id:'todos',nome:'Tudo'},{id:'escala',nome:'Escalas'},{id:'aviso',nome:'Avisos'},{id:'evento',nome:'Agenda'},{id:'config',nome:'Ajustes e pessoas'},{id:'checklist',nome:'Checklist da Mídia'}];
   const top = '<div class="bar"><h2 style="font-size:22px">Histórico de alterações</h2><span style="flex:1"></span><button class="btn ghost small" data-hist-reload>Atualizar</button><button class="btn ghost small" data-hist-csv>Baixar</button></div>'
     + '<div class="chips">'+tipos.map(t=>'<button class="chip" data-hist-tipo="'+t.id+'" aria-pressed="'+(histTipo===t.id)+'">'+t.nome+'</button>').join('')+'</div>';
   if (!histCache) return top + '<div class="empty">Carregando histórico…</div>';
@@ -1482,9 +1614,10 @@ function viewAjuda(){
   h += passo('5. Preencher a escala da sua conexão', ['Na aba <b>Escala</b>, encontre o domingo em que a sua conexão está na Direção do culto ou no Super Kids.', 'Toque no nome da sua conexão e depois em <b>Preencher escala</b> (ou <b>Editar escala</b>).', 'Digite os nomes em cada função. Vaga vazia aparece como “vaga aberta”.', 'Toque em <b>Salvar escala</b>. Pronto, todo mundo já vê.', 'Você só consegue editar os dias da sua conexão. As conexões Flechas, Forasteiros e Heróis também preenchem o Louvor. Quem tem a permissão <b>Escala</b> preenche a Direção do culto e o Super Kids de qualquer conexão.']);
   h += passo('6. Imprimir o check-in (Gestão)', ['Na aba <b>Escala</b>, no final de cada linha, toque em <b>Baixar PDF</b> ou <b>Baixar Excel</b>.', 'Na tela inicial também há o botão <b>Check-in do dia</b>.', 'A folha sai com Função, Nome, Check-in e as assinaturas de retirada e de devolução do equipamento e do crachá.', 'No dia, use a aba <b>Check-in</b> para marcar quem chegou, quem retirou e quem devolveu. As marcações aparecem na hora em todos os celulares.']);
   h += passo('7. Avisos, agenda da semana e eventos', ['Na aba <b>Avisos</b> ficam, nesta ordem: os <b>avisos</b>, a <b>agenda da semana</b> e os <b>eventos</b>. Use os botões no topo para ir direto a cada parte.', 'A agenda da semana também aparece na <b>Início</b>, com o que ainda falta acontecer.', 'Quando houver, toque em <b>Fazer inscrição</b> ou no botão do WhatsApp.', 'Quem tem a permissão <b>Avisos/Eventos</b> publica pelo botão <b>+</b>. Na agenda da semana, escreva uma atividade por linha: <b>data | nome | horário | local</b> (ex.: 27/10 | Ensaio do coro | 19h30 | Auditório) Cada dia some sozinho quando passa.']);
+  if (temMidia()) h += passo('Checklist da Mídia', ['Na aba <b>Checklist</b> aparece o próximo culto (ou o de hoje). Use a data e os botões Manhã/Noite para ver outros cultos.', 'Sua função no culto (Projeção, Transmissão, Câmera, Apoio 1 ou Apoio 2) aparece em destaque, com o seu checklist primeiro.', 'Toque em cada item para marcar. Fica salvo na hora, com o seu nome e o horário. Para desmarcar, toque de novo (só quem marcou ou um administrador).', 'Você só marca no <b>dia do culto</b> em que está escalado(a), e só os itens da sua função. Os das outras funções você vê sem poder marcar.']);
   if (isAdm()) {
     h += passo('8. Histórico', ['A aba <b>Histórico</b> mostra tudo o que foi criado, editado ou excluído: quem fez, o quê, e a data e a hora.']);
-    h += passo('9. Para administradores', ['Em <b>Ajustes</b> → <b>Pessoas e permissões</b>, toque em <b>Aprovar</b> na pessoa, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Sem tocar em Aprovar, ela continua <b>Pendente</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, Word, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
+    h += passo('9. Para administradores', ['Em <b>Ajustes</b> → <b>Pessoas e permissões</b>, toque em <b>Aprovar</b> na pessoa, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Sem tocar em Aprovar, ela continua <b>Pendente</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, Word, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Mídia: marque o extra <b>Mídia</b> em Pessoas e permissões para a pessoa ver o Checklist. Na escala da Mídia, escreva o trio em <b>Projeção</b>, <b>Transmissão</b> e <b>Câmera</b>; Apoio 1 e Apoio 2 já vêm preenchidos (troque só se alguém faltar). Os itens do checklist são editados na aba Checklist → <b>Editar itens</b>.', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);
   }
   h += '<div class="end" style="justify-content:center;margin:18px 0"><button class="btn" data-go="inicio">Começar a usar</button></div>';
   return h;
@@ -1527,7 +1660,7 @@ function viewAjustes(){
       const wpp = base.whatsapp || (ped && ped.whatsapp) || '';
       return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+(emailDe(id) && nomeComp(id)!==emailDe(id)?'<br><span class="meta">✉️ '+esc(emailDe(id))+'</span>':'')+(wpp?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(wpp).replace(/\D/g,'').length<=11?'55':'')+String(wpp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(wpp)+'</a>':'')+'</td><td>'+celulaStatus(id)+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
         + '<td><select class="inp" data-p-papel="'+esc(id)+'">'+opts(Object.entries(PAPEIS).map(([k,v])=>({id:k,nome:v})), base.papel)+'</select></td>'
-        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; }).join('')
+        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-midia="'+esc(id)+'"'+(atual&&atual.midia?' checked':'')+'> Mídia</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; }).join('')
     + '</tbody></table><div class="end"><button class="btn" data-salvar-pessoas>Salvar pessoas</button></div></div>';
   html += '<p class="hint">Administradores podem tudo (hoje: '+(nAdm+1)+' contando você; o ideal é até 5). Líder, Auxiliar e Organização preenchem a Direção do culto e o Super Kids nos dias em que a conexão deles está escalada; se a conexão for Flechas, Forasteiros ou Heróis, também o Louvor. <b>Extras:</b> Gestão vê a aba Check-in e imprime o check-in (PDF e Excel); Ministro pode editar a escala de Louvor; Avisos/Eventos pode publicar avisos e eventos (e editar ou excluir os que publicou); Escala pode preencher os nomes da Direção do culto e do Super Kids de qualquer conexão. Banco bloqueia alterações, cadastros, envio de mensagens, importações e exportações, mesmo que outros extras estejam marcados.</p>';
   return html;
@@ -1535,7 +1668,7 @@ function viewAjustes(){
 // ---------- Convidar por e-mail ----------
 // O convite deixa a pessoa pré-aprovada: ao fazer o cadastro entrando com ESSE e-mail, ela já fica Aprovada
 // com a função, a conexão e os extras escolhidos (o banco confere o e-mail do login).
-const EXTRAS = [['gestao','Gestão'],['ministro','Ministro'],['avisos','Avisos/Eventos'],['escala','Escala'],['banco','Banco']];
+const EXTRAS = [['gestao','Gestão'],['ministro','Ministro'],['avisos','Avisos/Eventos'],['escala','Escala'],['midia','Mídia'],['banco','Banco']];
 const descConvite = c => PAPEIS[c.papel] + (c.conexao && c.papel !== 'admin' ? ' · ' + conexaoNome(c.conexao) : '') + EXTRAS.filter(([k]) => c[k]).map(([, n]) => ' · ' + n).join('');
 function msgConviteEmail(c){
   const pn = String(c.nome||'').trim().split(' ')[0];
@@ -1634,7 +1767,7 @@ document.addEventListener('click', async e => {
   const pessoas = {};
   document.querySelectorAll('[data-p-papel]').forEach(sel => { const id = sel.dataset.pPapel; const con = document.querySelector('[data-p-con="'+id+'"]').value;
     const ant = S.pessoas[id] || {}; const ped = (S.cadastros||{})[id] || {};
-    pessoas[id] = {id, status:document.querySelector('[data-p-status="'+id+'"]').value, banco:!!document.querySelector('[data-p-banco="'+id+'"]').checked, email: ant.email || ped.email || S.emails[id] || null, papel: sel.value, conexao: con || null, nome: ant.nome || ped.nome || (S.names[id]||{}).nome || '', apelido: ant.apelido || ped.apelido || '', whatsapp: ant.whatsapp || ped.whatsapp || '', gestao: !!(document.querySelector('[data-p-gestao="'+id+'"]')||{}).checked, ministro: !!(document.querySelector('[data-p-min="'+id+'"]')||{}).checked, avisos: !!(document.querySelector('[data-p-av="'+id+'"]')||{}).checked, escala: !!(document.querySelector('[data-p-esc="'+id+'"]')||{}).checked}; });
+    pessoas[id] = {id, status:document.querySelector('[data-p-status="'+id+'"]').value, banco:!!document.querySelector('[data-p-banco="'+id+'"]').checked, email: ant.email || ped.email || S.emails[id] || null, papel: sel.value, conexao: con || null, nome: ant.nome || ped.nome || (S.names[id]||{}).nome || '', apelido: ant.apelido || ped.apelido || '', whatsapp: ant.whatsapp || ped.whatsapp || '', gestao: !!(document.querySelector('[data-p-gestao="'+id+'"]')||{}).checked, ministro: !!(document.querySelector('[data-p-min="'+id+'"]')||{}).checked, avisos: !!(document.querySelector('[data-p-av="'+id+'"]')||{}).checked, escala: !!(document.querySelector('[data-p-esc="'+id+'"]')||{}).checked, midia: !!(document.querySelector('[data-p-midia="'+id+'"]')||{}).checked}; });
   const falta = Object.entries(pessoas).filter(([id,p]) => p.status==='aprovado' && !p.banco && ehEquipe(p) && !p.conexao);
   if (falta.length) { toast('Escolha a conexão de '+falta.map(([id])=>nome(id)).join(', ')+'.'); return; }
   const nAdm = Object.values(pessoas).filter(p=>p.papel==='admin' && p.status==='aprovado' && !p.banco).length;
