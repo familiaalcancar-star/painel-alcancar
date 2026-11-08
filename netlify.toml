@@ -1,6 +1,9 @@
 # Site estático: o Netlify publica a pasta public/ como está (sem etapa de build).
 [build]
   publish = "public"
+  # Cada publicação no Netlify gasta créditos do plano grátis (acabaram em 28/10 por excesso de publicações).
+  # Por isso o Netlify só publica quando a mensagem do commit tem [publicar]; os outros commits são ignorados.
+  ignore = "! git log -1 --pretty=%B | grep -q '\\[publicar\\]'"
 
 [[headers]]
   for = "/*"
@@ -15,10 +18,3 @@
     Cache-Control = "no-cache"
     Service-Worker-Allowed = "/"
 
-# O endereço oficial agora é o GitHub Pages. Quem abrir o link antigo do Netlify
-# é levado automaticamente para o novo (vale assim que o Netlify voltar a publicar).
-[[redirects]]
-  from = "/*"
-  to = "https://familiaalcancar-star.github.io/painel-alcancar/:splat"
-  status = 301
-  force = true
