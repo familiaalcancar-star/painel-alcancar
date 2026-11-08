@@ -996,13 +996,17 @@ function ckAbrir(){
 // Itens (checklist_itens) por função e bloco; marcações (checklist_marcas) por culto (data + culto).
 // Quem pode marcar é decidido no banco (RLS); aqui a tela só bloqueia as caixas e explica o porquê.
 const MID_FUNCOES = ['Projeção', 'Transmissão', 'Câmera', 'Apoio 1', 'Apoio 2'];
+// Checklists: um por função, mas os Apoios 1 e 2 dividem o mesmo checklist "Apoio" (o que um marca aparece para o outro).
+const MID_CHECKLISTS = [{nome:'Projeção', de:['Projeção']}, {nome:'Transmissão', de:['Transmissão']}, {nome:'Câmera', de:['Câmera']}, {nome:'Apoio', de:['Apoio 1', 'Apoio 2']}];
+const mkChecklistDe = fnEscala => (MID_CHECKLISTS.find(c => c.de.includes(fnEscala)) || {}).nome;
 const MK = { data:null, culto:null, chave:null, ok:false, itens:null, marcas:{}, esc:null, editar:false, fnEd:'Projeção' };
 const horaSP = iso => new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo'});
 // Mesma regra do banco (midia_nome_bate): apelido igual, nome completo igual, ou nome e sobrenome dentro do nome completo.
 const midiaNomeBate = (n, p) => { const e = normNome(n); if (!e || !p) return false; return (normNome(p.apelido) && e === normNome(p.apelido)) || e === normNome(p.nome) || nomeBate(n, p); };
 const mkFuncoesDe = esc => MID_FUNCOES.map(nome => ({nome, pessoas: (((esc && esc.funcoes)||[]).find(f => normNome(f.nome) === normNome(nome))||{}).pessoas || []}));
 const mkMinhas = () => { const p = pessoaDe(S.uid); if (!p || !(p.midia || isAdm())) return []; return mkFuncoesDe(MK.esc).filter(f => f.pessoas.some(n => midiaNomeBate(n, p))).map(f => f.nome); };
-const mkPodeMarcar = fn => isAdm() || (temMidia() && MK.data === hoje() && mkMinhas().includes(fn));
+const mkMeusChecklists = () => [...new Set(mkMinhas().map(mkChecklistDe).filter(Boolean))];
+const mkPodeMarcar = ck => isAdm() || (temMidia() && MK.data === hoje() && mkMeusChecklists().includes(ck));
 function mkPadrao(){
   const hj = cultos().filter(c => !horaPassou(hoje(), c.hora));
   if (diasCulto().includes(new Date(hoje()+'T12:00:00').getDay()) && hj.length) return {data:hoje(), culto:hj[0].id};
@@ -1036,10 +1040,10 @@ function viewMidia(){
   else return h + '<div class="notice">Você não está escalado(a) neste culto.</div>';
   if (!MK.esc && isAdm()) h += '<div class="notice">A escala da Mídia deste culto ainda não foi montada.</div>';
   // Admin vê todas as funções; os demais, só a(s) função(ões) em que estão escalados neste culto. Sempre na ordem fixa.
-  const ordem = MID_FUNCOES.filter(f => isAdm() || minhas.includes(f));
-  ordem.forEach(fn => {
-    const itens = mkItensDe(fn), feitos = itens.filter(i => MK.marcas[i.id]).length, quem = (mkFuncoesDe(MK.esc).find(f => f.nome === fn)||{}).pessoas || [];
-    const pode = mkPodeMarcar(fn), minha = minhas.includes(fn);
+  const meus = mkMeusChecklists();
+  MID_CHECKLISTS.filter(c => isAdm() || meus.includes(c.nome)).forEach(c => { const fn = c.nome;
+    const itens = mkItensDe(fn), feitos = itens.filter(i => MK.marcas[i.id]).length, quem = mkFuncoesDe(MK.esc).filter(f => c.de.includes(f.nome)).flatMap(f => f.pessoas);
+    const pode = mkPodeMarcar(fn), minha = meus.includes(fn);
     h += '<section class="card mk-fn'+(minha ? ' minha' : '')+'"><h3>'+esc(fn)+(minha ? ' <span class="tag">você</span>' : '')+'</h3><div class="meta">'+(quem.length ? esc(quem.join(', ')) : 'Ninguém escalado')+'</div>';
     if (!itens.length) { h += '<p class="empty" style="margin:10px 0 0;padding:12px">Checklist ainda não cadastrado.</p></section>'; return; }
     h += '<div class="mk-prog"><div class="mk-barra"><i style="width:'+Math.round(100*feitos/itens.length)+'%"></i></div><b>'+esc(fn)+' '+feitos+'/'+itens.length+'</b></div>';
@@ -1081,7 +1085,7 @@ function viewMidiaEditar(){
   if (!MK.itens) { mkCarregarItens().then(render); return '<div class="empty">Carregando…</div>'; }
   const fn = MK.fnEd, itens = (MK.itens||[]).filter(i => i.funcao === fn && i.ativo).sort((a, b) => a.ordem - b.ordem), blocos = mkBlocos(itens);
   let h = '<button class="btn ghost small" data-mk-voltar>‹ Voltar ao checklist</button><h2 style="font-size:22px;margin-top:12px">Editar itens do checklist</h2>'
-    + '<div class="chips" style="flex-wrap:wrap">'+MID_FUNCOES.map(f => '<button class="chip" aria-pressed="'+(f===fn)+'" data-mk-fn="'+esc(f)+'">'+esc(f)+'</button>').join('')+'</div>';
+    + '<div class="chips" style="flex-wrap:wrap">'+MID_CHECKLISTS.map(c => c.nome).map(f => '<button class="chip" aria-pressed="'+(f===fn)+'" data-mk-fn="'+esc(f)+'">'+esc(f)+'</button>').join('')+'</div>';
   if (!itens.length) h += '<div class="empty">'+esc(fn)+': nenhum item ainda.</div>';
   blocos.forEach(b => { h += '<section class="card"><h3>'+esc(b.nome)+'</h3>' + b.itens.map(i => { const k = itens.indexOf(i);
     return '<div class="mk-ed"><span>'+esc(i.texto)+'</span><span class="mk-ed-b"><button class="icon-btn" data-mk-sobe="'+esc(i.id)+'"'+(k===0?' disabled':'')+' aria-label="Subir">↑</button><button class="icon-btn" data-mk-desce="'+esc(i.id)+'"'+(k===itens.length-1?' disabled':'')+' aria-label="Descer">↓</button><button class="icon-btn" data-mk-edita="'+esc(i.id)+'" aria-label="Editar">✏️</button><button class="icon-btn" data-mk-remove="'+esc(i.id)+'" aria-label="Remover">🗑</button></span></div>'; }).join('') + '</section>'; });
