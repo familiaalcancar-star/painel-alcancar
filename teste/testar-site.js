@@ -50,7 +50,8 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   conferir(await p.isVisible('[data-entrar]'), 'botão Entrar no topo');
   conferir((await p.textContent('#subtitle')).includes('Somente visualização'), 'subtítulo "Somente visualização"');
   const txt = await p.textContent('#view');
-  for (const s of ['Próximo culto','Em seguida','Avisos','Para você','Redes sociais','Sobre nós','Onde estamos','Pasta de Expectativas 2026','VEM E VÊ!']) conferir(txt.includes(s), 'Início mostra "' + s + '"');
+  conferir(txt.includes('Próximo culto') || txt.includes('Hoje'), 'Início mostra "Próximo culto" (ou "Hoje", no domingo)');
+  for (const s of ['Em seguida','Avisos','Para você','Redes sociais','Sobre nós','Onde estamos','Pasta de Expectativas 2026','VEM E VÊ!']) conferir(txt.includes(s), 'Início mostra "' + s + '"');
   conferir(!(await p.$('[data-dia-csv]')), 'sem botões de planilha/check-in');
   conferir(!(await p.$('#cadForm')), 'sem formulário de cadastro');
   conferir(!(await p.$('[data-chat]')), 'sem bate-papo para visitante');
@@ -401,6 +402,13 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     conferir(!JSON.stringify(await abas(p)).includes('Check-in'), 'quem não está escalado no Check-in não vê a aba');
     await p.context().close();
   }
+
+  console.log('Mídia com fixos');
+  p = await abrir('admin', '#escala'); await p.setViewportSize({ width: 1280, height: 900 });
+  await p.click('button.cell[data-det="2026-11-08|manha|midia"]'); await p.click('[data-esc]'); await p.waitForSelector('#dlg[open] [name="f0_0"]');
+  const midia = await p.$$eval('[name^="f0_"]', l => l.map(e => e.value));
+  conferir(midia.includes('Pedro Morais') && midia.includes('Augusto') && midia.filter(n => n === 'Augusto').length === 1, 'Mídia já abre com Pedro Morais e Augusto (sem duplicar)');
+  await p.context().close();
 
   console.log('Notificações');
   p = await abrir('admin');

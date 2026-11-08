@@ -686,13 +686,16 @@ function abrir(html, onSubmit, onReady){
 const slotNome = (f, i, j, v) => '<input class="inp" name="f'+i+'_'+j+'" aria-label="'+esc(f.nome)+' '+(j+1)+'" placeholder="Nome '+(j+1)+'" value="'+esc(v||'')+'">';
 document.addEventListener('click', e => { const b = e.target.closest('[data-mais]'); if (!b) return; const grade = b.previousElementSibling; const i = b.dataset.mais, j = grade.children.length;
   grade.insertAdjacentHTML('beforeend', '<input class="inp" name="f'+i+'_'+j+'" placeholder="Nome '+(j+1)+'">'); grade.lastElementChild.focus(); });
+const midiaFixos = () => Array.isArray(S.cfg && S.cfg.midiaFixos) ? S.cfg.midiaFixos : ['Pedro Morais', 'Augusto'];
 function camposArea(a, x){
   const minhasCon = conexoes();
   let h = '';
   if (a.porConexao && !isAdm()) h += '<p class="notice" style="margin-top:12px">Conexão: '+esc(conexoesTxt(x) || '—')+'</p>';
   else if (a.porConexao) h += '<label class="f">Conexões responsáveis</label><div class="chips" style="flex-wrap:wrap">'+minhasCon.map(c => '<label class="chip"><input type="checkbox" name="conexoes" value="'+esc(c.id)+'"'+(conexoesDe(x).includes(c.id)?' checked':'')+'> '+esc(c.nome)+'</label>').join('')+'</div><div class="hint">Marque mais de uma quando servirem juntas.</div>';
   a.funcoes.forEach((f, i) => {
-    const salvo = x ? ((x.funcoes||[]).find(g=>g.nome===f.nome)||{}).pessoas || [] : [];
+    let salvo = x ? ((x.funcoes||[]).find(g=>g.nome===f.nome)||{}).pessoas || [] : [];
+    // Mídia: as pessoas fixas (Ajustes → midiaFixos) já aparecem preenchidas; o banco também garante isso ao salvar.
+    if (a.id === 'midia' && i === 0) salvo = [...salvo, ...midiaFixos().filter(n => !salvo.some(p => normNome(p) === normNome(n)))];
     h += '<fieldset class="fs"><legend>'+esc(f.nome)+(f.vagas?' · '+f.vagas+(f.vagas>1?' pessoas':' pessoa'):'')+'</legend>';
     // Uma caixa por pessoa; o botão "+" acrescenta mais uma, mesmo além do número de vagas.
     h += '<div class="slotgrid">'+Array.from({length:Math.max(f.vagas||1, salvo.length)}, (_,j) => slotNome(f, i, j, salvo[j])).join('')+'</div>'
