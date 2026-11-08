@@ -34,7 +34,7 @@ select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a1'
 insert into checklist_marcas(data,culto,item) select hoje_sp(),'manha',id from checklist_itens where funcao='Projeção' order by ordem limit 1;
 select set_config('request.jwt.claim.sub','',false);
 select ok('Marca guarda quem marcou e a função', (select por_nome='Ana' and funcao='Projeção' from checklist_marcas limit 1));
-select ok('Marcar entra no Histórico', exists (select 1 from historico where tipo='checklist' and resumo like '%marcou "Wallpaper%'));
+select ok('Marcar entra no Histórico', exists (select 1 from historico where tipo='checklist' and resumo like '%Projeção: marcou "%'));
 select t('Outra pessoa NÃO desmarca','a2',$q$delete from checklist_marcas where culto='manha'$q$,'bloq');
 select t('Quem marcou NÃO desmarca (só admin)','a1',$q$delete from checklist_marcas where culto='manha'$q$,'bloq');
 select t('Admin desmarca qualquer','0a',$q$delete from checklist_marcas where culto='manha'$q$,'ok');
@@ -48,3 +48,7 @@ select set_config('request.jwt.claim.sub','',false);
 select t('Apoio 1 marca item do Apoio','a1',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Apoio' order by ordem limit 1$q$,'ok');
 select t('Apoio 2 marca item do Apoio','a4',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Apoio' order by ordem limit 1$q$,'ok');
 select t('Apoio NÃO marca item da Projeção','a4',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'bloq');
+-- Orações inicial e final em destaque nos 4 checklists.
+select ok('Orações inicial e final em destaque nas 4 funções', (select count(*) from checklist_itens where destaque and texto in ('Oração inicial','Oração final')) = 8);
+select t('Admin liga/desliga destaque','0a',$q$update checklist_itens set destaque = not destaque where texto='Oração final' and funcao='Apoio'$q$,'ok');
+select t('Não-admin NÃO muda destaque','a1',$q$update checklist_itens set destaque = false where texto='Oração final'$q$,'bloq');

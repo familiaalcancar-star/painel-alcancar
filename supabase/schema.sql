@@ -1346,3 +1346,12 @@ end $$;
 revoke execute on function public.pessoas_papel_midia() from public, anon, authenticated;
 create or replace trigger pessoas_papel_midia before insert or update on public.pessoas
   for each row execute function public.pessoas_papel_midia();
+
+-- ---------- Checklist: destaque e orações inicial/final (08/11/2026) ----------
+alter table public.checklist_itens add column if not exists destaque boolean not null default false;
+
+insert into public.checklist_itens (funcao, bloco, ordem, texto, destaque)
+select f, b, o, t, true
+  from (values ('Projeção'), ('Transmissão'), ('Câmera'), ('Apoio')) fs(f)
+  cross join (values ('Início', 0, 'Oração inicial'), ('Encerramento', 1000, 'Oração final')) it(b, o, t)
+ where not exists (select 1 from public.checklist_itens x where x.funcao = fs.f and x.texto = it.t);
