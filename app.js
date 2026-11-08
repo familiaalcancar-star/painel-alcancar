@@ -1473,7 +1473,8 @@ function abrirItem(tipo, id){
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-abrir]'); if (!b) return; const [t, id] = b.dataset.abrir.split('|'); abrirItem(t, id); });
 // A agenda da semana fica na tabela de avisos com tipo "semana" (mesma permissão Avisos/Eventos).
-const avisosComuns = () => S.avisos.filter(a => a.tipo !== 'semana');
+// soSiteAntigo: aviso que só o endereço antigo (Netlify, parado na versão de 28/10) mostra, mandando para o link novo.
+const avisosComuns = () => S.avisos.filter(a => a.tipo !== 'semana' && !a.soSiteAntigo);
 const semanas = () => S.avisos.filter(a => a.tipo === 'semana' && (a.ate || '') >= hoje() && (a.itens||[]).some(i => i.data >= hoje())).sort((x, y) => (x.de || '').localeCompare(y.de || ''));
 const periodoSemana = w => dataBR(w.de).slice(0,5) + ' a ' + dataBR(w.ate).slice(0,5);
 const diaSemana = d => new Date(d+'T12:00:00').toLocaleDateString('pt-BR', {weekday:'long'});
