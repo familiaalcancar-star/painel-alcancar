@@ -1265,7 +1265,7 @@ create policy ckl_marcas_ler on public.checklist_marcas for select to authentica
 drop policy if exists ckl_marcas_marcar on public.checklist_marcas;
 create policy ckl_marcas_marcar on public.checklist_marcas for insert to authenticated
   with check (is_admin() or (public.tem_midia() and data = public.hoje_sp()
-    and public.midia_escalado(data, culto, (select i.funcao from checklist_itens i where i.id = item and i.ativo))));
+    and exists (select 1 from checklist_itens i where i.id = item and i.ativo))); -- 08/11: todo cargo Mídia marca qualquer item, no dia do culto
 drop policy if exists ckl_marcas_desmarcar on public.checklist_marcas;
 create policy ckl_marcas_desmarcar on public.checklist_marcas for delete to authenticated
   using (is_admin()); -- 08/11: desmarcar é só do administrador
