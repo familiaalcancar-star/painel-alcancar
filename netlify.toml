@@ -14,3 +14,11 @@
   [headers.values]
     Cache-Control = "no-cache"
     Service-Worker-Allowed = "/"
+
+# O endereço oficial agora é o GitHub Pages. Quem abrir o link antigo do Netlify
+# é levado automaticamente para o novo (vale assim que o Netlify voltar a publicar).
+[[redirects]]
+  from = "/*"
+  to = "https://familiaalcancar-star.github.io/painel-alcancar/:splat"
+  status = 301
+  force = true
