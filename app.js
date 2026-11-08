@@ -1039,7 +1039,10 @@ function mkAbrir(){
   Promise.all([MK.itens ? null : mkCarregarItens(), mkCarregarMarcas(), mkCarregarEscala()]).catch(e => console.warn(e)).finally(() => { MK.ok = true; if (S.tab === 'midia') render(); });
 }
 // Itens a mostrar num culto: os ativos + os já removidos que tenham marcação nele (histórico).
-const mkItensDe = fn => (MK.itens||[]).filter(i => i.funcao === fn && (i.ativo || MK.marcas[i.id])).sort((a, b) => a.ordem - b.ordem);
+// "Oração inicial" sempre primeiro e "Oração final" sempre por último; o resto segue a ordem cadastrada.
+const mkFixa = i => { const t = normNome(i.texto); return t === 'oracao inicial' ? -1 : t === 'oracao final' ? 1 : 0; };
+const mkOrdena = (a, b) => mkFixa(a) - mkFixa(b) || a.ordem - b.ordem;
+const mkItensDe = fn => (MK.itens||[]).filter(i => i.funcao === fn && (i.ativo || MK.marcas[i.id])).sort(mkOrdena);
 const mkBlocos = itens => { const bs = []; itens.forEach(i => { let b = bs.find(x => x.nome === i.bloco); if (!b) bs.push(b = {nome:i.bloco, itens:[]}); b.itens.push(i); }); return bs; };
 function viewMidia(){
   if (!temMidia()) return '<div class="empty">Só quem tem o cargo Mídia (e os administradores) vê esta aba.</div>';
@@ -1066,7 +1069,7 @@ function viewMidia(){
     mkBlocos(itens).forEach(b => {
       h += '<h4 class="mk-bloco">'+esc(b.nome)+'</h4>';
       b.itens.forEach(i => { const m = MK.marcas[i.id]; const trava = !pode || (m && !isAdm()); // marcado fica fixo: só administrador desmarca
-        h += '<label class="mk-item'+(m ? ' feito' : '')+(trava ? ' trava' : '')+'"><input type="checkbox" data-mk="'+esc(i.id)+'"'+(m ? ' checked' : '')+(trava ? ' disabled' : '')+'><span class="mk-caixa" aria-hidden="true"></span>'
+        h += '<label class="mk-item'+(i.destaque ? ' dest' : '')+(m ? ' feito' : '')+(trava ? ' trava' : '')+'"><input type="checkbox" data-mk="'+esc(i.id)+'"'+(m ? ' checked' : '')+(trava ? ' disabled' : '')+'><span class="mk-caixa" aria-hidden="true"></span>'
           + '<span class="mk-txt">'+esc(i.texto)+(m ? '<small>✔ '+esc(m.por_nome || 'Alguém')+' · '+esc(horaSP(m.em))+'</small>' : '')+'</span></label>'; });
     });
     h += '</section>';
@@ -1099,12 +1102,14 @@ document.addEventListener('click', e => { const c = e.target.closest('[data-mk-c
 // Administrador: adicionar, editar, reordenar e remover itens.
 function viewMidiaEditar(){
   if (!MK.itens) { mkCarregarItens().then(render); return '<div class="empty">Carregando…</div>'; }
-  const fn = MK.fnEd, itens = (MK.itens||[]).filter(i => i.funcao === fn && i.ativo).sort((a, b) => a.ordem - b.ordem), blocos = mkBlocos(itens);
+  const fn = MK.fnEd, itens = (MK.itens||[]).filter(i => i.funcao === fn && i.ativo).sort(mkOrdena), blocos = mkBlocos(itens);
   let h = '<button class="btn ghost small" data-mk-voltar>‹ Voltar ao checklist</button><h2 style="font-size:22px;margin-top:12px">Editar itens do checklist</h2>'
     + '<div class="chips" style="flex-wrap:wrap">'+MID_CHECKLISTS.map(c => c.nome).map(f => '<button class="chip" aria-pressed="'+(f===fn)+'" data-mk-fn="'+esc(f)+'">'+esc(f)+'</button>').join('')+'</div>';
   if (!itens.length) h += '<div class="empty">'+esc(fn)+': nenhum item ainda.</div>';
   blocos.forEach(b => { h += '<section class="card"><h3>'+esc(b.nome)+'</h3>' + b.itens.map(i => { const k = itens.indexOf(i);
-    return '<div class="mk-ed"><span>'+esc(i.texto)+'</span><span class="mk-ed-b"><button class="icon-btn" data-mk-sobe="'+esc(i.id)+'"'+(k===0?' disabled':'')+' aria-label="Subir">↑</button><button class="icon-btn" data-mk-desce="'+esc(i.id)+'"'+(k===itens.length-1?' disabled':'')+' aria-label="Descer">↓</button><button class="icon-btn" data-mk-edita="'+esc(i.id)+'" aria-label="Editar">✏️</button><button class="icon-btn" data-mk-remove="'+esc(i.id)+'" aria-label="Remover">🗑</button></span></div>'; }).join('') + '</section>'; });
+    // Orações inicial/final ficam presas no começo e no fim: não sobem nem descem, e ninguém passa por elas.
+    const sobe = k > 0 && !mkFixa(i) && !mkFixa(itens[k-1]), desce = k < itens.length-1 && !mkFixa(i) && !mkFixa(itens[k+1]);
+    return '<div class="mk-ed'+(i.destaque ? ' dest' : '')+'"><span>'+(i.destaque ? '🙏 ' : '')+esc(i.texto)+'</span><span class="mk-ed-b"><button class="icon-btn mk-dest-btn'+(i.destaque ? ' on' : '')+'" data-mk-dest="'+esc(i.id)+'" aria-pressed="'+(!!i.destaque)+'" aria-label="Destaque" title="Ligar/desligar destaque">⭐</button><button class="icon-btn" data-mk-sobe="'+esc(i.id)+'"'+(sobe?'':' disabled')+' aria-label="Subir">↑</button><button class="icon-btn" data-mk-desce="'+esc(i.id)+'"'+(desce?'':' disabled')+' aria-label="Descer">↓</button><button class="icon-btn" data-mk-edita="'+esc(i.id)+'" aria-label="Editar">✏️</button><button class="icon-btn" data-mk-remove="'+esc(i.id)+'" aria-label="Remover">🗑</button></span></div>'; }).join('') + '</section>'; });
   h += '<section class="card"><h3>Adicionar item em '+esc(fn)+'</h3><form id="mkNovo"><label class="f" for="mkB">Bloco</label><input class="inp" id="mkB" name="bloco" required list="mkBlocos" placeholder="Ex.: Bloco 1 – Backgrounds">'
     + '<datalist id="mkBlocos">'+blocos.map(b => '<option value="'+esc(b.nome)+'">').join('')+'</datalist>'
     + '<label class="f" for="mkT">Item</label><input class="inp" id="mkT" name="texto" required maxlength="300">'
@@ -1118,11 +1123,12 @@ async function mkSalvarItem(id, dados, resumo){
 }
 document.addEventListener('click', async e => { if (!isAdm()) return; const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.mkFn) { MK.fnEd = b.dataset.mkFn; render(); return; }
-  const lista = () => (MK.itens||[]).filter(i => i.funcao === MK.fnEd && i.ativo).sort((a, b) => a.ordem - b.ordem);
-  const mover = async (id, dir) => { const l = lista(), k = l.findIndex(i => i.id === id), o = l[k + dir]; if (!o) return; const a = l[k];
+  const lista = () => (MK.itens||[]).filter(i => i.funcao === MK.fnEd && i.ativo).sort(mkOrdena);
+  const mover = async (id, dir) => { const l = lista(), k = l.findIndex(i => i.id === id), o = l[k + dir]; if (!o) return; const a = l[k]; if (mkFixa(a) || mkFixa(o)) return;
     // Troca de lugar com o vizinho; se mudar de bloco, o item passa para o bloco do vizinho.
     const r1 = await sb.from('checklist_itens').update({ordem:o.ordem, bloco:o.bloco}).eq('id', a.id), r2 = await sb.from('checklist_itens').update({ordem:a.ordem}).eq('id', o.id);
     if (r1.error || r2.error) { falhaEscrita(r1.error || r2.error); return; } await mkCarregarItens(); render(); };
+  if (b.dataset.mkDest) { const i = lista().find(x => x.id === b.dataset.mkDest); if (i) await mkSalvarItem(i.id, {destaque:!i.destaque}, 'Checklist da Mídia · '+i.funcao+': '+(i.destaque ? 'tirou o destaque de' : 'destacou')+' "'+i.texto+'"'); }
   if (b.dataset.mkSobe) await mover(b.dataset.mkSobe, -1);
   if (b.dataset.mkDesce) await mover(b.dataset.mkDesce, 1);
   if (b.dataset.mkRemove) { const i = lista().find(x => x.id === b.dataset.mkRemove); if (i && await confirmar('Remover o item "'+i.texto+'" de '+i.funcao+'?\nAs marcações dos cultos anteriores continuam no histórico.')) await mkSalvarItem(i.id, {ativo:false}, 'Checklist da Mídia · '+i.funcao+': removeu "'+i.texto+'"'); }
@@ -1133,9 +1139,9 @@ document.addEventListener('click', async e => { if (!isAdm()) return; const b = 
 });
 document.addEventListener('submit', async e => { if (e.target.id !== 'mkNovo' || !isAdm()) return; e.preventDefault();
   const fd = new FormData(e.target), bloco = String(fd.get('bloco')).trim(), texto = String(fd.get('texto')).trim(); if (!bloco || !texto) return;
-  const l = (MK.itens||[]).filter(i => i.funcao === MK.fnEd && i.ativo).sort((a, b) => a.ordem - b.ordem), doBloco = l.filter(i => i.bloco === bloco);
+  const l = (MK.itens||[]).filter(i => i.funcao === MK.fnEd && i.ativo).sort(mkOrdena), doBloco = l.filter(i => i.bloco === bloco);
   let ordem; if (doBloco.length) { const ult = doBloco[doBloco.length-1], prox = l[l.indexOf(ult)+1]; ordem = prox ? (Number(ult.ordem) + Number(prox.ordem)) / 2 : Number(ult.ordem) + 10; }
-  else ordem = (l.length ? Number(l[l.length-1].ordem) : 0) + 10;
+  else { const fim = l.find(i => mkFixa(i) === 1), meio = l.filter(i => !mkFixa(i)), base = meio.length ? Number(meio[meio.length-1].ordem) : (l.find(i => mkFixa(i) === -1) || {ordem:0}).ordem; ordem = fim && Number(base) + 10 >= Number(fim.ordem) ? (Number(base) + Number(fim.ordem)) / 2 : Number(base) + 10; }
   if (await mkSalvarItem(null, {funcao:MK.fnEd, bloco, texto, ordem}, 'Checklist da Mídia · '+MK.fnEd+': adicionou "'+texto+'"')) toast('Item adicionado.');
 });
 

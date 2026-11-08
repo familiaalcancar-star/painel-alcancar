@@ -355,3 +355,15 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 /* Cadastro: erro embaixo do campo */
 .erro-campo{color:#ff6b6b;font-size:13px;margin:4px 0 0}
 .inp.inp-erro{border-color:#ff6b6b}
+
+/* Checklist: itens em destaque (orações) */
+.mk-item.dest{background:rgba(255,198,26,.10);border-left:3px solid var(--yellow);border-radius:10px;padding:14px 10px;margin:6px 0}
+.mk-item.dest .mk-txt{font-weight:700}
+.mk-item.dest .mk-txt::before{content:'🙏 '}
+.mk-item.dest .mk-caixa{flex-basis:36px;height:36px;border-color:var(--yellow)}
+.mk-item.dest.feito .mk-caixa{border-color:#3DAA35}
+.mk-item.dest + .mk-item{border-top:0}
+.mk-ed.dest span:first-child{font-weight:700}
+.mk-dest-btn{opacity:.35}
+.mk-dest-btn.on{opacity:1}
+@media (prefers-color-scheme: light){ .mk-item.dest{background:rgba(255,198,26,.18)} }
