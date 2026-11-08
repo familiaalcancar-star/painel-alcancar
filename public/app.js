@@ -1033,9 +1033,10 @@ function viewMidia(){
   const minhas = mkMinhas();
   if (minhas.length) h += '<div class="mk-eu">Sua função neste culto: <b>'+minhas.map(esc).join(' e ')+'</b>'+(MK.data !== hoje() ? '<br><small>Você poderá marcar no dia do culto.</small>' : '')+'</div>';
   else if (isAdm()) h += '<div class="notice">Administrador: você vê todos os checklists e pode marcar ou desmarcar qualquer item.</div>';
-  else h += '<div class="notice">Você não está escalado(a) neste culto. Pode ver os checklists, mas não marcar.</div>';
-  if (!MK.esc) h += '<div class="notice">A escala da Mídia deste culto ainda não foi montada.</div>';
-  const ordem = [...minhas, ...MID_FUNCOES.filter(f => !minhas.includes(f))];
+  else return h + '<div class="notice">Você não está escalado(a) neste culto.</div>';
+  if (!MK.esc && isAdm()) h += '<div class="notice">A escala da Mídia deste culto ainda não foi montada.</div>';
+  // Admin vê todas as funções; os demais, só a(s) função(ões) em que estão escalados neste culto. Sempre na ordem fixa.
+  const ordem = MID_FUNCOES.filter(f => isAdm() || minhas.includes(f));
   ordem.forEach(fn => {
     const itens = mkItensDe(fn), feitos = itens.filter(i => MK.marcas[i.id]).length, quem = (mkFuncoesDe(MK.esc).find(f => f.nome === fn)||{}).pessoas || [];
     const pode = mkPodeMarcar(fn), minha = minhas.includes(fn);
@@ -1044,7 +1045,7 @@ function viewMidia(){
     h += '<div class="mk-prog"><div class="mk-barra"><i style="width:'+Math.round(100*feitos/itens.length)+'%"></i></div><b>'+esc(fn)+' '+feitos+'/'+itens.length+'</b></div>';
     mkBlocos(itens).forEach(b => {
       h += '<h4 class="mk-bloco">'+esc(b.nome)+'</h4>';
-      b.itens.forEach(i => { const m = MK.marcas[i.id]; const trava = !pode || (m && !(isAdm() || m.por === S.uid));
+      b.itens.forEach(i => { const m = MK.marcas[i.id]; const trava = !pode || (m && !isAdm()); // marcado fica fixo: só administrador desmarca
         h += '<label class="mk-item'+(m ? ' feito' : '')+(trava ? ' trava' : '')+'"><input type="checkbox" data-mk="'+esc(i.id)+'"'+(m ? ' checked' : '')+(trava ? ' disabled' : '')+'><span class="mk-caixa" aria-hidden="true"></span>'
           + '<span class="mk-txt">'+esc(i.texto)+(m ? '<small>✔ '+esc(m.por_nome || 'Alguém')+' · '+esc(horaSP(m.em))+'</small>' : '')+'</span></label>'; });
     });
@@ -1056,6 +1057,7 @@ async function mkMarcar(id, marcar){
   const i = (MK.itens||[]).find(x => x.id === id); if (!i) return;
   if (!mkPodeMarcar(i.funcao)) { toast(MK.data === hoje() ? 'Você não está escalado(a) nesta função neste culto.' : 'Só dá para marcar no dia do culto.'); render(); return; }
   const ant = MK.marcas[id];
+  if (!marcar && (!isAdm() || !await confirmar('Desmarcar este item?\n"'+i.texto+'"'))) { if (!isAdm()) toast('Só um administrador pode desmarcar.'); render(); return; }
   if (marcar) MK.marcas = {...MK.marcas, [id]: {item:id, por:S.uid, por_nome:nome(S.uid), em:new Date().toISOString()}};
   else { const m = {...MK.marcas}; delete m[id]; MK.marcas = m; }
   render();
@@ -1063,7 +1065,7 @@ async function mkMarcar(id, marcar){
     const r = marcar ? await sb.from('checklist_marcas').insert({data:MK.data, culto:MK.culto, item:id})
       : await sb.from('checklist_marcas').delete().eq('data', MK.data).eq('culto', MK.culto).eq('item', id).select('item');
     if (r.error) throw r.error;
-    if (!marcar && !(r.data||[]).length) throw new Error('Só quem marcou ou um administrador pode desmarcar.');
+    if (!marcar && !(r.data||[]).length) throw new Error('Só um administrador pode desmarcar.');
   } catch(e){ console.warn(e); toast(/desmarcar/.test(e.message||'') ? e.message : 'Não foi possível salvar. Confira se você está escalado(a) neste culto.'); const m = {...MK.marcas}; if (ant) m[id] = ant; else delete m[id]; MK.marcas = m; }
   await mkCarregarMarcas(); render();
 }
@@ -1614,7 +1616,7 @@ function viewAjuda(){
   h += passo('5. Preencher a escala da sua conexão', ['Na aba <b>Escala</b>, encontre o domingo em que a sua conexão está na Direção do culto ou no Super Kids.', 'Toque no nome da sua conexão e depois em <b>Preencher escala</b> (ou <b>Editar escala</b>).', 'Digite os nomes em cada função. Vaga vazia aparece como “vaga aberta”.', 'Toque em <b>Salvar escala</b>. Pronto, todo mundo já vê.', 'Você só consegue editar os dias da sua conexão. As conexões Flechas, Forasteiros e Heróis também preenchem o Louvor. Quem tem a permissão <b>Escala</b> preenche a Direção do culto e o Super Kids de qualquer conexão.']);
   h += passo('6. Imprimir o check-in (Gestão)', ['Na aba <b>Escala</b>, no final de cada linha, toque em <b>Baixar PDF</b> ou <b>Baixar Excel</b>.', 'Na tela inicial também há o botão <b>Check-in do dia</b>.', 'A folha sai com Função, Nome, Check-in e as assinaturas de retirada e de devolução do equipamento e do crachá.', 'No dia, use a aba <b>Check-in</b> para marcar quem chegou, quem retirou e quem devolveu. As marcações aparecem na hora em todos os celulares.']);
   h += passo('7. Avisos, agenda da semana e eventos', ['Na aba <b>Avisos</b> ficam, nesta ordem: os <b>avisos</b>, a <b>agenda da semana</b> e os <b>eventos</b>. Use os botões no topo para ir direto a cada parte.', 'A agenda da semana também aparece na <b>Início</b>, com o que ainda falta acontecer.', 'Quando houver, toque em <b>Fazer inscrição</b> ou no botão do WhatsApp.', 'Quem tem a permissão <b>Avisos/Eventos</b> publica pelo botão <b>+</b>. Na agenda da semana, escreva uma atividade por linha: <b>data | nome | horário | local</b> (ex.: 27/10 | Ensaio do coro | 19h30 | Auditório) Cada dia some sozinho quando passa.']);
-  if (temMidia()) h += passo('Checklist da Mídia', ['Na aba <b>Checklist</b> aparece o próximo culto (ou o de hoje). Use a data e os botões Manhã/Noite para ver outros cultos.', 'Sua função no culto (Projeção, Transmissão, Câmera, Apoio 1 ou Apoio 2) aparece em destaque, com o seu checklist primeiro.', 'Toque em cada item para marcar. Fica salvo na hora, com o seu nome e o horário. Para desmarcar, toque de novo (só quem marcou ou um administrador).', 'Você só marca no <b>dia do culto</b> em que está escalado(a), e só os itens da sua função. Os das outras funções você vê sem poder marcar.']);
+  if (temMidia()) h += passo('Checklist da Mídia', ['Na aba <b>Checklist</b> aparece o próximo culto (ou o de hoje). Use a data e os botões Manhã/Noite para ver outros cultos.', 'Sua função no culto (Projeção, Transmissão, Câmera, Apoio 1 ou Apoio 2) aparece em destaque, com o seu checklist primeiro.', 'Toque em cada item para marcar. Fica salvo na hora, com o seu nome e o horário, e não pode ser desmarcado (só um administrador desmarca).', 'Você vê só o checklist da função em que está escalado(a) e só marca no <b>dia do culto</b>.']);
   if (isAdm()) {
     h += passo('8. Histórico', ['A aba <b>Histórico</b> mostra tudo o que foi criado, editado ou excluído: quem fez, o quê, e a data e a hora.']);
     h += passo('9. Para administradores', ['Em <b>Ajustes</b> → <b>Pessoas e permissões</b>, toque em <b>Aprovar</b> na pessoa, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Sem tocar em Aprovar, ela continua <b>Pendente</b>.', 'Para convidar alguém, use <b>Convidar pelo WhatsApp</b> em Ajustes: a mensagem já vai com o link e o passo a passo.', 'Administradores preenchem todas as áreas e também podem criar <b>+ Culto extra</b>.', 'Para preencher várias escalas de uma vez, use <b>Importar escala</b> na aba Escala: escolha um Excel, Word, CSV ou PDF, confira a prévia e toque em <b>Confirmar importação</b>. Ele preenche a Direção do culto e o Super Kids (conexões), o Louvor e a Mídia (nomes).', 'Mídia: marque o extra <b>Mídia</b> em Pessoas e permissões para a pessoa ver o Checklist. Na escala da Mídia, escreva o trio em <b>Projeção</b>, <b>Transmissão</b> e <b>Câmera</b>; Apoio 1 e Apoio 2 já vêm preenchidos (troque só se alguém faltar). Os itens do checklist são editados na aba Checklist → <b>Editar itens</b>.', 'Em Ajustes também ficam os cultos, as conexões, as redes sociais e as postagens em destaque.']);

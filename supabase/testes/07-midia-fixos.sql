@@ -36,5 +36,5 @@ select set_config('request.jwt.claim.sub','',false);
 select ok('Marca guarda quem marcou e a função', (select por_nome='Ana' and funcao='Projeção' from checklist_marcas limit 1));
 select ok('Marcar entra no Histórico', exists (select 1 from historico where tipo='checklist' and resumo like '%marcou "Wallpaper%'));
 select t('Outra pessoa NÃO desmarca','a2',$q$delete from checklist_marcas where culto='manha'$q$,'bloq');
-select t('Quem marcou desmarca','a1',$q$delete from checklist_marcas where culto='manha'$q$,'ok');
+select t('Quem marcou NÃO desmarca (só admin)','a1',$q$delete from checklist_marcas where culto='manha'$q$,'bloq');
 select t('Admin desmarca qualquer','0a',$q$delete from checklist_marcas where culto='manha'$q$,'ok');

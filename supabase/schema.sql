@@ -1268,7 +1268,7 @@ create policy ckl_marcas_marcar on public.checklist_marcas for insert to authent
     and public.midia_escalado(data, culto, (select i.funcao from checklist_itens i where i.id = item and i.ativo))));
 drop policy if exists ckl_marcas_desmarcar on public.checklist_marcas;
 create policy ckl_marcas_desmarcar on public.checklist_marcas for delete to authenticated
-  using (is_admin() or (por = auth.uid() and public.tem_midia()));
+  using (is_admin()); -- 08/11: desmarcar é só do administrador
 drop policy if exists status_banco_inserir on public.checklist_marcas;
 create policy status_banco_inserir on public.checklist_marcas as restrictive for insert to authenticated with check (public.sessao_pode_escrever());
 drop policy if exists status_banco_apagar on public.checklist_marcas;
