@@ -8,6 +8,14 @@ const SAIDA = process.argv[2] || path.join(RAIZ, 'teste', 'capturas');
 fs.mkdirSync(SAIDA, { recursive: true });
 const ler = n => JSON.parse(fs.readFileSync(path.join(RAIZ, 'dados-exportados', n), 'utf8'));
 const DADOS = { config: ler('config.json'), escalas: ler('escalas.json'), avisos: ler('avisos.json'), eventos: ler('eventos.json') };
+// Mídia como está no banco desde 08/11: 5 funções e Apoio 1/2 fixos (o banco converte as escalas antigas).
+const FIXOS = {'Apoio 1':'Pedro Morais', 'Apoio 2':'Augusto Cantuaria'};
+DADOS.config.midiaFixos = FIXOS;
+DADOS.config.areas.forEach(a => { if (a.id === 'midia') a.funcoes = ['Projeção','Transmissão','Câmera','Apoio 1','Apoio 2'].map(nome => ({nome, vagas:1})); });
+DADOS.escalas.forEach(e => { if (e.area !== 'midia') return; const ns = (e.funcoes||[]).flatMap(f => f.pessoas||[]);
+  const ehFixo = (n, f) => { const a = n.toLowerCase(), b = f.toLowerCase(); return a === b || a === b.split(' ')[0]; };
+  const resto = ns.filter(n => !ehFixo(n, FIXOS['Apoio 1']) && !ehFixo(n, FIXOS['Apoio 2']));
+  e.funcoes = [{nome:'Projeção', pessoas:resto.slice(0,1)}, {nome:'Transmissão', pessoas:resto.slice(1,2)}, {nome:'Câmera', pessoas:resto.slice(2)}, {nome:'Apoio 1', pessoas:[FIXOS['Apoio 1']]}, {nome:'Apoio 2', pessoas:[FIXOS['Apoio 2']]}]; });
 const MOCK = 'window.__DADOS = ' + JSON.stringify(DADOS) + ';\n' + fs.readFileSync(path.join(__dirname, 'mock-supabase.js'), 'utf8');
 const TIPOS = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css', '.webp':'image/webp' };
 const srv = http.createServer((req, res) => {
@@ -121,7 +129,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
 
   console.log('Administrador');
   p = await abrir('admin');
-  conferir(JSON.stringify(await abas(p)) === JSON.stringify(['Início','Escala','Avisos','Check-in','Histórico','Ajustes']), 'vê todas as abas');
+  conferir(JSON.stringify(await abas(p)) === JSON.stringify(['Início','Escala','Avisos','Check-in','Checklist','Histórico','Ajustes']), 'vê todas as abas');
   conferir(await p.isVisible('.card.pend'), 'aviso amarelo de cadastro pendente');
   conferir((await p.textContent('#tabs .badge')) === '1', 'bolinha vermelha com 1 em Ajustes');
   await foto(p, '10-admin-inicio');
@@ -403,12 +411,57 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.context().close();
   }
 
-  console.log('Mídia com fixos');
+  console.log('Mídia: funções e Apoio fixo');
   p = await abrir('admin', '#escala'); await p.setViewportSize({ width: 1280, height: 900 });
   await p.click('button.cell[data-det="2026-11-08|manha|midia"]'); await p.click('[data-esc]'); await p.waitForSelector('#dlg[open] [name="f0_0"]');
-  const midia = await p.$$eval('[name^="f0_"]', l => l.map(e => e.value));
-  conferir(midia.includes('Pedro Morais') && midia.includes('Augusto') && midia.filter(n => n === 'Augusto').length === 1, 'Mídia já abre com Pedro Morais e Augusto (sem duplicar)');
+  const legendas = await p.$$eval('#dlg legend', l => l.map(e => e.textContent.split(' ·')[0]));
+  conferir(JSON.stringify(legendas) === JSON.stringify(['Projeção','Transmissão','Câmera','Apoio 1','Apoio 2']), 'Mídia com Projeção, Transmissão, Câmera, Apoio 1 e Apoio 2');
+  conferir(!(await p.isVisible('[name="f3_0"]')) && await p.inputValue('[name="f3_0"]') === 'Pedro Morais' && await p.inputValue('[name="f4_0"]') === 'Augusto Cantuaria', 'Apoio 1/2 já vêm com Pedro Morais e Augusto Cantuaria (recolhidos)');
+  await p.locator('#dlg').screenshot({ path: path.join(SAIDA, '43-midia-funcoes.png') });
   await p.context().close();
+
+  console.log('Checklist da Mídia');
+  {
+    const hojeSP = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    const abrirMid = async (papel, esc) => { const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
+      await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+      const pg = await ctx.newPage(); pg.erros = []; pg.on('pageerror', e => pg.erros.push(e.message));
+      await pg.addInitScript(([pp, e]) => { localStorage.setItem('mockPapel', pp); localStorage.setItem('tutorialVisto', '1'); if (e) localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); }, [papel, esc]);
+      await pg.goto('http://localhost:8123/'); await pg.waitForSelector('#tabs button'); await pg.waitForTimeout(300); return pg; };
+    const escHoje = {id: hojeSP+'_manha_midia', d:{data:hojeSP, culto:'manha', area:'midia', funcoes:[{nome:'Projeção', pessoas:['Ana']},{nome:'Transmissão', pessoas:['Bia']},{nome:'Câmera', pessoas:[]},{nome:'Apoio 1', pessoas:['Pedro Morais']},{nome:'Apoio 2', pessoas:['Augusto Cantuaria']}]}};
+    const irHoje = async pg => { await pg.click('#tabs [data-tab="midia"]'); await pg.waitForTimeout(300); await pg.fill('#mkD', hojeSP); await pg.dispatchEvent('#mkD', 'change'); await pg.waitForTimeout(200); await pg.click('[data-mk-culto="manha"]'); await pg.waitForTimeout(400); };
+    p = await abrirMid('midia', escHoje);
+    conferir(JSON.stringify(await abas(p)).includes('Checklist'), 'cargo Mídia vê a aba Checklist');
+    await irHoje(p);
+    conferir((await p.textContent('.mk-eu')).includes('Projeção'), 'mostra em destaque a função da pessoa (Projeção)');
+    conferir((await p.$$eval('.mk-fn h3', l => l.map(e => e.textContent)))[0].startsWith('Projeção'), 'checklist da própria função vem primeiro');
+    conferir((await p.textContent('#view')).includes('Projeção 0/3') && (await p.textContent('#view')).includes('Checklist ainda não cadastrado'), 'barra de progresso e "Checklist ainda não cadastrado" nas outras');
+    await p.click('.mk-fn.minha .mk-item >> nth=0'); await p.waitForTimeout(400);
+    conferir(await p.evaluate(() => window.__TABELAS.checklist_marcas.length === 1) && (await p.textContent('.mk-fn.minha')).includes('✔ Ana ·') && (await p.textContent('#view')).includes('Projeção 1/3'), 'marcar salva e mostra "✔ Ana · hora"');
+    conferir(await p.$$eval('.mk-fn:not(.minha) input[data-mk]', l => l.every(e => e.disabled)), 'outras funções em modo somente leitura');
+    await p.screenshot({ path: path.join(SAIDA, '44-checklist-midia.png'), fullPage: true });
+    await p.click('.mk-fn.minha .mk-item >> nth=0'); await p.waitForTimeout(400);
+    conferir(await p.evaluate(() => window.__TABELAS.checklist_marcas.length === 0), 'quem marcou desmarca');
+    await p.fill('#mkD', '2030-01-06'); await p.dispatchEvent('#mkD', 'change'); await p.waitForTimeout(400);
+    conferir((await p.textContent('#view')).includes('Você não está escalado(a) neste culto') && await p.$$eval('input[data-mk]', l => l.every(e => e.disabled)), 'fora do culto escalado: caixas bloqueadas com aviso');
+    conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    await p.context().close();
+    p = await abrirMid('betel', escHoje);
+    conferir(!JSON.stringify(await abas(p)).includes('Checklist'), 'sem o cargo Mídia não vê a aba');
+    await p.context().close();
+    p = await abrirMid('admin', escHoje); await irHoje(p);
+    conferir((await p.textContent('#view')).includes('Administrador: você vê todos') && !(await p.$('.mk-fn.minha input[disabled]')), 'admin vê tudo e pode marcar');
+    await p.click('[data-mk-editar]'); await p.waitForTimeout(200);
+    await p.fill('#mkB', 'Bloco 2 – Cronômetro'); await p.fill('#mkT', 'Item novo de teste'); await p.click('#mkNovo [type=submit]'); await p.waitForTimeout(400);
+    const novo = await p.evaluate(() => window.__TABELAS.checklist_itens.find(i => i.texto === 'Item novo de teste'));
+    conferir(novo && novo.funcao === 'Projeção' && novo.ordem > 30, 'admin adiciona item no fim do bloco');
+    await p.click('[data-mk-sobe="'+novo.id+'"]'); await p.waitForTimeout(400);
+    conferir(await p.evaluate(id => { const l = window.__TABELAS.checklist_itens.filter(i => i.ativo).sort((a,b) => a.ordem - b.ordem); return l[l.length-1].id !== id; }, novo.id), 'admin reordena (↑)');
+    await p.click('[data-mk-remove="'+novo.id+'"]'); await p.click('[data-r="1"]'); await p.waitForTimeout(400);
+    conferir(await p.evaluate(id => window.__TABELAS.checklist_itens.find(i => i.id === id).ativo === false, novo.id), 'admin remove (fica no histórico)');
+    await p.screenshot({ path: path.join(SAIDA, '45-checklist-editar.png'), fullPage: true });
+    await p.context().close();
+  }
 
   console.log('Notificações');
   p = await abrir('admin');
