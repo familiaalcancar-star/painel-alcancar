@@ -351,3 +351,7 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .mk-ed-b{display:flex;gap:4px}
 .mid-apoio{border:1px dashed var(--line);border-radius:12px;padding:6px 10px;margin:12px 0}
 .mid-apoio summary{cursor:pointer;color:var(--muted);font-size:14px;padding:6px 0}
+
+/* Cadastro: erro embaixo do campo */
+.erro-campo{color:#ff6b6b;font-size:13px;margin:4px 0 0}
+.inp.inp-erro{border-color:#ff6b6b}

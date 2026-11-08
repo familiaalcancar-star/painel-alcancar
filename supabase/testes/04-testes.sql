@@ -51,9 +51,9 @@ select t('Avisador NÃO toma autoria de outro (troca autor)','d1',$q$insert into
 select t('Avisador envia imagem','d0',$q$insert into storage.objects(bucket_id,name,owner_id) values ('imagens','a.webp',auth.uid()::text)$q$,'ok');
 select t('Betel NÃO envia imagem','b1',$q$insert into storage.objects(bucket_id,name,owner_id) values ('imagens','a.webp',auth.uid()::text)$q$,'bloq');
 -- cadastro
-select t('Novo envia cadastro','99',$q$insert into cadastros(id,nome,whatsapp,conexao,papel) values (auth.uid(),'Novo','11','betel','lider')$q$,'ok');
-select t('Novo NÃO pede admin','99',$q$insert into cadastros(id,nome,whatsapp,conexao,papel) values (auth.uid(),'Novo','11','betel','admin')$q$,'bloq');
-select t('Novo NÃO cadastra outro','99',$q$insert into cadastros(id,nome,whatsapp,conexao,papel) values ('00000000-0000-0000-0000-0000000000b1','X','11','betel','lider')$q$,'bloq');
+select t('Novo envia cadastro','99',$q$insert into cadastros(id,nome,email,whatsapp,conexao,papel) values (auth.uid(),'Novo','novo@x.com','11999990000','betel','lider')$q$,'ok');
+select t('Novo NÃO pede admin','99',$q$insert into cadastros(id,nome,email,whatsapp,conexao,papel) values (auth.uid(),'Novo','novo@x.com','11999990000','betel','admin')$q$,'bloq');
+select t('Novo NÃO cadastra outro','99',$q$insert into cadastros(id,nome,email,whatsapp,conexao,papel) values ('00000000-0000-0000-0000-0000000000b1','X','x@x.com','11999990000','betel','lider')$q$,'bloq');
 select t('Novo NÃO se aprova','99',$q$insert into pessoas(id,nome,papel) values (auth.uid(),'Novo','lider')$q$,'bloq');
 select t('Novo NÃO edita escala','99',$q$update escalas set d=d||'{"obs":"x"}' where id='2026-11-01_manha_direcao'$q$,'bloq');
 -- admin

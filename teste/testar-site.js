@@ -115,13 +115,21 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   await p.click('.notice [data-go="inicio"]'); await p.waitForTimeout(150);
   conferir(await p.isVisible('#cadForm'), 'o botão leva ao formulário de cadastro');
   conferir(!(await p.$$eval('#kP option', os => os.map(o => o.value))).includes('admin'), 'Administrador não aparece no formulário');
-  await p.fill('#kN', 'Nova Pessoa'); await p.fill('#kW', '(11) 98888-7777'); await p.selectOption('#kC', 'betel'); await p.click('#cadForm [type=submit]');
+  conferir(JSON.stringify(await p.$$eval('#kP option', os => os.map(o => o.textContent))) === JSON.stringify(['Escolha…','Líder','Auxiliar','Organização','Mídia','Louvor','Coro','Membro']), 'funções: Líder, Auxiliar, Organização, Mídia, Louvor, Coro e Membro');
+  await p.fill('#kN', ''); await p.fill('#kE', ''); await p.click('#cadForm [type=submit]'); await p.waitForTimeout(150);
+  const errosVazios = await p.$$eval('.erro-campo:not([hidden])', l => l.map(e => e.dataset.erro));
+  conferir(JSON.stringify(errosVazios) === JSON.stringify(['nome','email','whatsapp','conexao','papel']) && !(await p.evaluate(() => window.__TABELAS.cadastros.some(c => c.email === 'nova.pessoa@gmail.com'))), 'enviar vazio não envia e mostra o erro embaixo de cada campo');
+  await foto(p, '06a-cadastro-erros');
+  await p.fill('#kN', 'Nova Pessoa'); await p.fill('#kE', 'nova.pessoa@gmail'); await p.fill('#kW', '98888'); await p.selectOption('#kC', 'betel'); await p.selectOption('#kP', 'midia'); await p.click('#cadForm [type=submit]'); await p.waitForTimeout(150);
+  conferir(JSON.stringify(await p.$$eval('.erro-campo:not([hidden])', l => l.map(e => e.dataset.erro))) === '["email","whatsapp"]', 'e-mail inválido e WhatsApp sem DDD são barrados');
+  await p.fill('#kE', 'nova.pessoa@gmail.com'); await p.fill('#kW', '(11) 98888-7777'); await p.click('#cadForm [type=submit]');
   await p.waitForSelector('#dlg[open] [data-avisou]');
   conferir(true, 'logo depois do cadastro, abre a janela com o botão verde do WhatsApp');
   await p.click('#dlg [data-cancel]'); await p.waitForTimeout(150);
   await p.waitForSelector('a[href^="https://wa.me/5511958800779"]');
   conferir(true, 'depois do cadastro, aparece "Avisar o administrador pelo WhatsApp"');
   conferir((await p.textContent('#subtitle')).includes('aguardando aprovação'), 'subtítulo mostra cadastro aguardando');
+  conferir(await p.evaluate(() => { const c = window.__TABELAS.cadastros.find(c => c.email === 'nova.pessoa@gmail.com'); return c && c.papel === 'midia' && c.conexao === 'betel'; }), 'cadastro de Mídia salvo com e-mail, conexão e função');
   conferir(!(await p.$('[data-chat]')), 'sem bate-papo enquanto o cadastro não é aprovado');
   await foto(p, '06-cadastro-enviado');
   conferir(!p.erros.length, 'sem erros no console' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
@@ -488,6 +496,27 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.screenshot({ path: path.join(SAIDA, '45-checklist-editar.png'), fullPage: true });
     await p.context().close();
   }
+
+  console.log('Cadastro: funções novas e aprovação');
+  for (const [papel, nomeF] of [['louvor','Louvor'],['coro','Coro'],['leitura','Membro']]) {
+    p = await abrir('novo'); await p.waitForSelector('#cadForm');
+    await p.fill('#kN', 'Pessoa '+nomeF+' Teste'); await p.fill('#kE', papel+'@teste.com'); await p.fill('#kW', '11 97777-0000'); await p.selectOption('#kC', 'shalom'); await p.selectOption('#kP', papel);
+    await p.click('#cadForm [type=submit]'); await p.waitForSelector('#dlg[open] [data-avisou]');
+    conferir(await p.evaluate(pp => window.__TABELAS.cadastros.some(c => c.papel === pp && c.email.endsWith('@teste.com')), papel) && (await p.textContent('#dlg')).length > 0, 'cadastro de '+nomeF+' enviado');
+    await p.context().close();
+  }
+  p = await abrir('admin', '#ajustes');
+  const sel = '[data-p-papel="00000000-0000-0000-0000-0000000000d7"]';
+  conferir(JSON.stringify(await p.$$eval(sel+' option', os => os.map(o => o.textContent))) === JSON.stringify(['Administrador','Líder','Auxiliar','Organização','Mídia','Louvor','Coro','Membro']), 'aprovação: admin escolhe entre todas as funções');
+  conferir(await p.inputValue(sel) === 'auxiliar', 'aprovação já vem com a função que a pessoa pediu');
+  await p.selectOption(sel, 'midia');
+  conferir(await p.isChecked('[data-p-midia="00000000-0000-0000-0000-0000000000d7"]'), 'trocar para Mídia liga o extra Mídia');
+  await p.click('[data-aprovar="00000000-0000-0000-0000-0000000000d7"]'); await p.click('[data-salvar-pessoas]'); await p.waitForTimeout(300);
+  conferir(await p.evaluate(() => { const x = window.__TABELAS.pessoas.find(p => p.id === '00000000-0000-0000-0000-0000000000d7'); return x && x.papel === 'midia' && x.midia === true; }), 'aprovado como Mídia com o extra Mídia');
+  await p.click('[data-convites]').catch(() => {}); await p.waitForTimeout(200);
+  const cvOps = await p.$$eval('#cvP option', os => os.map(o => o.textContent)).catch(() => []);
+  conferir(['Mídia','Louvor','Coro','Membro'].every(n => cvOps.includes(n)), 'convite por e-mail com Mídia, Louvor, Coro e Membro');
+  await p.context().close();
 
   console.log('Notificações');
   p = await abrir('admin');

@@ -35,11 +35,11 @@ select ok('Não-admin NÃO dispara aviso de importação', (ult()).tipo='importa
 insert into chat(texto) values ('bom dia');
 select ok('Bate-papo: todos menos quem enviou', (ult()).titulo='💬 Lider' and tem('a') and tem('f1') and not tem('b1'));
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000099',false);
-insert into cadastros(id,nome,whatsapp,conexao,papel) values (auth.uid(),'Novo Fulano','11999990000','betel','lider');
+insert into cadastros(id,nome,email,whatsapp,conexao,papel) values (auth.uid(),'Novo Fulano','novo@x.com','11999990000','betel','lider');
 select ok('Cadastro: só admins', (ult()).tipo='cadastro' and tem('a') and not tem('b1') and array_length((ult()).para,1)=1);
 select ok('Cadastro: texto', (ult()).corpo like 'Novo Fulano · Lider%revisar.');
 delete from push_inscricoes where usuario='00000000-0000-0000-0000-00000000000a';
-insert into cadastros(id,nome,whatsapp,conexao,papel) values ('00000000-0000-0000-0000-0000000000d1','X','1','betel','lider');
+insert into cadastros(id,nome,email,whatsapp,conexao,papel) values ('00000000-0000-0000-0000-0000000000d1','X','x@x.com','11999990001','betel','lider');
 select ok('Sem aparelho inscrito NÃO grava aviso', (ult()).corpo like 'Novo Fulano%');
 select ok('Site NÃO lê fila, inscrições nem chaves', (select bool_and(relrowsecurity) from pg_class where relname in ('notificacoes','push_inscricoes','push_chaves','notif_importando'))
   and not exists (select 1 from pg_policies where tablename in ('notificacoes','push_inscricoes','push_chaves','notif_importando')));

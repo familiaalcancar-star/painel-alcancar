@@ -66,7 +66,9 @@ const conexoesDe = x => !x ? [] : (x.conexoes && x.conexoes.length ? x.conexoes 
 const conexoesTxt = x => conexoesDe(x).map(conexaoNome).filter(Boolean).join(' e ');
 const cultoInfo = id => cultos().find(c=>c.id===id) || {id, nome:id, hora:''};
 const areaInfo = id => areas().find(a=>a.id===id) || {id, nome:id, porConexao:false, funcoes:[{nome:'Equipe',vagas:0}]};
-const PAPEIS = {admin:'Administrador', lider:'Líder', auxiliar:'Auxiliar', organizacao:'Organização', leitura:'Só consulta'};
+// Funções. Mídia, Louvor, Coro e Membro (papel "leitura") só consultam; Mídia tem também o extra Mídia (Checklist).
+const PAPEIS = {admin:'Administrador', lider:'Líder', auxiliar:'Auxiliar', organizacao:'Organização', midia:'Mídia', louvor:'Louvor', coro:'Coro', leitura:'Membro'};
+const PAPEIS_CADASTRO = ['lider','auxiliar','organizacao','midia','louvor','coro','leitura'];
 const STATUS = {pendente:'Pendente', aprovado:'Aprovado', removido:'Removido'};
 const statusDe = id => S.pessoas[id] ? (S.pessoas[id].status || 'aprovado') : 'pendente';
 const aprovado = id => !!S.pessoas[id] && statusDe(id) === 'aprovado';
@@ -106,6 +108,7 @@ const podeArea = (a, x, d) => isAdm() || (!!(d || (x && x.data)) && datasCheckin
 const temAvisos = () => isAdm() || !!(pessoaDe(S.uid)||{}).avisos;
 const papelTexto = () => { if (!S.uid) return 'Somente visualização'; if (statusDe(S.uid) === 'removido') return 'Acesso removido · Somente visualização'; if (banco() && aprovado(S.uid)) return 'Banco · Somente visualização'; if (isAdm()) return 'Administrador'; const p = pessoaDe(S.uid);
   if (ehEquipe(p)) return PAPEIS[p.papel]+' · Conexão '+conexaoNome(p.conexao);
+  if (p && PAPEIS[p.papel]) return PAPEIS[p.papel]+(p.conexao ? ' · Conexão '+conexaoNome(p.conexao) : '');
   if (!p && (S.meuCad || S.pessoas[S.uid])) return 'Cadastro aguardando aprovação'; return 'Modo leitura'; };
 
 /* ---------- banco (Supabase) ---------- */
@@ -145,6 +148,7 @@ function falhaEscrita(e){
   console.warn(e);
   const msg = String((e && (e.message || e.code)) || '');
   if (!S.uid) toast('Toque em Entrar para poder salvar.');
+  else if (/^(Preencha|Informe|Escolha)/.test(msg)) toast(msg); // validação do cadastro feita no banco
   else if (/42501|row-level security|permission|travados/i.test(msg)) toast(/travados/.test(msg) ? 'Data, culto, área e conexão só podem ser trocados por um administrador.' : 'Sem permissão para salvar isso. Fale com um administrador.');
   else if (/Failed to fetch|NetworkError|network/i.test(msg)) toast('Sem internet no momento. Tente de novo em instantes.');
   else toast('Não foi possível salvar agora. Tente de novo em instantes.');
@@ -408,6 +412,7 @@ function render(){
   let k = 0; document.querySelectorAll('details.area').forEach(d => { d.dataset.k = S.tab+(k++); if (abertos.includes(d.dataset.k)) d.open = true; });
   if (S.tab==='historico' && isAdm()) carregarHistorico();
 }
+document.addEventListener('change', e => { const sel = e.target.closest && e.target.closest('[data-p-papel]'); if (!sel || sel.value !== 'midia') return; const cx = document.querySelector('[data-p-midia="'+sel.dataset.pPapel+'"]'); if (cx) cx.checked = true; });
 document.addEventListener('click', e => { const g = e.target.closest('[data-ir]'); if (!g) return; const [tab, alvo] = g.dataset.ir.split('|');
   S.tab = tab; history.replaceState(null,'','#'+tab); renderTabs(); render();
   requestAnimationFrame(() => { const el = document.getElementById(alvo); if (el) { el.scrollIntoView({behavior:'smooth', block:'start'}); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1800); } }); });
@@ -492,13 +497,16 @@ function cardCadastro(){
   if (!S.uid || isAdm() || pessoaDe(S.uid) || !S.cfg) return '';
   if (S.meuCad) { const msg = msgAprovacao();
     return '<div class="notice">Cadastro enviado: '+esc(S.meuCad.nome||'')+' · '+esc(PAPEIS[S.meuCad.papel]||'')+' da conexão '+esc(conexaoNome(S.meuCad.conexao))+'. Agora é só aguardar a aprovação de um administrador. Para agilizar, avise pelo WhatsApp:<a class="btn" style="display:block;text-align:center;margin-top:12px;text-decoration:none;background:#25D366;color:#fff" href="https://wa.me/'+ADM_WPP()+'?text='+encodeURIComponent(msg)+'" target="_blank" rel="noopener">Avisar o administrador pelo WhatsApp</a></div>'; }
-  return '<section class="card"><h3>É líder, auxiliar ou da organização da conexão?</h3><p class="meta" style="margin:4px 0 0">Faça seu cadastro para poder preencher a escala da sua conexão. Quem só vai consultar não precisa se cadastrar.</p><form id="cadForm">'
-    + '<label class="f" for="kN">Nome completo</label><input class="inp" id="kN" name="nome" required autocomplete="name" value="'+esc(S.nomeConta||'')+'">'
-    + '<label class="f" for="kA">Me chamar: (apelido)</label><input class="inp" id="kA" name="apelido" placeholder="Como você prefere ser chamado">'
-    + '<label class="f" for="kW">WhatsApp (com DDD)</label><input class="inp" id="kW" name="whatsapp" type="tel" required inputmode="tel" placeholder="(11) 99999-9999">'
-    + '<label class="f" for="kC">Conexão</label><select class="inp" id="kC" name="conexao" required><option value="">Escolha…</option>'+opts(conexoes(), '')+'</select>'
-    + '<label class="f" for="kP">Função</label><select class="inp" id="kP" name="papel" required>'+opts([{id:'lider',nome:'Líder'},{id:'auxiliar',nome:'Auxiliar'},{id:'organizacao',nome:'Organização'}], 'lider')+'</select>'
-    + '<p class="hint">Depois de enviado, a conexão só pode ser alterada por um administrador.</p>'
+  // Todos os campos são obrigatórios (o banco também confere); o erro aparece embaixo do campo.
+  const erro = k => '<p class="erro-campo" data-erro="'+k+'" hidden></p>';
+  return '<section class="card"><h3>Faça seu cadastro</h3><p class="meta" style="margin:4px 0 0">Depois da aprovação de um administrador, você vê quem está escalado em cada função. Líderes, auxiliares e organização também preenchem a escala da conexão.</p><form id="cadForm" novalidate>'
+    + '<label class="f" for="kN">Nome completo</label><input class="inp" id="kN" name="nome" autocomplete="name" value="'+esc(S.nomeConta||'')+'">'+erro('nome')
+    + '<label class="f" for="kE">E-mail</label><input class="inp" id="kE" name="email" type="email" autocomplete="email" inputmode="email" value="'+esc(S.email||'')+'">'+erro('email')
+    + '<label class="f" for="kA">Me chamar: (apelido, opcional)</label><input class="inp" id="kA" name="apelido" placeholder="Como você prefere ser chamado">'
+    + '<label class="f" for="kW">WhatsApp (com DDD)</label><input class="inp" id="kW" name="whatsapp" type="tel" inputmode="tel" placeholder="(11) 99999-9999">'+erro('whatsapp')
+    + '<label class="f" for="kC">Conexão</label><select class="inp" id="kC" name="conexao"><option value="">Escolha…</option>'+opts(conexoes(), '')+'</select>'+erro('conexao')
+    + '<label class="f" for="kP">Função na igreja</label><select class="inp" id="kP" name="papel"><option value="">Escolha…</option>'+opts(PAPEIS_CADASTRO.map(id => ({id, nome:PAPEIS[id]})), '')+'</select>'+erro('papel')
+    + '<p class="hint">Escolha uma função. Depois de enviado, a conexão e a função só podem ser alteradas por um administrador.</p>'
     + '<div class="end"><button type="submit" class="btn">Enviar cadastro</button></div></form></section>';
 }
 /* ---------- notificações no celular (Web Push) ---------- */
@@ -570,8 +578,16 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 document.addEventListener('submit', async e => {
   if (e.target.id !== 'cadForm') return; e.preventDefault();
   if (S.meuCad) { toast('Seu cadastro já foi enviado.'); return; }
-  const fd = new FormData(e.target); const data = {nome:String(fd.get('nome')||'').trim(), apelido:String(fd.get('apelido')||'').trim(), whatsapp:String(fd.get('whatsapp')||'').trim(), conexao:fd.get('conexao'), papel:fd.get('papel')};
-  if (String(data.whatsapp).replace(/\D/g,'').length < 10) { toast('Coloque o WhatsApp com DDD.'); return; }
+  const fd = new FormData(e.target); const data = {nome:String(fd.get('nome')||'').trim(), email:String(fd.get('email')||'').trim().toLowerCase(), apelido:String(fd.get('apelido')||'').trim(), whatsapp:String(fd.get('whatsapp')||'').trim(), conexao:fd.get('conexao')||'', papel:fd.get('papel')||''};
+  const erros = {
+    nome: !data.nome ? 'Preencha o nome completo.' : data.nome.split(/\s+/).length < 2 ? 'Escreva nome e sobrenome.' : '',
+    email: !data.email ? 'Preencha o e-mail.' : !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email) ? 'E-mail inválido. Ex.: nome@gmail.com' : '',
+    whatsapp: data.whatsapp.replace(/\D/g,'').length < 10 ? 'Informe o WhatsApp com DDD (ex.: 11 99999-9999).' : '',
+    conexao: !conexoes().some(c => c.id === data.conexao) ? 'Escolha a sua conexão.' : '',
+    papel: !PAPEIS_CADASTRO.includes(data.papel) ? 'Escolha a sua função na igreja.' : '' };
+  Object.entries(erros).forEach(([k, m]) => { const el = e.target.querySelector('[data-erro="'+k+'"]'); if (el) { el.textContent = m; el.hidden = !m; } const inp = e.target.querySelector('[name="'+k+'"]'); if (inp) inp.classList.toggle('inp-erro', !!m); });
+  const primeiroErro = Object.keys(erros).find(k => erros[k]);
+  if (primeiroErro) { e.target.querySelector('[name="'+primeiroErro+'"]').focus(); toast('Falta preencher: confira os campos em vermelho.'); return; }
   const b = e.target.querySelector('[type=submit]'); b.disabled = true;
   try {
     const r = await sb.from('cadastros').insert({id:S.uid, email:S.email, ...data}); if (r.error) throw r.error;
@@ -1611,7 +1627,7 @@ const passo = (titulo, itens, aberto) => '<details class="card tut"'+(aberto?' o
 function viewAjuda(){
   const p = pessoaDe(S.uid); const lid = minhas().length > 0;
   const voce = !S.uid ? 'Visitante: você pode ver tudo sem entrar. Para preencher a escala da sua conexão, toque em <b>Entrar</b> e depois faça seu cadastro (passo 3).'
-    : isAdm() ? 'Administrador: você pode fazer tudo no painel.' : lid ? PAPEIS[p.papel]+' da conexão '+esc(conexaoNome(p.conexao))+': você preenche a Direção do culto e o Super Kids nos dias da sua conexão.' : 'Consulta: você pode ver tudo. Se for líder, auxiliar ou da organização de uma conexão, faça seu cadastro (passo 3).';
+    : isAdm() ? 'Administrador: você pode fazer tudo no painel.' : lid ? PAPEIS[p.papel]+' da conexão '+esc(conexaoNome(p.conexao))+': você preenche a Direção do culto e o Super Kids nos dias da sua conexão.' : (p && PAPEIS[p.papel] ? PAPEIS[p.papel]+': você vê as escalas e quem está escalado'+(p.midia ? ', e marca o Checklist da Mídia da sua função' : '')+'.' : 'Consulta: você pode ver tudo. Para ver quem está escalado, faça seu cadastro (passo 3).');
   let h = cardCadastro() + cardPush(true) + '<h2 class="section-title" style="margin-top:0">Como usar o painel</h2><div class="notice"><b>Seu acesso hoje</b><br>'+voce+'</div>';
   h += passo('1. Primeiros passos', ['Para só consultar a escala, os avisos e a agenda, <b>não precisa entrar</b>: é só abrir o link.', 'Para preencher a escala, publicar avisos, fazer check-in ou usar o bate-papo, toque em <b>Entrar</b>, no topo da tela.', 'O jeito mais fácil é <b>Continuar com Google</b> (quem tem Gmail). Ou entre com e-mail e senha: na primeira vez, toque em <b>Criar conta</b> e confirme pelo link que chega no e-mail.', 'Esqueceu a senha? Toque em <b>Esqueci minha senha</b> e siga o link que chega no e-mail.', 'Neste aparelho, você continua conectado. Para sair, toque em <b>Sair</b>, embaixo do seu nome.', 'Para ter um atalho no celular: no iPhone, toque em Compartilhar e depois em <b>Adicionar à Tela de Início</b>. No Android, toque no menu ⋮ e depois em <b>Adicionar à tela inicial</b>.', 'Este tutorial fica sempre no botão <b>❓ Como usar</b>, no topo da tela.'], true);
   h += passo('2. Tela inicial', ['No cartão grande fica o <b>próximo domingo</b>, com o culto da manhã (amarelo) e o da noite (azul).', 'Toque numa área, como Direção do culto ou Louvor, para ver quem está escalado em cada função.', 'Logo abaixo vem o domingo seguinte, em <b>Em seguida</b>.', 'Depois vêm a <b>Agenda</b> e os <b>Avisos</b>. Toque em um item para ver os detalhes. Os botões amarelos levam para a inscrição e os verdes abrem o WhatsApp de quem organiza.', 'No final ficam o Instagram, o YouTube e o endereço da igreja.']);
@@ -1666,7 +1682,7 @@ function viewAjustes(){
       const wpp = base.whatsapp || (ped && ped.whatsapp) || '';
       return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+(emailDe(id) && nomeComp(id)!==emailDe(id)?'<br><span class="meta">✉️ '+esc(emailDe(id))+'</span>':'')+(wpp?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(wpp).replace(/\D/g,'').length<=11?'55':'')+String(wpp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(wpp)+'</a>':'')+'</td><td>'+celulaStatus(id)+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
         + '<td><select class="inp" data-p-papel="'+esc(id)+'">'+opts(Object.entries(PAPEIS).map(([k,v])=>({id:k,nome:v})), base.papel)+'</select></td>'
-        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-midia="'+esc(id)+'"'+(atual&&atual.midia?' checked':'')+'> Mídia</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; }).join('')
+        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-midia="'+esc(id)+'"'+((atual&&atual.midia) || base.papel==='midia' ?' checked':'')+'> Mídia</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; }).join('')
     + '</tbody></table><div class="end"><button class="btn" data-salvar-pessoas>Salvar pessoas</button></div></div>';
   html += '<p class="hint">Administradores podem tudo (hoje: '+(nAdm+1)+' contando você; o ideal é até 5). Líder, Auxiliar e Organização preenchem a Direção do culto e o Super Kids nos dias em que a conexão deles está escalada; se a conexão for Flechas, Forasteiros ou Heróis, também o Louvor. <b>Extras:</b> Gestão vê a aba Check-in e imprime o check-in (PDF e Excel); Ministro pode editar a escala de Louvor; Avisos/Eventos pode publicar avisos e eventos (e editar ou excluir os que publicou); Escala pode preencher os nomes da Direção do culto e do Super Kids de qualquer conexão. Banco bloqueia alterações, cadastros, envio de mensagens, importações e exportações, mesmo que outros extras estejam marcados.</p>';
   return html;
@@ -1695,6 +1711,7 @@ document.addEventListener('submit', async e => {
   if (e.target.id !== 'convForm' || !isAdm()) return; e.preventDefault();
   const fd = new FormData(e.target);
   const c = {email: String(fd.get('email')||'').trim().toLowerCase(), nome: String(fd.get('nome')||'').trim(), papel: fd.get('papel'), conexao: fd.get('conexao') || null};
+  if (c.papel === 'midia') fd.set('midia', 'on'); // função Mídia já leva o extra Mídia
   EXTRAS.forEach(([k]) => c[k] = !!fd.get(k));
   if (!/^\S+@\S+\.\S+$/.test(c.email)) { toast('Confira o e-mail.'); return; }
   if (ehEquipe(c) && !c.conexao) { toast('Escolha a conexão.'); return; }
