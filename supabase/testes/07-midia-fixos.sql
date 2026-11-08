@@ -38,3 +38,13 @@ select ok('Marcar entra no Histórico', exists (select 1 from historico where ti
 select t('Outra pessoa NÃO desmarca','a2',$q$delete from checklist_marcas where culto='manha'$q$,'bloq');
 select t('Quem marcou NÃO desmarca (só admin)','a1',$q$delete from checklist_marcas where culto='manha'$q$,'bloq');
 select t('Admin desmarca qualquer','0a',$q$delete from checklist_marcas where culto='manha'$q$,'ok');
+-- Checklist "Apoio": Apoio 1 e Apoio 2 marcam os mesmos itens.
+insert into auth.users values ('00000000-0000-0000-0000-0000000000a4','apoio2@x') on conflict do nothing;
+insert into pessoas(id,nome,apelido,papel,status,midia) values ('00000000-0000-0000-0000-0000000000a4','Bruno Apoio','Bruno','leitura','aprovado',true) on conflict do nothing;
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000a',false);
+insert into escalas(id,d) select 'mapoio', jsonb_build_object('data', hoje_sp(), 'culto','noite','area','midia','funcoes',
+  '[{"nome":"Apoio 1","pessoas":["Ana"]},{"nome":"Apoio 2","pessoas":["Bruno"]}]'::jsonb);
+select set_config('request.jwt.claim.sub','',false);
+select t('Apoio 1 marca item do Apoio','a1',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Apoio' order by ordem limit 1$q$,'ok');
+select t('Apoio 2 marca item do Apoio','a4',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Apoio' order by ordem limit 1$q$,'ok');
+select t('Apoio NÃO marca item da Projeção','a4',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'bloq');

@@ -4,7 +4,7 @@
 (() => {
 const D = window.__DADOS;
 const U = { admin:'00000000-0000-0000-0000-00000000000a', betel:'00000000-0000-0000-0000-0000000000b1', flechas:'00000000-0000-0000-0000-0000000000f1',
-  gestao:'00000000-0000-0000-0000-0000000000c0', escala:'00000000-0000-0000-0000-0000000000e5', midia:'00000000-0000-0000-0000-0000000000a1', novo:'00000000-0000-0000-0000-000000000099' };
+  gestao:'00000000-0000-0000-0000-0000000000c0', escala:'00000000-0000-0000-0000-0000000000e5', midia:'00000000-0000-0000-0000-0000000000a1', midia2:'00000000-0000-0000-0000-0000000000a2', novo:'00000000-0000-0000-0000-000000000099' };
 const T = {
   config:[{id:'geral', d:D.config}], config_privada:[{id:'geral', d:{whatsAdm:'5511958800779'}}],
   pessoas:[
@@ -13,6 +13,7 @@ const T = {
     {id:U.flechas, email:'flechas@x', nome:'Org Flechas', apelido:'', whatsapp:'11922222222', conexao:'flechas', papel:'organizacao', gestao:false, ministro:false, avisos:false},
     {id:U.gestao, email:'gestao@x', nome:'Gestora Silva', apelido:'', whatsapp:'11933333333', conexao:null, papel:'leitura', gestao:true, ministro:false, avisos:false},
     {id:U.midia, email:'midia@x', nome:'Ana Projeção Silva', apelido:'Ana', whatsapp:'11955555555', conexao:null, papel:'leitura', gestao:false, ministro:false, avisos:false, midia:true},
+    {id:U.midia2, email:'midia2@x', nome:'Bruno Apoio Souza', apelido:'Bruno', whatsapp:'11966666666', conexao:null, papel:'leitura', gestao:false, ministro:false, avisos:false, midia:true},
     {id:U.escala, email:'escala@x', nome:'Paula Escala', apelido:'Paulinha', whatsapp:'11944444444', conexao:null, papel:'leitura', gestao:false, ministro:false, avisos:false, escala:true}],
   cadastros:[{id:'00000000-0000-0000-0000-0000000000d7', email:'pendente@x', nome:'Maria Pendente', apelido:'Mari', whatsapp:'11977777777', conexao:'shalom', papel:'auxiliar', em:'2026-10-26T10:00:00Z'}],
   acessos:[{id:'00000000-0000-0000-0000-0000000000d7', email:'pendente@x'}],
@@ -20,12 +21,13 @@ const T = {
   avisos: D.avisos.map(x => { const {id, ...d} = x; return {id, d, autor:null, criado_em:d.criadoEm}; }),
   eventos: D.eventos.map(x => { const {id, ...d} = x; return {id, d, autor:null}; }),
   checkin_marcas:[], historico:[], convites:[], checklist_marcas:[],
-  checklist_itens:[['Bloco 1 – Backgrounds','Wallpaper (tela de descanso)'],['Bloco 1 – Backgrounds','Fundo da letra das músicas'],['Bloco 2 – Cronômetro','Conferir se está no horário correto']].map(([bloco, texto], k) => ({id:'it'+k, funcao:'Projeção', bloco, texto, ordem:(k+1)*10, ativo:true})),
+  checklist_itens:[['Bloco 1 – Backgrounds','Wallpaper (tela de descanso)'],['Bloco 1 – Backgrounds','Fundo da letra das músicas'],['Bloco 2 – Cronômetro','Conferir se está no horário correto']].map(([bloco, texto], k) => ({id:'it'+k, funcao:'Projeção', bloco, texto, ordem:(k+1)*10, ativo:true})).concat([['Bloco 1 – Luzes da plataforma','Luz amarela direcionada à plataforma'],['Bloco 2 – Luzes da mídia','Teto – esquerda']].map(([bloco, texto], k) => ({id:'ap'+k, funcao:'Apoio', bloco, texto, ordem:(k+1)*10, ativo:true}))),
   chat:[{id:'m1', texto:'Bom dia, pessoal! Escala de domingo fechada?', por:U.betel, em:'2026-10-25T12:00:00.000Z'},
         {id:'m2', texto:'Falta só a recepção da noite.', por:U.gestao, em:new Date(Date.now()-3600e3).toISOString()},
         {id:'m3', texto:'Combinado, eu vejo isso.', por:U.admin, em:new Date(Date.now()-1800e3).toISOString()}] };
 // Teste do check-in por escalado: uma escala do Staff a mais, gravada antes de abrir a página.
 try { const ex = JSON.parse(localStorage.getItem('mockEscalaExtra') || 'null'); if (ex) { T.escalas = T.escalas.filter(e => e.id !== ex.id); T.escalas.push({id:ex.id, d:ex.d}); } } catch(e){}
+try { const mm = JSON.parse(localStorage.getItem('mockMarcas') || 'null'); if (mm) T.checklist_marcas = mm; } catch(e){}
 window.__TABELAS = T;
 const derivados = (t, r) => { if (t==='escalas' || t==='eventos') r.data = r.d && r.d.data; if (t==='escalas') { r.culto = r.d.culto; r.area = r.d.area; } return r; };
 Object.keys(T).forEach(t => T[t].forEach(r => derivados(t, r)));
