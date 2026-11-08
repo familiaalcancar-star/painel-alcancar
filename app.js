@@ -705,7 +705,7 @@ const slotNome = (f, i, j, v) => '<input class="inp" name="f'+i+'_'+j+'" aria-la
 document.addEventListener('click', e => { const b = e.target.closest('[data-mais]'); if (!b) return; const grade = b.previousElementSibling; const i = b.dataset.mais, j = grade.children.length;
   grade.insertAdjacentHTML('beforeend', '<input class="inp" name="f'+i+'_'+j+'" placeholder="Nome '+(j+1)+'">'); grade.lastElementChild.focus(); });
 // Mídia: Apoio 1 e Apoio 2 têm pessoa fixa (config.midiaFixos); o trio do culto fica em Projeção, Transmissão e Câmera.
-const midiaFixos = () => { const f = S.cfg && S.cfg.midiaFixos; return f && !Array.isArray(f) && typeof f === 'object' ? f : {'Apoio 1':'Pedro Morais', 'Apoio 2':'Augusto Cantuaria'}; };
+const midiaFixos = () => { const f = S.cfg && S.cfg.midiaFixos; return f && !Array.isArray(f) && typeof f === 'object' ? f : {'Apoio 1':'Pedro Moraes', 'Apoio 2':'Augusto Cantuaria'}; };
 function camposArea(a, x){
   const minhasCon = conexoes();
   let h = '';
