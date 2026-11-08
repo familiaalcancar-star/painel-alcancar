@@ -31,7 +31,7 @@ const S = { pronto:false, sessao:undefined, uid:null, email:'', cfg:null, cfgLoa
 const TABS = [
   {id:'inicio', label:'Início', ic:'🏠'}, {id:'escala', label:'Escala', ic:'📋'}, {id:'avisos', label:'Avisos', ic:'📣'},
   {id:'checkin', label:'Check-in', ic:'✅', gestao:true}, {id:'midia', label:'Checklist', ic:'🎬', midia:true}, {id:'historico', label:'Histórico', ic:'🕘', owner:true},
-  {id:'ajustes', label:'Ajustes', ic:'⚙️', owner:true}, {id:'ajuda', label:'Ajuda', ic:'❓', hidden:true}];
+  {id:'ajustes', label:'Ajustes', ic:'⚙️', owner:true}, {id:'ajuda', label:'Ajuda', ic:'❓', hidden:true}, {id:'formmidia', label:'Formulário da Mídia', ic:'📝', owner:true, hidden:true}];
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const slug = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'x';
@@ -407,7 +407,7 @@ function render(){
   const t = TABS.find(x => x.id === S.tab);
   if (!t || (t.owner && !isAdm()) || (t.gestao && !veCheckin()) || (t.midia && !temMidia())) S.tab = 'inicio';
   if (!S.cfg && S.tab!=='ajustes') { v.innerHTML = isAdm() ? '<div class="empty">O painel ainda não está configurado.<br><br><button class="btn" data-go="ajustes">Configurar agora</button></div>' : '<div class="empty">Não foi possível carregar o painel agora. Confira a internet e tente de novo.</div>'; return; }
-  const fns = {inicio:viewInicio, escala:viewEscala, checkin:viewCheckin, midia:viewMidia, avisos:viewAvisos, historico:viewHistorico, ajustes:viewAjustes, ajuda:viewAjuda};
+  const fns = {inicio:viewInicio, escala:viewEscala, checkin:viewCheckin, midia:viewMidia, avisos:viewAvisos, historico:viewHistorico, ajustes:viewAjustes, ajuda:viewAjuda, formmidia:viewFormMidia};
   v.innerHTML = bannerCadastro() + fns[S.tab]();
   let k = 0; document.querySelectorAll('details.area').forEach(d => { d.dataset.k = S.tab+(k++); if (abertos.includes(d.dataset.k)) d.open = true; });
   if (S.tab==='historico' && isAdm()) carregarHistorico();
@@ -602,6 +602,7 @@ function viewInicio(){
   const blocoDia = d => lista.filter(c=>c.data===d).map((c,i) => (i?'<hr class="div-culto">':'')+'<div class="culto-sec"><h3 class="culto-t'+(/noite/i.test(cultoInfo(c.culto).nome)?' noite':'')+'">'+esc(cultoTitulo(c))+'</h3>'+blocosCulto(S.prox, c)+'</div>').join('');
   let html = cardCadastro() + cardPush();
   if (isAdm() && pendentes().length) { const n = pendentes().length; html = '<button class="card pend" data-go="ajustes"><span>🔔 <b>'+n+' cadastro'+(n>1?'s':'')+' aguardando aprovação</b></span><span class="meta">Revisar ›</span></button>' + html; }
+  if (isAdm()) html = '<button class="card atalho" data-go="formmidia"><span>📝 <b>Formulário da Mídia</b><br><small class="meta">Respostas, filtros, Excel e link para enviar</small></span><span class="meta">Abrir ›</span></button>' + html;
   if (!datas.length) html += '<div class="empty">Nenhum culto programado. Confira os dias de culto em Ajustes.</div>';
   else {
     const [p, ...resto] = datas;
@@ -1431,7 +1432,7 @@ document.addEventListener('click', e => { if (e.target.closest('[data-importar]'
 if (window.__TABELAS) window.__importar = {lerArquivo, interpretar, planejar, lerData, lerRotulo, lerCulto}; // só no teste (banco simulado)
 
 /* ---------- BACKUP (só administrador) ---------- */
-const TABELAS_BACKUP = ['config','config_privada','pessoas','cadastros','pessoas_referencia','acessos','escalas','avisos','eventos','checkin_marcas','historico','chat'];
+const TABELAS_BACKUP = ['config','config_privada','pessoas','cadastros','pessoas_referencia','acessos','escalas','avisos','eventos','checkin_marcas','historico','chat','formulario_midia_respostas','formulario_midia_conhecimentos','formulario_midia_ministerios'];
 async function baixarBackup(btn){
   if (!isAdm()) return;
   const txt = btn.textContent; btn.textContent = 'Gerando…'; btn.disabled = true;
@@ -1662,7 +1663,8 @@ const DIAS = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
 function viewAjustes(){
   if (!isAdm()) return '<div class="empty">Só administradores acessam os ajustes.</div>';
   const c = S.cfg || {};
-  let html = '<h2 class="section-title">Ajustes do painel</h2><div class="card"><form id="cfgForm">'
+  let html = '<button class="card atalho" data-go="formmidia" style="margin-top:6px"><span>📝 <b>Formulário da Mídia</b><br><small class="meta">Respostas, filtros, Excel, link e listas do formulário</small></span><span class="meta">Abrir ›</span></button>'
+    + '<h2 class="section-title">Ajustes do painel</h2><div class="card"><form id="cfgForm">'
     + '<label class="f" for="cI">Nome da igreja</label><input class="inp" id="cI" name="igreja" value="'+esc(c.igreja||'')+'">'
     + '<label class="f" for="cC">Conexões</label><textarea class="inp" id="cC" name="conexoes">'+esc(conexoes().map(x=>x.nome).join('\n'))+'</textarea><div class="hint">Uma por linha. A ordem alfabética é automática.</div>'
     + '<label class="f" for="cU">Cultos</label><textarea class="inp" id="cU" name="cultos">'+esc(cultos().map(x=>x.nome+(x.hora?' | '+x.hora:'')).join('\n'))+'</textarea><div class="hint">Um por linha, no formato Nome | horário. Ex.: Manhã | 10h</div>'
@@ -1678,7 +1680,7 @@ function viewAjustes(){
     + '<div class="end"><a class="btn zap" id="cvLink" target="_blank" rel="noopener" href="'+esc(waUrl('', msgConvite('')))+'">Enviar passo a passo no WhatsApp</a></div>'
     + '<p class="hint">Sem número, o WhatsApp abre para você escolher o contato ou um grupo.</p></div>';
   html += viewConvites();
-  html += '<h2 class="section-title">Backup do banco de dados</h2><div class="card"><p class="meta" style="margin:0">Baixa tudo o que está no banco (configuração, pessoas, cadastros, escalas, avisos, eventos, check-in, histórico e bate-papo) num arquivo .zip. Contém WhatsApp e e-mails: guarde em lugar seguro e não compartilhe.</p><div class="end"><button class="btn" data-backup>Baixar backup (.zip)</button></div></div>';
+  html += '<h2 class="section-title">Backup do banco de dados</h2><div class="card"><p class="meta" style="margin:0">Baixa tudo o que está no banco (configuração, pessoas, cadastros, escalas, avisos, eventos, check-in, histórico, bate-papo e Formulário da Mídia) num arquivo .zip. Contém WhatsApp e e-mails: guarde em lugar seguro e não compartilhe.</p><div class="end"><button class="btn" data-backup>Baixar backup (.zip)</button></div></div>';
   html += '<h2 class="section-title">Pessoas e permissões</h2><p class="hint">O status muda sozinho. Para aprovar alguém: toque em <b>Aprovar</b>, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Se você salvar sem tocar em <b>Aprovar</b>, a pessoa continua <b>Pendente</b>. <b>Remover</b> exclui a pessoa da lista e tira o acesso; se ela entrar de novo, faz um cadastro novo. <b>Banco</b> permite apenas visualizar e prevalece sobre a função e todos os extras.</p>';
   const ids = [...new Set([...S.membros, ...Object.keys(S.cadastros||{}), ...Object.keys(S.pessoas||{})])].filter(id => id && id!==S.uid);
   const nAdm = Object.values(S.pessoas||{}).filter(p=>p.papel==='admin' && aprovado(p.id) && !p.banco && p.id!==S.uid).length;
@@ -1810,6 +1812,194 @@ document.addEventListener('click', async e => {
     toast('Pessoas salvas'); await carregarPessoas(); renderTabs(); render();
   } catch(err){ falhaEscrita(err); }
   finally { t.disabled = false; }
+});
+
+/* ---------- FORMULÁRIO DA MÍDIA (só administradores) ---------- */
+// Respostas do formulário público (formulario-midia/). Só administradores leem (regra no banco, RLS).
+// As listas de conhecimentos e de outros ministérios ficam no banco e são editadas aqui.
+const FM_NIVEIS = [['nenhum','Nenhum'], ['basico','Básico'], ['intermediario','Intermediário'], ['avancado','Avançado']];
+const FM_NIVEL = Object.fromEntries(FM_NIVEIS);
+const FM_FUNCOES = ['Projeção', 'Transmissão', 'Câmera', 'Apoio'];
+const FM_DISP = {manha:'Domingo manhã', noite:'Domingo noite'};
+const FM = { chave:false, ok:false, resp:[], conh:[], mins:[], editar:false, abertos:false,
+  f:{ conexao:'', ministerio:'', conh:'', niveis:[], funcao:'', disp:'', iphone:'' } };
+const fmLink = () => location.origin + location.pathname.replace(/[^/]*$/, '') + 'formulario-midia/';
+const fmIdade = iso => { if (!iso) return null; const [a, m, d] = iso.split('-').map(Number), [ha, hm, hd] = hoje().split('-').map(Number); return ha - a - ((hm < m || (hm === m && hd < d)) ? 1 : 0); };
+const fmData = iso => iso ? new Date(iso).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric', timeZone:'America/Sao_Paulo'}) : '';
+const fmMinNome = id => (FM.mins.find(m => m.id === id) || {}).nome || '(removido)';
+const fmMins = r => r.outro_ministerio ? (r.ministerios || []).slice().sort((a, b) => FM.mins.findIndex(m => m.id === a) - FM.mins.findIndex(m => m.id === b)).map(fmMinNome) : [];
+const fmFuncoes = r => (r.funcoes||[]).slice().sort((a, b) => FM_FUNCOES.indexOf(a) - FM_FUNCOES.indexOf(b)).join(', ');
+const fmDisps = r => (r.disponibilidade||[]).slice().sort().map(d => FM_DISP[d] || d).join(', ');
+const fmZap = w => { let d = String(w||'').replace(/\D/g,''); if (d.length <= 11) d = '55' + d; return 'https://wa.me/' + d; };
+async function fmCarregar(){
+  const [r, c, m] = await Promise.all([
+    sb.from('formulario_midia_respostas').select('*').order('enviado_em', {ascending:false}).limit(2000),
+    sb.from('formulario_midia_conhecimentos').select('*').order('ordem').order('nome'),
+    sb.from('formulario_midia_ministerios').select('*').order('ordem').order('nome')]);
+  if (r.error || c.error || m.error) { console.warn(r.error || c.error || m.error); toast('Não foi possível carregar o Formulário da Mídia.'); }
+  FM.resp = r.data || []; FM.conh = c.data || []; FM.mins = m.data || []; FM.ok = true;
+}
+function fmAbrir(force){
+  if (FM.chave && !force) return; FM.chave = true; FM.ok = false;
+  fmCarregar().catch(e => console.warn(e)).finally(() => { FM.ok = true; if (S.tab === 'formmidia') render(); });
+}
+function fmFiltrar(){
+  const f = FM.f;
+  return FM.resp.filter(r => (!f.conexao || r.conexao === f.conexao)
+    && (!f.ministerio || (f.ministerio === '__nao' ? !r.outro_ministerio : (r.outro_ministerio && (r.ministerios||[]).includes(f.ministerio))))
+    && (!f.conh || !f.niveis.length || f.niveis.includes((r.conhecimentos||{})[f.conh]))
+    && (!f.funcao || (r.funcoes||[]).includes(f.funcao))
+    && (!f.disp || (r.disponibilidade||[]).includes(f.disp))
+    && (!f.iphone || r.iphone === (f.iphone === 'sim')));
+}
+const fmSel = (k, rotulo, ops) => '<div><label class="f" for="fmf_'+k+'">'+rotulo+'</label><select class="inp" id="fmf_'+k+'" data-fm-f="'+k+'"><option value="">Todos</option>'
+  + ops.map(([v, n]) => '<option value="'+esc(v)+'"'+(FM.f[k] === v ? ' selected' : '')+'>'+esc(n)+'</option>').join('') + '</select></div>';
+function viewFormMidia(){
+  if (!isAdm()) return '<div class="empty">Só administradores veem o Formulário da Mídia.</div>';
+  fmAbrir();
+  if (FM.editar) return viewFormMidiaListas();
+  let h = '<div class="bar"><button class="btn ghost small" data-go="inicio">‹ Início</button><h2 style="font-size:22px">Formulário da Mídia</h2></div>'
+    + '<div class="card"><p class="meta" style="margin:0 0 6px">Link do formulário (abre sem login, ideal para mandar no WhatsApp):</p><p style="margin:0 0 10px;word-break:break-all"><b>'+esc(fmLink())+'</b></p>'
+    + '<div class="bar" style="margin:0"><button class="btn small" data-fm-copiar>🔗 Copiar link do formulário</button>'
+    + '<a class="btn small zap" target="_blank" rel="noopener" href="https://wa.me/?text='+encodeURIComponent('Quer servir na Mídia da Família Alcançar? 🎬 Preencha o formulário (leva uns 3 minutos): '+fmLink())+'">Enviar no WhatsApp</a>'
+    + '<button class="btn ghost small" data-fm-excel>⬇️ Exportar Excel</button><button class="btn ghost small" data-fm-listas>✏️ Editar listas</button><button class="btn ghost small" data-fm-atualizar>↻ Atualizar</button></div></div>';
+  if (!FM.ok) return h + '<div class="empty">Carregando respostas…</div>';
+  const f = FM.f, lista = fmFiltrar(), ativos = FM.f.conh ? FM.conh.find(c => c.id === FM.f.conh) : null;
+  h += '<details class="card fm-filtros" data-fm-det'+(FM.abertos ? ' open' : '')+'><summary><b>Filtros</b></summary><div class="fm-grid">'
+    + fmSel('conexao', 'Conexão', conexoes().map(c => [c.id, c.nome]))
+    + fmSel('ministerio', 'Outro ministério', [...FM.mins.map(m => [m.id, m.nome + (m.ativo ? '' : ' (desativado)')]), ['__nao', 'Não serve em outro']])
+    + fmSel('funcao', 'Função desejada', FM_FUNCOES.map(x => [x, x]))
+    + fmSel('disp', 'Disponibilidade', Object.entries(FM_DISP))
+    + fmSel('iphone', 'Tem iPhone?', [['sim','Sim'], ['nao','Não']])
+    + fmSel('conh', 'Conhecimento', FM.conh.map(c => [c.id, c.nome + (c.ativo ? '' : ' (desativado)')]))
+    + '</div>' + (ativos ? '<label class="f">Nível em '+esc(ativos.nome)+' (marque um ou mais)</label><div class="chips" style="flex-wrap:wrap">'
+      + FM_NIVEIS.map(([v, n]) => '<button class="chip" aria-pressed="'+f.niveis.includes(v)+'" data-fm-nivel="'+v+'">'+n+'</button>').join('') + '</div>' : '')
+    + '<div class="end" style="margin-top:8px"><button class="btn ghost small" data-fm-limpar>Limpar filtros</button></div></details>';
+  h += '<p class="meta" style="margin:4px 2px 8px"><b style="color:var(--yellow)">'+lista.length+'</b> de '+FM.resp.length+' resposta'+(FM.resp.length === 1 ? '' : 's')+'</p>';
+  if (!FM.resp.length) return h + '<div class="empty">Ninguém respondeu ainda. Copie o link acima e mande no WhatsApp.</div>';
+  if (!lista.length) return h + '<div class="empty">Ninguém com esses filtros.</div>';
+  h += '<div class="card lst fm-lista">' + lista.map(r => { const i = fmIdade(r.nascimento);
+    return '<div class="fm-li"><button class="fm-li-b" data-fm-ver="'+esc(r.id)+'"><b>'+esc(r.nome)+'</b><span class="meta">'+(i !== null ? i+' anos · ' : '')+esc(conexaoNome(r.conexao) || r.conexao)+'</span>'
+      + '<span class="meta">Enviado em '+fmData(r.enviado_em)+(r.atualizado_em ? ' · atualizado em '+fmData(r.atualizado_em) : '')+'</span></button>'
+      + '<a class="fm-zap" href="'+esc(fmZap(r.whatsapp))+'" target="_blank" rel="noopener" aria-label="WhatsApp de '+esc(r.nome)+'">'+esc(r.whatsapp)+'</a></div>'; }).join('') + '</div>';
+  return h;
+}
+function fmDetalhe(id){
+  const r = FM.resp.find(x => x.id === id); if (!r) return;
+  const lin = (k, v) => '<div class="fm-d"><span>'+k+'</span><b>'+v+'</b></div>';
+  const i = fmIdade(r.nascimento);
+  const conhs = FM.conh.filter(c => c.ativo || (r.conhecimentos||{})[c.id]);
+  abrir('<form><h2 style="margin-bottom:10px">'+esc(r.nome)+'</h2>'
+    + '<h3 class="fm-dh">Dados pessoais</h3>'
+    + lin('Nascimento', dataBR(r.nascimento)+(i !== null ? ' ('+i+' anos)' : '')) + lin('E-mail', '<a href="mailto:'+esc(r.email)+'">'+esc(r.email)+'</a>')
+    + lin('WhatsApp', '<a href="'+esc(fmZap(r.whatsapp))+'" target="_blank" rel="noopener">'+esc(r.whatsapp)+'</a>')
+    + '<h3 class="fm-dh">Conhecimentos</h3>' + conhs.map(c => { const n = (r.conhecimentos||{})[c.id]; return lin(esc(c.nome), n ? '<span class="fm-nv fm-nv-'+n+'">'+FM_NIVEL[n]+'</span>' : '<span class="meta">não respondeu (item novo)</span>'); }).join('')
+    + '<h3 class="fm-dh">Serviço na Mídia</h3>' + lin('Funções', esc(fmFuncoes(r))) + lin('Disponibilidade', esc(fmDisps(r))) + lin('Tem iPhone?', r.iphone ? 'Sim' : 'Não')
+    + '<h3 class="fm-dh">Conexão e ministérios</h3>' + lin('Conexão', esc(conexaoNome(r.conexao) || r.conexao)) + lin('Serve em outro ministério?', r.outro_ministerio ? 'Sim' : 'Não')
+    + (r.outro_ministerio ? lin('Ministérios', esc(fmMins(r).join(', '))) : '')
+    + '<h3 class="fm-dh">Envio</h3>' + lin('Autorizou guardar os dados', r.autorizo ? 'Sim' : 'Não') + lin('Enviado em', esc(fmtQuando(r.enviado_em)))
+    + (r.atualizado_em ? lin('Atualizado em', esc(fmtQuando(r.atualizado_em))+' ('+r.envios+' envios)') : '')
+    + '<div class="end"><button type="button" class="btn danger small" data-fm-apagar="'+esc(r.id)+'">Excluir resposta</button><span style="flex:1"></span><button type="button" class="btn ghost" data-cancel>Fechar</button></div></form>', async () => true);
+}
+async function fmApagar(id){
+  const r = FM.resp.find(x => x.id === id); if (!r) return;
+  if (!await confirmar('Excluir a resposta de '+r.nome+'?\nIsso não pode ser desfeito.')) return;
+  const x = await sb.from('formulario_midia_respostas').delete().eq('id', id).select('id');
+  if (x.error || !(x.data||[]).length) { toast('Não foi possível excluir.'); return; }
+  await logar('excluiu', 'formulario', 'Excluiu a resposta de '+r.nome+' do Formulário da Mídia', null, null);
+  FM.resp = FM.resp.filter(y => y.id !== id); $('#dlg').close(); toast('Resposta excluída.');
+}
+async function fmCopiar(){
+  const t = fmLink();
+  try { await navigator.clipboard.writeText(t); }
+  catch(e) { const a = document.createElement('textarea'); a.value = t; a.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch(_){} a.remove(); }
+  toast('Link copiado! Agora é só colar no WhatsApp.');
+}
+async function fmExcel(btn){
+  if (!FM.resp.length) { toast('Ainda não há respostas para exportar.'); return; }
+  const txt = btn.textContent; btn.textContent = 'Gerando…'; btn.disabled = true;
+  try {
+    await carregar(EXCELJS);
+    const wb = new window.ExcelJS.Workbook(), ws = wb.addWorksheet('Respostas', {views:[{state:'frozen', ySplit:1, xSplit:1}]});
+    const conhs = FM.conh.filter(c => c.ativo || FM.resp.some(r => (r.conhecimentos||{})[c.id]));
+    const cols = [['Nome',30],['Idade',8],['Nascimento',13],['E-mail',30],['WhatsApp',17],['Conexão',14],
+      ...conhs.map(c => [c.nome, 15]), ['Funções desejadas',30],['Disponibilidade',26],['Tem iPhone?',11],['Serve em outro ministério?',14],['Outros ministérios',30],
+      ['Autorizou guardar os dados',14],['Enviado em',18],['Atualizado em',18],['Envios',8]];
+    ws.columns = cols.map(([header, width]) => ({header, width}));
+    FM.resp.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', {sensitivity:'base'})).forEach(r => ws.addRow([
+      r.nome, fmIdade(r.nascimento), dataBR(r.nascimento), r.email, r.whatsapp, conexaoNome(r.conexao) || r.conexao,
+      ...conhs.map(c => FM_NIVEL[(r.conhecimentos||{})[c.id]] || ''), fmFuncoes(r), fmDisps(r),
+      r.iphone ? 'Sim' : 'Não', r.outro_ministerio ? 'Sim' : 'Não', fmMins(r).join(', '), r.autorizo ? 'Sim' : 'Não',
+      fmtQuando(r.enviado_em), r.atualizado_em ? fmtQuando(r.atualizado_em) : '', r.envios]));
+    const h = ws.getRow(1); h.height = 32;
+    h.eachCell(c => { c.font = {bold:true, color:{argb:'FFFFFFFF'}}; c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF191919'}}; c.alignment = {vertical:'middle', horizontal:'center', wrapText:true}; });
+    ws.autoFilter = {from:{row:1, column:1}, to:{row:1, column:cols.length}};
+    await baixar('formulario-midia-'+hoje()+'.xlsx', await wb.xlsx.writeBuffer());
+  } catch(e) { console.warn(e); toast('Não foi possível gerar o Excel agora.'); }
+  finally { btn.textContent = txt; btn.disabled = false; }
+}
+// ----- Listas editáveis (conhecimentos e outros ministérios) -----
+const FM_TAB = { conh:'formulario_midia_conhecimentos', mins:'formulario_midia_ministerios' };
+function fmBlocoLista(k, titulo, dica){
+  return '<h2 class="section-title">'+titulo+'</h2><div class="card"><p class="hint" style="margin:0 0 10px">'+dica+'</p>'
+    + FM[k].map(x => '<div class="fm-it'+(x.ativo ? '' : ' off')+'"><input class="inp" data-fm-nome="'+k+'|'+esc(x.id)+'" value="'+esc(x.nome)+'" aria-label="Nome">'
+      + '<input class="inp fm-ord" type="number" inputmode="numeric" data-fm-ordem="'+k+'|'+esc(x.id)+'" value="'+esc(x.ordem)+'" aria-label="Ordem">'
+      + '<label class="chip"><input type="checkbox" data-fm-ativo="'+k+'|'+esc(x.id)+'"'+(x.ativo ? ' checked' : '')+'> No formulário</label></div>').join('')
+    + '<div class="fm-it"><input class="inp" id="fmNovo_'+k+'" placeholder="Novo item" maxlength="80"><button class="btn small" data-fm-add="'+k+'">+ Incluir</button></div>'
+    + '<div class="end"><button class="btn" data-fm-salvar="'+k+'">Salvar alterações</button></div></div>';
+}
+function viewFormMidiaListas(){
+  return '<div class="bar"><button class="btn ghost small" data-fm-voltar>‹ Respostas</button><h2 style="font-size:22px">Listas do formulário</h2></div>'
+    + '<p class="hint">Mudanças aqui aparecem no formulário na hora. Um item novo de conhecimento passa a ser obrigatório para quem preencher daqui para frente. Para tirar um item, desmarque <b>No formulário</b> (as respostas antigas continuam com ele). A ordem segue o número (menor primeiro).</p>'
+    + (FM.ok ? fmBlocoLista('conh', 'Conhecimentos', 'Cada pessoa escolhe o nível: Nenhum, Básico, Intermediário ou Avançado.') + fmBlocoLista('mins', 'Outros ministérios', 'Aparece para quem responde Sim em “Serve em algum outro ministério?”.') : '<div class="empty">Carregando…</div>');
+}
+async function fmIncluir(k){
+  const i = $('#fmNovo_'+k), nomeN = (i.value || '').trim(); if (!nomeN) { toast('Escreva o nome do item.'); return; }
+  if (FM[k].some(x => semAcento(x.nome) === semAcento(nomeN))) { toast('Esse item já existe.'); return; }
+  const ordem = Math.max(0, ...FM[k].map(x => x.ordem || 0)) + 10;
+  const r = await sb.from(FM_TAB[k]).insert({nome:nomeN, ordem}).select('*');
+  if (r.error) { console.warn(r.error); toast('Não foi possível incluir.'); return; }
+  await logar('criou', 'formulario', 'Formulário da Mídia: incluiu "'+nomeN+'" em '+(k === 'conh' ? 'Conhecimentos' : 'Outros ministérios'), null, null);
+  FM[k].push(r.data[0]); render(); toast('Item incluído.');
+}
+async function fmSalvarLista(k, btn){
+  const mud = [];
+  FM[k].forEach(x => {
+    const n = (document.querySelector('[data-fm-nome="'+k+'|'+x.id+'"]') || {}).value, o = Number((document.querySelector('[data-fm-ordem="'+k+'|'+x.id+'"]') || {}).value),
+      a = !!(document.querySelector('[data-fm-ativo="'+k+'|'+x.id+'"]') || {}).checked;
+    if (n === undefined) return;
+    const novo = {nome:n.trim(), ordem:Number.isFinite(o) ? Math.round(o) : x.ordem, ativo:a};
+    if (!novo.nome) return;
+    if (novo.nome !== x.nome || novo.ordem !== x.ordem || novo.ativo !== x.ativo) mud.push([x, novo]);
+  });
+  if (!mud.length) { toast('Nada para salvar.'); return; }
+  btn.disabled = true;
+  let falhou = 0;
+  for (const [x, novo] of mud) { const r = await sb.from(FM_TAB[k]).update(novo).eq('id', x.id).select('id'); if (r.error || !(r.data||[]).length) falhou++; else Object.assign(x, novo); }
+  btn.disabled = false;
+  await logar('editou', 'formulario', 'Formulário da Mídia: alterou '+mud.length+' item(ns) de '+(k === 'conh' ? 'Conhecimentos' : 'Outros ministérios'), null, null);
+  FM[k].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR')); render();
+  toast(falhou ? 'Alguns itens não foram salvos (nome repetido?).' : 'Alterações salvas.');
+}
+document.addEventListener('click', e => { const sm = e.target.closest('[data-fm-det] > summary'); if (sm) FM.abertos = !sm.parentElement.open; });
+document.addEventListener('change', e => {
+  const s = e.target.closest('[data-fm-f]'); if (!s) return;
+  FM.f[s.dataset.fmF] = s.value; if (s.dataset.fmF === 'conh') FM.f.niveis = s.value ? ['intermediario', 'avancado'] : [];
+  render();
+});
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (t.closest('[data-fm-copiar]')) return void fmCopiar();
+  if (t.closest('[data-fm-excel]')) return void fmExcel(t.closest('[data-fm-excel]'));
+  if (t.closest("[data-fm-atualizar]")) { fmAbrir(true); render(); return; }
+  if (t.closest('[data-fm-listas]')) { FM.editar = true; render(); window.scrollTo(0, 0); return; }
+  if (t.closest('[data-fm-voltar]')) { FM.editar = false; render(); window.scrollTo(0, 0); return; }
+  if (t.closest('[data-fm-limpar]')) { FM.f = { conexao:'', ministerio:'', conh:'', niveis:[], funcao:'', disp:'', iphone:'' }; render(); return; }
+  const nv = t.closest('[data-fm-nivel]'); if (nv) { const v = nv.dataset.fmNivel, l = FM.f.niveis; FM.f.niveis = l.includes(v) ? l.filter(x => x !== v) : [...l, v]; render(); return; }
+  const ver = t.closest('[data-fm-ver]'); if (ver) return void fmDetalhe(ver.dataset.fmVer);
+  const ap = t.closest('[data-fm-apagar]'); if (ap) return void fmApagar(ap.dataset.fmApagar);
+  const ad = t.closest('[data-fm-add]'); if (ad) return void fmIncluir(ad.dataset.fmAdd);
+  const sv = t.closest('[data-fm-salvar]'); if (sv) return void fmSalvarLista(sv.dataset.fmSalvar, sv);
 });
 
 /* ---------- BATE-PAPO ---------- */
