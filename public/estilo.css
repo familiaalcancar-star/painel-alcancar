@@ -367,23 +367,3 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .mk-dest-btn{opacity:.35}
 .mk-dest-btn.on{opacity:1}
 @media (prefers-color-scheme: light){ .mk-item.dest{background:rgba(255,198,26,.18)} }
-
-/* ---------- Formulário da Mídia (administrador) ---------- */
-.card.atalho{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;color:var(--ink);border-color:#2f4f7a;background:var(--night-soft)}
-.fm-filtros summary{cursor:pointer}
-.fm-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
-.fm-grid > div{min-width:0}.fm-grid .inp{min-width:0;width:100%;max-width:100%}
-@media (max-width:420px){.fm-grid{grid-template-columns:1fr}}
-.fm-li{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line)}
-.fm-li:first-child{border-top:0}
-.fm-li-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;background:none;border:0;padding:12px 0;text-align:left;color:var(--ink)}
-.fm-li-b b{font-size:16px}
-.fm-zap{flex:none;font-size:13px;color:var(--green);text-decoration:none;border:1px solid #234a22;border-radius:999px;padding:6px 10px;white-space:nowrap}
-.fm-dh{font-size:15px;color:var(--yellow);margin:16px 0 4px}
-.fm-d{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
-.fm-d span{color:var(--muted)}.fm-d b{text-align:right;font-weight:600}
-.fm-nv{border-radius:999px;padding:1px 9px;font-size:13px;background:#26262b}
-.fm-nv-intermediario{background:var(--gold-soft);color:var(--yellow)}.fm-nv-avancado{background:var(--vine-soft);color:var(--vine)}
-.fm-it{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
-.fm-it .inp{flex:1;min-width:150px}.fm-it .inp.fm-ord{flex:0 0 74px;min-width:0}
-.fm-it .chip{margin:0}.fm-it.off .inp{opacity:.55}

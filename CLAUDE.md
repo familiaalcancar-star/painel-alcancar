@@ -133,13 +133,6 @@ Botão "❓ Como usar" no topo; tutorial curto em passos, abre automaticamente n
 
 **Importar escala** (aba Escala, só Admin): ler arquivo **Excel ou PDF** feito por outro administrador, reconhecer datas, culto, área, nomes de conexões (tolerante a variações de escrita) e nomes de Mídia/Louvor, cruzar com os domingos existentes e mostrar **prévia** (preencher / substituir / não reconhecido) antes de "Confirmar importação"; registrar no Histórico. Feito para Direção, Super Kids, Louvor e Mídia; testado com exemplos inventados (`teste/exemplos/`). Ajustar quando chegarem arquivos reais.
 
-## Formulário da Mídia (feito em 08/11/2026)
-
-- Página pública, **sem login**: `public/formulario-midia/` (link: `<site>/formulario-midia/`). Mobile-first, uma etapa por tela, barra "Etapa X de 4", Voltar/Próximo, todos os campos obrigatórios com aviso vermelho embaixo do campo.
-- Etapas: 1 Dados pessoais (14 anos ou mais) · 2 Conhecimentos (Nenhum/Básico/Intermediário/Avançado) · 3 Serviço na Mídia (funções, disponibilidade, iPhone) · 4 Conexão e "serve em outro ministério?" · 4B Outros ministérios (só se Sim). Autorização obrigatória antes de Enviar.
-- Banco (`supabase/ajustes/2026-11-08-formulario-midia.sql`): listas `formulario_midia_conhecimentos` e `formulario_midia_ministerios` (admin edita; desativar em vez de apagar), respostas em `formulario_midia_respostas` (uma por e-mail; reenvio atualiza e guarda `atualizado_em`), envio **só** pela função `enviar_formulario_midia` (valida tudo de novo, inclusive idade, e limita envios: 10 por endereço de internet, 3 por e-mail e 100 no total a cada 10 min). Só administradores leem/excluem respostas (RLS).
-- Tela do administrador: aba oculta `#formmidia`, aberta pelo atalho na Início e em Ajustes. Lista, detalhe, filtros, Excel, copiar link e editar listas.
-
 ## Ordem sugerida de trabalho
 
 1. Passo a passo das contas da igreja (e-mail, GitHub privado, Supabase, Netlify) — um por vez, esperando o Augusto confirmar.

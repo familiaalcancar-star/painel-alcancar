@@ -7,9 +7,6 @@ Escalas, avisos, agenda e check-in da igreja. Site estático + Supabase (grátis
 - `public/` — o site (abre direto no navegador, sem etapa de build): `index.html`, `app.js`, `estilo.css`, `config.js`, logo, banners e bibliotecas em `vendor/`.
 - Hospedagem: **Netlify** (`netlify.toml` publica a pasta `public`). O repositório é **público** porque o Netlify grátis bloqueia alterações enviadas por outra conta em repositório privado. Por isso, nunca colocar senhas, chaves secretas ou dados de pessoas aqui (os dados ficam no Supabase; `dados-exportados/` está no .gitignore).
 - `teste/` — teste das telas no navegador com o banco simulado: `node teste/testar-site.js`.
-  Formulário da Mídia (envia de verdade para o banco de teste local): `node teste/testar-formulario-midia.js`.
-- `public/formulario-midia/` — **Formulário da Mídia**, página pública sem login (link para mandar no WhatsApp).
-  Respostas só para administradores (Início ou Ajustes → "Formulário da Mídia"). Banco: `supabase/ajustes/2026-11-08-formulario-midia.sql`.
 - `supabase/schema.sql` — banco de dados e permissões. Rodar no SQL Editor do Supabase.
 - `supabase/testes/` — testes automáticos das permissões.
 - `docs/passo-a-passo.md` — o que o Augusto faz em cada etapa.

@@ -29,8 +29,6 @@ const T = {
 // Teste do check-in por escalado: uma escala do Staff a mais, gravada antes de abrir a página.
 try { const ex = JSON.parse(localStorage.getItem('mockEscalaExtra') || 'null'); if (ex) { T.escalas = T.escalas.filter(e => e.id !== ex.id); T.escalas.push({id:ex.id, d:ex.d}); } } catch(e){}
 try { const mm = JSON.parse(localStorage.getItem('mockMarcas') || 'null'); if (mm) T.checklist_marcas = mm; } catch(e){}
-// Formulário da Mídia: listas e respostas vêm do banco de teste local (teste/testar-formulario-midia.js).
-if (D.fm) Object.assign(T, D.fm);
 window.__TABELAS = T;
 const derivados = (t, r) => { if (t==='escalas' || t==='eventos') r.data = r.d && r.d.data; if (t==='escalas') { r.culto = r.d.culto; r.area = r.d.area; } return r; };
 Object.keys(T).forEach(t => T[t].forEach(r => derivados(t, r)));
@@ -86,7 +84,7 @@ class Q {
 }
 window.supabase = { createClient: () => ({
   from: t => new Q(t),
-  rpc: async (n, args) => n === 'enviar_formulario_midia' ? fetch('/__rpc', {method:'POST', body:JSON.stringify(args.p)}).then(r => r.json()) : (window.__rpc = window.__rpc || []).push([n, args]) && n === 'escalas_publicas' ? {data: T.escalas.filter(r => r.data >= args.p_de && r.data <= args.p_ate).sort((a,b) => a.data.localeCompare(b.data)).map(r => { const d = JSON.parse(JSON.stringify(r.d)); const qtd = (d.funcoes||[]).reduce((s,f) => s + (f.pessoas||[]).filter(x => String(x).trim()).length, 0); delete d.funcoes; return {id:r.id, d:{...d, qtd}}; }), error:null} : n === 'pessoas_nomes' ? {data: sessao ? T.pessoas.map(p => ({id:p.id, nome:p.nome, apelido:p.apelido})) : [], error:null} : {data:null, error:null},
+  rpc: async (n, args) => (window.__rpc = window.__rpc || []).push([n, args]) && n === 'escalas_publicas' ? {data: T.escalas.filter(r => r.data >= args.p_de && r.data <= args.p_ate).sort((a,b) => a.data.localeCompare(b.data)).map(r => { const d = JSON.parse(JSON.stringify(r.d)); const qtd = (d.funcoes||[]).reduce((s,f) => s + (f.pessoas||[]).filter(x => String(x).trim()).length, 0); delete d.funcoes; return {id:r.id, d:{...d, qtd}}; }), error:null} : n === 'pessoas_nomes' ? {data: sessao ? T.pessoas.map(p => ({id:p.id, nome:p.nome, apelido:p.apelido})) : [], error:null} : {data:null, error:null},
   channel: () => ({ on(){ return this; }, subscribe(){ return this; } }), removeChannel(){},
   storage: { from: () => ({ upload: async () => ({data:{}, error:null}), getPublicUrl: () => ({data:{publicUrl:'imagens/rede-igPrev.webp'}}) }) },
   auth: {
