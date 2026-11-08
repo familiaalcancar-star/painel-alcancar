@@ -21,8 +21,8 @@ insert into escalas(id,d) select 'mamanha', jsonb_build_object('data', to_char(n
 select set_config('request.jwt.claim.sub','',false);
 select t('Projeção marca item da Projeção hoje','a1',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'manha',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'ok');
 select t('Projeção NÃO marca em outro dia','a1',$q$insert into checklist_marcas(data,culto,item) select to_char(now() + interval '7 days','YYYY-MM-DD'),'manha',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'bloq');
-select t('Cargo Mídia marca mesmo sem estar escalado no culto','a1',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'ok');
-select t('Cargo Mídia marca item de outra função','a2',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'manha',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'ok');
+select t('Projeção NÃO marca no culto da noite (não escalada)','a1',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'bloq');
+select t('Transmissão NÃO marca item da Projeção','a2',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'manha',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'bloq');
 select t('Escalado sem o cargo Mídia NÃO marca','a3',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'manha',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'bloq');
 select t('Cargo Mídia lê as marcas','a2','select 1 from checklist_marcas union all select 1','ok');
 select t('Sem cargo NÃO lê as marcas','a3','select * from checklist_marcas','bloq');
@@ -47,7 +47,7 @@ insert into escalas(id,d) select 'mapoio', jsonb_build_object('data', hoje_sp(),
 select set_config('request.jwt.claim.sub','',false);
 select t('Apoio 1 marca item do Apoio','a1',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Apoio' order by ordem limit 1$q$,'ok');
 select t('Apoio 2 marca item do Apoio','a4',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Apoio' order by ordem limit 1$q$,'ok');
-select t('Apoio também marca item da Projeção (todo cargo Mídia)','a4',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'ok');
+select t('Apoio NÃO marca item da Projeção','a4',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'bloq');
 -- Orações inicial e final em destaque nos 4 checklists.
 select ok('Orações inicial e final em destaque nas 4 funções', (select count(*) from checklist_itens where destaque and texto in ('Oração inicial','Oração final')) = 8);
 select t('Admin liga/desliga destaque','0a',$q$update checklist_itens set destaque = not destaque where texto='Oração final' and funcao='Apoio'$q$,'ok');
