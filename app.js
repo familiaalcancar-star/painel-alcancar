@@ -1094,7 +1094,8 @@ function mkAbrir(){
 }
 // Itens a mostrar num culto: os ativos + os já removidos que tenham marcação nele (histórico).
 // "Oração inicial" sempre primeiro e "Oração final" sempre por último; o resto segue a ordem cadastrada.
-const mkFixa = i => { const t = normNome(i.texto); return t === 'oracao inicial' ? -1 : t === 'oracao final' ? 1 : 0; };
+// O bloco "Após a oração final" (ex.: mochila do Apoio) vem depois dela.
+const mkFixa = i => { const t = normNome(i.texto), b = normNome(i.bloco); return t === 'oracao inicial' ? -1 : t === 'oracao final' ? 1 : /^(apos|depois) .*oracao final/.test(b) ? 2 : 0; };
 const mkOrdena = (a, b) => mkFixa(a) - mkFixa(b) || a.ordem - b.ordem;
 const mkItensDe = fn => (MK.itens||[]).filter(i => i.funcao === fn && (i.ativo || MK.marcas[i.id])).sort(mkOrdena);
 const mkBlocos = itens => { const bs = []; itens.forEach(i => { let b = bs.find(x => x.nome === i.bloco); if (!b) bs.push(b = {nome:i.bloco, itens:[]}); b.itens.push(i); }); return bs; };
