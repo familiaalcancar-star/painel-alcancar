@@ -44,6 +44,7 @@ class Q {
   constructor(t){ this.t = t; this.f = []; this.op = 'select'; this.ord = null; this.lim = 1e9; this.um = false; this.ret = false; }
   select(){ if (this.op !== 'select') this.ret = true; return this; }
   eq(k,v){ this.f.push(r => r[k] === v); return this; }
+  in(k,v){ this.f.push(r => v.includes(r[k])); return this; }
   gte(k,v){ this.f.push(r => r[k] >= v); return this; }
   lte(k,v){ this.f.push(r => r[k] <= v); return this; }
   order(k, o){ this.ord = [k, !o || o.ascending !== false]; return this; }
@@ -86,7 +87,13 @@ class Q {
 }
 window.supabase = { createClient: () => ({
   from: t => new Q(t),
-  rpc: async (n, args) => (window.__rpc = window.__rpc || []).push([n, args]) && n === 'fez_checkin' ? {data: !!(T.checkin_marcas||[]).some(c => c.data === args.p_data && c.culto === args.p_culto && c.ci) || localStorage.getItem('mockFezCheckin') === '1', error:null} : n === 'escalas_publicas' ? {data: T.escalas.filter(r => r.data >= args.p_de && r.data <= args.p_ate).sort((a,b) => a.data.localeCompare(b.data)).map(r => { const d = JSON.parse(JSON.stringify(r.d)); const qtd = (d.funcoes||[]).reduce((s,f) => s + (f.pessoas||[]).filter(x => String(x).trim()).length, 0); delete d.funcoes; return {id:r.id, d:{...d, qtd}}; }), error:null} : n === 'pessoas_nomes' ? {data: sessao ? T.pessoas.map(p => ({id:p.id, nome:p.nome, apelido:p.apelido})) : [], error:null} : {data:null, error:null},
+  rpc: async (n, args) => (window.__rpc = window.__rpc || []).push([n, args]) && n === 'trocar_escalado' ? (() => {
+      const e = T.escalas.find(x => x.id === args.p_escala_id); if (!e) return {data:null, error:{message:'Escala não encontrada.'}};
+      const fs = JSON.parse(JSON.stringify(e.d.funcoes || [])), f = fs.find(x => x.nome === args.p_funcao_atual), ix = f ? (f.pessoas||[]).indexOf(args.p_nome_atual) : -1;
+      if (ix < 0) return {data:null, error:{message:'Pessoa não encontrada nessa função.'}};
+      f.pessoas.splice(ix, 1); const novo = args.p_nome_novo || args.p_nome_atual, fn = args.p_funcao_nova || args.p_funcao_atual;
+      let g = fs.find(x => x.nome === fn); if (!g) fs.push(g = {nome:fn, pessoas:[]}); g.pessoas.push(novo); e.d.funcoes = fs; return {data:fs, error:null}; })()
+    : n === 'fez_checkin' ? {data: !!(T.checkin_marcas||[]).some(c => c.data === args.p_data && c.culto === args.p_culto && c.ci) || localStorage.getItem('mockFezCheckin') === '1', error:null} : n === 'escalas_publicas' ? {data: T.escalas.filter(r => r.data >= args.p_de && r.data <= args.p_ate).sort((a,b) => a.data.localeCompare(b.data)).map(r => { const d = JSON.parse(JSON.stringify(r.d)); const qtd = (d.funcoes||[]).reduce((s,f) => s + (f.pessoas||[]).filter(x => String(x).trim()).length, 0); delete d.funcoes; return {id:r.id, d:{...d, qtd}}; }), error:null} : n === 'pessoas_nomes' ? {data: sessao ? T.pessoas.map(p => ({id:p.id, nome:p.nome, apelido:p.apelido})) : [], error:null} : {data:null, error:null},
   channel: () => ({ on(){ return this; }, subscribe(){ return this; } }), removeChannel(){},
   storage: { from: () => ({ upload: async () => ({data:{}, error:null}), getPublicUrl: () => ({data:{publicUrl:'imagens/rede-igPrev.webp'}}) }) },
   auth: {

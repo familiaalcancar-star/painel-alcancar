@@ -32,3 +32,8 @@ select t('Escalado em Gestão de culto marca check-in','b1',
   format($q$insert into checkin_marcas(data,culto,chave,ci) values (%L,'manha','g',true)$q$, to_char(now() + interval '3 days','YYYY-MM-DD')),'ok');
 select t('Organização acessa o check-in (qualquer data)','f1',$q$insert into checkin_marcas(data,culto,chave,ci) values ('2099-01-01','manha','o',true)$q$,'ok');
 select t('Líder sem escala NÃO acessa o check-in','a5',$q$insert into checkin_marcas(data,culto,chave,ci) values ('2099-01-01','manha','o2',true)$q$,'bloq');
+-- 09/11: trocar escalado pelo check-in.
+select t('Gestão troca a pessoa pelo check-in','c0',$q$select 1/(jsonb_typeof(trocar_escalado('ck1','Checagem','Aux Shalom','Fulano Novo')) = 'array')::int$q$,'ok');
+select t('Gestão troca só a função','c0',$q$select 1/((trocar_escalado('ck1','Checagem','Aux Shalom',null,'Check-in')->0->'pessoas') ? 'Aux Shalom')::int$q$,'ok');
+select t('Sem acesso ao check-in NÃO troca','a5',$q$select trocar_escalado('ck1','Checagem','Aux Shalom','X')$q$,'bloq');
+select t('NÃO troca escala fora da semana','c0',$q$select trocar_escalado('ck2','Check-in','Lider Betel','X')$q$,'bloq');

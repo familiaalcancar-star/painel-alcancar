@@ -406,3 +406,6 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .ckmini input:focus-visible+span{outline:2px solid var(--yellow);outline-offset:2px}
 .ckmini.off{opacity:.4;cursor:default}
 .ck2-itens > .btn{align-self:flex-start;margin-top:6px}
+
+/* Check-in: botão Trocar ao lado do nome */
+.ck2-top .ck-troca{margin-left:auto;flex:0 0 auto;padding:4px 10px;font-size:13px}
