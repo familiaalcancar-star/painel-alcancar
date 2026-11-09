@@ -21,6 +21,7 @@ const T = {
   avisos: D.avisos.map(x => { const {id, ...d} = x; return {id, d, autor:null, criado_em:d.criadoEm}; }),
   eventos: D.eventos.map(x => { const {id, ...d} = x; return {id, d, autor:null}; }),
   checkin_marcas:[], historico:[], convites:[], checklist_marcas:[],
+  checkin_itens:[['Crachá',null,10],['Colete',null,20],['Rádio',6,30],['Bastão de luz',null,40],['Guarda-chuva',null,50]].map(([nome, estoque, ordem]) => ({nome, estoque, ordem, ativo:true})),
   checklist_itens:[['Bloco 1 – Backgrounds','Wallpaper (tela de descanso)'],['Bloco 1 – Backgrounds','Fundo da letra das músicas'],['Bloco 2 – Cronômetro','Conferir se está no horário correto']].map(([bloco, texto], k) => ({id:'it'+k, funcao:'Projeção', bloco, texto, ordem:(k+1)*10, ativo:true})).concat([['Bloco 1 – Luzes da plataforma','Luz amarela direcionada à plataforma'],['Bloco 2 – Luzes da mídia','Teto – esquerda']].map(([bloco, texto], k) => ({id:'ap'+k, funcao:'Apoio', bloco, texto, ordem:(k+1)*10, ativo:true})))
     .concat(['Projeção','Apoio'].flatMap(f => [{id:'or-ini-'+f, funcao:f, bloco:'Início', texto:'Oração inicial', ordem:0, ativo:true, destaque:true}, {id:'or-fim-'+f, funcao:f, bloco:'Encerramento', texto:'Oração final', ordem:1000, ativo:true, destaque:true}])),
   chat:[{id:'m1', texto:'Bom dia, pessoal! Escala de domingo fechada?', por:U.betel, em:'2026-10-25T12:00:00.000Z'},
@@ -32,7 +33,7 @@ try { const mm = JSON.parse(localStorage.getItem('mockMarcas') || 'null'); if (m
 window.__TABELAS = T;
 const derivados = (t, r) => { if (t==='escalas' || t==='eventos') r.data = r.d && r.d.data; if (t==='escalas') { r.culto = r.d.culto; r.area = r.d.area; } return r; };
 Object.keys(T).forEach(t => T[t].forEach(r => derivados(t, r)));
-const chaves = {checkin_marcas:['data','culto','chave'], checklist_marcas:['data','culto','item'], convites:['email']};
+const chaves = {checkin_itens:['nome'], checkin_marcas:['data','culto','chave'], checklist_marcas:['data','culto','item'], convites:['email']};
 const mesma = (t, a, b) => (chaves[t]||['id']).every(k => a[k] === b[k]);
 let sessao = null; const ouvintes = [];
 try { const p = localStorage.getItem('mockPapel'); if (p && U[p]) sessao = {user:{id:U[p], email:p+'@x'}}; } catch(e){}

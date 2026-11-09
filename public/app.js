@@ -194,7 +194,7 @@ async function carregarPrivado(){ await Promise.all([carregarPessoas(), carregar
 const RECARGA = {
   config: () => carregarConfig(), pessoas: async () => { await carregarPessoas(); fecharChat(); if ($('#dlg').open) $('#dlg').close(); }, cadastros: () => carregarPessoas(),
   escalas: () => Promise.all([carregarProx(), carregarMes(), S.ckD ? ckCarregarDocs() : null, MK.data ? mkCarregarEscala() : null]),
-  avisos: () => carregarAvisos(), eventos: () => carregarEventos(), checkin_marcas: () => Promise.all([S.ckD ? ckCarregarMarcas() : null, MK.data && !MK.fezCheckin ? mkCarregarCheckin() : null]),
+  avisos: () => carregarAvisos(), eventos: () => carregarEventos(), checkin_itens: () => ckCarregarItens(), checkin_marcas: () => Promise.all([S.ckD ? ckCarregarMarcas() : null, MK.data && !MK.fezCheckin ? mkCarregarCheckin() : null]),
   checklist_marcas: () => MK.data ? mkCarregarMarcas() : null, checklist_itens: () => MK.itens ? mkCarregarItens() : null,
   chat: () => carregarChat().then(chatAtualizado) };
 const pendRecarga = {};
@@ -931,7 +931,7 @@ function carregar(src){ return LIBS[src] ||= new Promise((ok, err) => { const s 
 const JSPDF = 'vendor/jspdf-2.5.1.min.js';
 const AUTOTABLE = 'vendor/jspdf-autotable-3.8.2.min.js';
 const EXCELJS = 'vendor/exceljs-4.4.0.min.js';
-const CK_HEAD = ['Área','Função','Nome','Check-in','Assinatura retirada (equipamento / crachá)','Assinatura devolução (equipamento / crachá)'];
+const CK_HEAD = ['Área','Função','Nome','Check-in','Retirou','Devolveu'];
 function blocosCheckin(d, c){
   const ci = cultoInfo(c), docs = todasEscalas().filter(x => x.data===d && x.culto===c);
   const grupos = areas().filter(a => !ehLouvor(a.nome)).map(a => {
@@ -947,13 +947,25 @@ function blocosCheckin(d, c){
   const nm = ci.nome || c; const cap = nm.charAt(0).toUpperCase()+nm.slice(1);
   return { culto:c, rotulo:'Culto da '+nm.toLowerCase()+(ci.hora?' · '+ci.hora:''), noite:/noite/i.test(nm), grupos, temDados:grupos.length > 0, cap };
 }
-const CK_COLS = ['Função','Nome','Check-in','Assinatura — retirada\n(equipamento / crachá)','Assinatura — devolução\n(equipamento / crachá)'];
+const CK_COLS = ['Função','Nome','Check-in','Retirou','Devolveu'];
+// Marcações do dia (para a ficha mostrar check-in, o que cada um retirou/devolveu e as pendências).
+async function ckMarcasDia(d){ const r = await sb.from('checkin_marcas').select('*').eq('data', d); const m = {}; (r.data||[]).forEach(x => (m[x.culto] = m[x.culto] || {})[x.chave] = x); return m; }
+// Linhas da ficha por culto: escalados + pessoas avulsas, e a lista do que ainda não voltou.
+function fichaCulto(b, marcas){
+  const M = marcas[b.culto] || {}, grupos = b.grupos.map(g => ({...g, rows:g.rows.map(r => ({...r, m:M[r.k]}))}));
+  const avs = Object.values(M).filter(m => String(m.chave).startsWith('avulso_')).sort((x, y) => String(x.chave).localeCompare(String(y.chave)));
+  if (avs.length) grupos.push({area:'Pessoas avulsas', conexao:'', obs:'', rows:avs.map(m => ({funcao:'Avulso', fn:'Avulso', nome:m.nome||'', m}))});
+  const pend = grupos.flatMap(g => g.rows.flatMap(r => ckFalta(r.m).map(f => f.nome+' ×'+f.qtd+' — '+(r.nome || (r.m && r.m.nome) || r.fn))));
+  return {grupos, pend};
+}
+const fichaLinha = r => [r.funcao, r.nome || (r.m && r.m.nome) || '', r.m && r.m.ci ? 'Sim' : '', ckRetTxt(r.m), ckDevTxt(r.m)];
 const tituloDia = d => { const t = fmtDia(d); return t.charAt(0).toUpperCase()+t.slice(1); };
 async function garantirDia(d){ if (!todasEscalas().some(x => x.data === d)) { const extra = linhas(await sb.from('escalas').select('id,d').eq('data', d)); S.ckDocs = [...(S.ckDocs||[]).filter(x => x.data !== d), ...extra]; } }
 async function gerarCheckinPDF(d, cs, btn, arq){
   if (!temGestao()) { toast('Só administradores e a Gestão podem imprimir o check-in.'); return; }
   await garantirDia(d);
-  const bs = cs.map(c => blocosCheckin(d, c)).filter(b => b.temDados);
+  const marcas = await ckMarcasDia(d);
+  const bs = cs.map(c => blocosCheckin(d, c)).filter(b => b.temDados || Object.keys(marcas[b.culto]||{}).some(k => k.startsWith('avulso_')));
   if (!bs.length) { toast('Não há escala preenchida '+(cs.length>1?'neste dia.':'neste culto.')); return; }
   const txt = btn.textContent; btn.textContent = 'Gerando…'; btn.disabled = true;
   try {
@@ -968,17 +980,22 @@ async function gerarCheckinPDF(d, cs, btn, arq){
       const cor = b.noite ? [30,136,229] : [255,198,26];
       doc.setFillColor(...cor); doc.roundedRect(M, y, W-2*M, 9, 1.5, 1.5, 'F');
       doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(b.noite?255:20); doc.text(b.rotulo, M+4, y+6.2); doc.setTextColor(20);
-      const body = [];
-      b.grupos.forEach(g => {
+      const body = [], fc = fichaCulto(b, marcas);
+      fc.grupos.forEach(g => {
         body.push([{content: g.area.toUpperCase() + (g.conexao ? '   ·   '+(g.conexao.includes(' e ')?'Conexões ':'Conexão ')+g.conexao : '') + (g.obs ? '   ·   '+g.obs : ''), colSpan:5, styles:{fillColor:[236,236,236], fontStyle:'bold', fontSize:9.5, textColor:[30,30,30], minCellHeight:7, cellPadding:{top:1.8,bottom:1.8,left:3,right:3}}}]);
-        g.rows.forEach(r => body.push([r.funcao, r.nome, '', '', '']));
+        g.rows.forEach(r => body.push(fichaLinha(r)));
       });
       doc.autoTable({ startY: y+11, margin:{left:M, right:M, top:23, bottom:14}, theme:'grid', head:[CK_COLS], body, showHead:'everyPage', rowPageBreak:'avoid',
         styles:{font:'helvetica', fontSize:10, cellPadding:{top:2.2,bottom:2.2,left:3,right:3}, minCellHeight:10, valign:'middle', lineColor:[150,150,150], lineWidth:0.2, textColor:[20,20,20], overflow:'linebreak'},
         headStyles:{fillColor:[25,25,25], textColor:255, fontStyle:'bold', fontSize:9, halign:'center', minCellHeight:11},
-        columnStyles:{0:{cellWidth:58, fontSize:9, textColor:[70,70,70]}, 1:{cellWidth:64, fontStyle:'bold'}, 2:{cellWidth:24}, 3:{cellWidth:'auto'}, 4:{cellWidth:'auto'}},
+        columnStyles:{0:{cellWidth:58, fontSize:9, textColor:[70,70,70]}, 1:{cellWidth:64, fontStyle:'bold'}, 2:{cellWidth:24, halign:'center'}, 3:{cellWidth:'auto', fontSize:9}, 4:{cellWidth:'auto', fontSize:9}},
         didDrawPage: () => cab() });
       y = doc.lastAutoTable.finalY + 10;
+      if (fc.pend.length) {
+        doc.autoTable({ startY: y, margin:{left:M, right:M, top:23, bottom:14}, theme:'grid', head:[['Ainda não devolvido · '+b.rotulo]], body:fc.pend.map(t => [t]), rowPageBreak:'avoid',
+          styles:{font:'helvetica', fontSize:10, textColor:[20,20,20], lineColor:[150,150,150], lineWidth:0.2}, headStyles:{fillColor:[255,198,26], textColor:20, fontStyle:'bold'}, didDrawPage: () => cab() });
+        y = doc.lastAutoTable.finalY + 10;
+      }
     });
     const n = doc.internal.getNumberOfPages();
     for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(120); doc.text('Página '+i+' de '+n, W-M, doc.internal.pageSize.getHeight()-6, {align:'right'}); }
@@ -991,7 +1008,9 @@ function checkinPDF(d, c, btn){ return gerarCheckinPDF(d, [c], btn, 'checkin-'+d
 async function checkinXLSX(d, c, btn){
   if (!temGestao()) { toast('Só administradores e a Gestão podem imprimir o check-in.'); return; }
   await garantirDia(d);
-  const b = blocosCheckin(d, c); if (!b.temDados) { toast('Não há escala preenchida neste culto.'); return; }
+  const marcas = await ckMarcasDia(d);
+  const b = blocosCheckin(d, c); if (!b.temDados && !Object.keys(marcas[c]||{}).some(k => k.startsWith('avulso_'))) { toast('Não há escala preenchida neste culto.'); return; }
+  const fc = fichaCulto(b, marcas);
   const txt = btn.textContent; btn.textContent = 'Gerando…'; btn.disabled = true;
   try {
     await carregar(EXCELJS);
@@ -1005,14 +1024,16 @@ async function checkinXLSX(d, c, btn){
     const h = ws.getRow(4); h.values = CK_COLS.map(t => t.replace('\n',' ')); h.height = 34;
     h.eachCell(cell => { cell.font = {bold:true, color:{argb:'FFFFFFFF'}}; cell.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF191919'}}; cell.border = bordas; cell.alignment = {vertical:'middle', horizontal:'center', wrapText:true}; });
     let r = 5;
-    b.grupos.forEach(g => {
+    fc.grupos.forEach(g => {
       ws.mergeCells('A'+r+':E'+r); const gc = ws.getCell('A'+r);
       gc.value = g.area.toUpperCase() + (g.conexao ? '  ·  '+(g.conexao.includes(' e ')?'Conexões ':'Conexão ')+g.conexao : '') + (g.obs ? '  ·  '+g.obs : '');
       gc.font = {bold:true}; gc.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FFECECEC'}}; gc.border = bordas; ws.getRow(r).height = 20; r++;
-      g.rows.forEach(x => { const row = ws.getRow(r++); row.values = [x.funcao, x.nome, '', '', '']; row.height = 26;
+      g.rows.forEach(x => { const row = ws.getRow(r++); row.values = fichaLinha(x); row.height = 26;
         for (let col = 1; col <= 5; col++) { const cell = row.getCell(col); cell.border = bordas; cell.alignment = {vertical:'middle', wrapText:true}; }
         row.getCell(2).font = {bold:true}; row.getCell(1).font = {color:{argb:'FF555555'}}; });
     });
+    if (fc.pend.length) { r++; ws.mergeCells('A'+r+':E'+r); const pc = ws.getCell('A'+r); pc.value = 'AINDA NÃO DEVOLVIDO'; pc.font = {bold:true}; pc.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FFFFC61A'}}; pc.border = bordas; r++;
+      fc.pend.forEach(t => { ws.mergeCells('A'+r+':E'+r); const c2 = ws.getCell('A'+r); c2.value = t; c2.border = bordas; r++; }); }
     ws.pageSetup.printTitlesRow = '4:4';
     await baixar('checkin-'+d+'-'+c+'.xlsx', await wb.xlsx.writeBuffer());
   } catch(e) { console.warn(e); toast('Não foi possível gerar o Excel agora.'); }
@@ -1022,16 +1043,17 @@ async function checkinXLSX(d, c, btn){
 /* ---------- CHECK-IN (marcação ao vivo) ---------- */
 function proxCulto(){ let d = hoje(); for (let i = 0; i < 14; i++) { if (diasCulto().includes(new Date(d+'T12:00:00').getDay())) return d; d = somaDias(d, 1); } return hoje(); }
 async function ckCarregarDocs(){ const d = S.ckD; const l = linhas(await sb.from('escalas').select('id,d').eq('data', d)); if (d === S.ckD) { S.ckDocs = l; S.ckOk = true; } }
-async function ckCarregarMarcas(){ const d = S.ckD, c = S.ckC; const r = await sb.from('checkin_marcas').select('*').eq('data', d).eq('culto', c);
+async function ckCarregarMarcas(){ const d = S.ckD, c = S.ckC; const r = await sb.from('checkin_marcas').select('*').eq('data', d);
   if (r.error) { console.warn(r.error); return; } if (d !== S.ckD || c !== S.ckC) return;
-  const m = {}; (r.data||[]).forEach(x => m[x.chave] = {...x, _v:1}); S.ckMarks = m; }
+  S.ckDia = r.data || []; const m = {}; S.ckDia.filter(x => x.culto === c).forEach(x => m[x.chave] = {...x, _v:1}); S.ckMarks = m; }
+async function ckCarregarItens(){ const r = await sb.from('checkin_itens').select('*').order('ordem').order('nome'); if (!r.error) S.ckItens = r.data || []; }
 function ckAbrir(){
   if (ckEscalado()) S.ckD = datasCheckin()[0];
   if (!S.ckD) S.ckD = proxCulto();
   if (!S.ckC || !cultos().some(c => c.id===S.ckC)) S.ckC = (cultos()[0]||{}).id;
   const chave = S.ckD+'_'+S.ckC; if (S.ckChave === chave) return; S.ckChave = chave;
   S.ckMarks = {}; S.ckOk = false;
-  Promise.all([ckCarregarDocs(), ckCarregarMarcas()]).catch(e => console.warn(e)).finally(() => { S.ckOk = true; if (S.tab==='checkin') render(); });
+  Promise.all([ckCarregarDocs(), ckCarregarMarcas(), S.ckItens ? null : ckCarregarItens()]).catch(e => console.warn(e)).finally(() => { S.ckOk = true; if (S.tab==='checkin') render(); });
 }
 /* ---------- CHECKLIST DA MÍDIA ---------- */
 // Itens (checklist_itens) por função e bloco; marcações (checklist_marcas) por culto (data + culto).
@@ -1178,6 +1200,66 @@ document.addEventListener('submit', async e => { if (e.target.id !== 'mkNovo' ||
   if (await mkSalvarItem(null, {funcao:MK.fnEd, bloco, texto, ordem}, 'Checklist da Mídia · '+MK.fnEd+': adicionou "'+texto+'"')) toast('Item adicionado.');
 });
 
+/* Ajustes (admin): itens do check-in, estoque e itens padrão por área/função. */
+const ckRegraTxt = r => (r.area === '*' ? 'Todas' : ((areaInfo(r.area)||{}).nome || r.area))+' | '+(r.funcao === '*' ? 'Todas' : r.funcao)+' | '+(r.itens||[]).join(', ');
+function cardCkItens(){
+  if (!isAdm()) return '';
+  if (!S.ckItens) { ckCarregarItens().then(() => { if (S.tab === 'ajustes') render(); }); return '<h2 class="section-title">Itens do check-in</h2><div class="empty">Carregando…</div>'; }
+  return '<h2 class="section-title">Itens do check-in</h2><form class="card" id="ckItensForm"><p class="hint" style="margin-top:0">Itens que as pessoas retiram e devolvem no check-in. <b>Estoque</b> é a quantidade total (vazio = sem limite): o check-in mostra quantos estão em uso.</p>'
+    + '<div class="tbl-wrap"><table class="lead"><thead><tr><th>Item</th><th>Estoque</th><th>Na lista</th></tr></thead><tbody>'
+    + S.ckItens.map(i => '<tr><td>'+esc(i.nome)+'</td><td><input class="inp" style="width:90px" type="number" min="0" inputmode="numeric" data-cki-est="'+esc(i.nome)+'" value="'+(i.estoque == null ? '' : i.estoque)+'" placeholder="sem limite"></td><td><input type="checkbox" data-cki-ativo="'+esc(i.nome)+'"'+(i.ativo !== false ? ' checked' : '')+'></td></tr>').join('')
+    + '</tbody></table></div>'
+    + '<label class="f" for="ckiNovo">Novo item (opcional)</label><div class="row"><div><input class="inp" id="ckiNovo" name="novo" maxlength="60" placeholder="Ex.: Chave da sala"></div><div><input class="inp" name="novoEst" type="number" min="0" placeholder="Estoque (vazio = sem limite)"></div></div>'
+    + '<label class="f" for="ckiPadrao">Itens padrão (já vêm marcados no check-in)</label><textarea class="inp" id="ckiPadrao" name="padrao" style="min-height:90px">'+esc(ckRegras().map(ckRegraTxt).join('\n'))+'</textarea>'
+    + '<p class="hint">Uma regra por linha: <b>Área | Função | itens separados por vírgula</b>. Use <b>Todas</b> para valer em todas. A regra mais específica vence. Ex.: <code>Direção do culto | Estacionamento | Crachá, Colete</code></p>'
+    + '<div class="end"><button type="submit" class="btn">Salvar itens do check-in</button></div></form>';
+}
+document.addEventListener('submit', async e => { if (e.target.id !== 'ckItensForm' || !isAdm()) return; e.preventDefault();
+  const f = e.target, fd = new FormData(f), b = f.querySelector('[type=submit]'); b.disabled = true;
+  try {
+    for (const i of S.ckItens || []) { const v = f.querySelector('[data-cki-est="'+CSS.escape(i.nome)+'"]').value, est = v === '' ? null : Math.max(0, parseInt(v, 10) || 0), ativo = f.querySelector('[data-cki-ativo="'+CSS.escape(i.nome)+'"]').checked;
+      if (est !== (i.estoque == null ? null : i.estoque) || ativo !== (i.ativo !== false)) { const r = await sb.from('checkin_itens').update({estoque:est, ativo}).eq('nome', i.nome); if (r.error) throw r.error; } }
+    const novo = String(fd.get('novo')||'').trim();
+    if (novo && !(S.ckItens||[]).some(i => normNome(i.nome) === normNome(novo))) { const ne = String(fd.get('novoEst')||''); const r = await sb.from('checkin_itens').insert({nome:novo, estoque: ne === '' ? null : Math.max(0, parseInt(ne, 10) || 0)}); if (r.error) throw r.error; }
+    const areaId = t => { const n = normNome(t); if (!n || n === 'todas' || n === 'todos' || t.trim() === '*') return '*'; const a = areas().find(x => normNome(x.nome) === n || normNome(x.id) === n); return a ? a.id : t.trim(); };
+    const regras = String(fd.get('padrao')||'').split('\n').map(l => l.split('|').map(x => x.trim())).filter(p => p.length >= 3 && p[2])
+      .map(([a, fn, its]) => ({area:areaId(a), funcao: (!fn || ['todas','todos','*'].includes(normNome(fn)) || fn === '*') ? '*' : fn, itens: its.split(',').map(x => x.trim()).filter(Boolean)}));
+    if (JSON.stringify(regras) !== JSON.stringify(ckRegras())) await salvar(ref('config','geral'), {...S.cfg, checkinPadrao:regras}, {acao:'editou', tipo:'config', resumo:'Itens padrão do check-in', antes:S.cfg});
+    await logar('editou', 'config', 'Itens e estoque do check-in', null, null);
+    await Promise.all([ckCarregarItens(), carregarConfig()]); toast('Itens do check-in salvos'); render();
+  } catch(err){ falhaEscrita(err); } finally { b.disabled = false; }
+});
+/* Retirada e devolução de itens: cada marcação guarda itens = [{nome, ret, dev}] (quantidades). */
+const CK_PADRAO_INICIAL = [{area:'*', funcao:'*', itens:['Crachá']}, {area:'direcao', funcao:'Estacionamento', itens:['Crachá','Colete']}];
+const ckRegras = () => (S.cfg && Array.isArray(S.cfg.checkinPadrao)) ? S.cfg.checkinPadrao : CK_PADRAO_INICIAL;
+// Itens que já vêm marcados no check-in: a regra mais específica (área + função) vence.
+function ckPadrao(areaId, fn){
+  const bateArea = r => r.area === '*' || normNome(r.area) === normNome(areaId) || normNome(r.area) === normNome((areaInfo(areaId)||{}).nome);
+  const rs = ckRegras().filter(r => bateArea(r) && (r.funcao === '*' || normNome(r.funcao) === normNome(fn)))
+    .sort((a, b) => ((b.area !== '*') + (b.funcao !== '*')) - ((a.area !== '*') + (a.funcao !== '*')));
+  return rs.length ? rs[0].itens || [] : [];
+}
+const ckFalta = m => ((m && m.itens) || []).filter(i => (i.dev||0) < (i.ret||0)).map(i => ({nome:i.nome, qtd:(i.ret||0) - (i.dev||0)}));
+const ckLista = l => l.map(i => i.nome+' ×'+i.qtd).join(', ');
+const ckRetTxt = m => ckLista(((m && m.itens) || []).filter(i => i.ret > 0).map(i => ({nome:i.nome, qtd:i.ret})));
+const ckDevTxt = m => ckLista(((m && m.itens) || []).filter(i => i.dev > 0).map(i => ({nome:i.nome, qtd:i.dev})));
+const ckPlural = n => /\s/.test(n) || /s$/i.test(n) ? n : n+'s';
+const ckAvulsos = () => Object.values(S.ckMarks||{}).filter(m => String(m.chave).startsWith('avulso_')).sort((a, b) => String(a.chave).localeCompare(String(b.chave)));
+function ckMeta(k){ let meta = null; blocosCheckin(S.ckD, S.ckC).grupos.forEach(g => g.rows.forEach(r => { if (r.k === k) meta = {escalado:r.nome, area:g.area, areaId:g.id, funcao:r.fn}; }));
+  const m = (S.ckMarks||{})[k]; return meta || {escalado:'', area:(m && m.area) || 'Pessoas avulsas', areaId:'', funcao:(m && m.funcao) || 'Avulso'}; }
+function ckLinha(k, nomeEsc, fn, m){
+  m = m || {}; const nm = nomeEsc || m.nome || '', itens = m.itens || [], falta = ckFalta(m);
+  const st = itens.length ? (falta.length ? ' pend' : ' ok') : '';
+  return '<div class="ck2'+(m.ci ? ' feito' : '')+st+'"><div class="ck2-top"><label class="ckbox" title="Check-in"><input type="checkbox" data-ckk="'+esc(k)+'" data-campo="ci"'+(m.ci?' checked':'')+' aria-label="'+esc('Check-in · '+(nm||fn))+'"><span></span></label>'
+    + '<span class="ckn">'+(nomeEsc ? '<b>'+esc(nomeEsc)+'</b>' : '<input class="inp ckin" data-cknome="'+esc(k)+'" placeholder="Digite o nome" value="'+esc(m.nome||'')+'">')+'<small>'+esc(fn)+'</small></span></div>'
+    + '<div class="ck2-itens">' + itens.map((it, ix) => { const tudo = (it.dev||0) >= (it.ret||0);
+        return '<span class="ckit'+(tudo ? ' volta' : '')+'"><b>'+esc(it.nome)+' ×'+it.ret+'</b><small>devolvido '+(it.dev||0)+'/'+it.ret+'</small>'
+          + (!tudo ? '<button type="button" data-ck-dev="'+esc(k)+'|'+ix+'">↩ Devolveu</button>' : '')
+          + ((it.dev||0) > 0 ? '<button type="button" class="mini" data-ck-undev="'+esc(k)+'|'+ix+'" aria-label="Desfazer devolução">−</button>' : '')
+          + (!(it.dev||0) ? '<button type="button" class="mini" data-ck-rm="'+esc(k)+'|'+ix+'" aria-label="Tirar '+esc(it.nome)+'">✕</button>' : '') + '</span>'; }).join('')
+    + '<button type="button" class="btn ghost small" data-ck-add="'+esc(k)+'">+ item</button></div>'
+    + (falta.length ? '<div class="ck2-falta">Falta: '+esc(ckLista(falta))+'</div>' : '') + '</div>';
+}
 function viewCheckin(){
   if (!veCheckin()) return '<div class="empty">Só administradores, a Gestão, a Organização e quem está escalado no Check-in ou na Gestão de culto acessam esta aba.</div>';
   ckAbrir(); const fixo = ckEscalado();
@@ -1186,38 +1268,74 @@ function viewCheckin(){
       : '<label class="f" for="ckD" style="margin-top:0">Data do culto</label><input class="inp" type="date" id="ckD" value="'+esc(S.ckD)+'">')
     + '<div class="chips" style="margin-top:10px">'+cultos().map(c => '<button class="chip" aria-pressed="'+(c.id===S.ckC)+'" data-ck-culto="'+esc(c.id)+'">'+esc(c.nome)+(c.hora?' · '+esc(c.hora):'')+'</button>').join('')+'</div></div>';
   if (!S.ckOk) return h + '<div class="empty">Carregando…</div>';
-  const b = blocosCheckin(S.ckD, S.ckC);
-  if (!b.temDados) return h + '<div class="empty">Não há escala preenchida para este culto.</div>';
-  const M = S.ckMarks || {}; let tot = 0, ci = 0, ret = 0, dev = 0;
-  b.grupos.forEach(g => g.rows.forEach(r => { const m = M[r.k]||{}; if (r.nome || m.nome) tot++; if (m.ci) ci++; if (m.ret) ret++; if (m.dev) dev++; }));
-  h += '<div class="ckres"><span><b>'+ci+'</b>/'+tot+' check-in</span><span><b>'+ret+'</b> retiraram</span><span><b>'+dev+'</b> devolveram</span></div>';
+  const b = blocosCheckin(S.ckD, S.ckC), M = S.ckMarks || {}, avs = ckAvulsos();
+  if (!b.temDados && !avs.length) return h + '<div class="empty">Não há escala preenchida para este culto.</div>' + '<div class="bar"><button class="btn ghost" data-ck-pessoa>+ pessoa</button></div>';
+  let tot = 0, ci = 0;
+  b.grupos.forEach(g => g.rows.forEach(r => { const m = M[r.k]||{}; if (r.nome || m.nome) tot++; if (m.ci) ci++; }));
+  const pend = [...b.grupos.flatMap(g => g.rows.map(r => ({nome:r.nome || (M[r.k]||{}).nome || r.fn, m:M[r.k]}))), ...avs.map(m => ({nome:m.nome || 'Avulso', m}))]
+    .flatMap(x => ckFalta(x.m).map(f => ({...f, quem:x.nome})));
+  h += '<div class="ckres"><span><b>'+ci+'</b>/'+tot+' check-in</span><span><b>'+pend.length+'</b> '+(pend.length === 1 ? 'item pendente' : 'itens pendentes')+'</span></div>';
+  // Estoque: itens com quantidade total; "em uso" soma o que saiu e ainda não voltou no dia (os dois cultos).
+  (S.ckItens||[]).filter(i => i.estoque != null).forEach(i => { const uso = (S.ckDia||[]).reduce((s, m) => s + ((m.itens||[]).filter(x => normNome(x.nome) === normNome(i.nome)).reduce((t, x) => t + Math.max(0, (x.ret||0) - (x.dev||0)), 0)), 0);
+    h += '<div class="ck-estoque'+(uso > i.estoque ? ' passou' : '')+'">'+esc(ckPlural(i.nome))+': <b>'+uso+'</b> de '+i.estoque+' em uso'+(uso > i.estoque ? ' · ⚠️ passou do total!' : '')+'</div>'; });
+  if (pend.length) h += '<div class="card ck-pendentes"><h3>Ainda não devolvido</h3>'+pend.map(p => '<div>'+esc(p.nome)+' ×'+p.qtd+' — <b>'+esc(p.quem)+'</b></div>').join('')+'</div>';
   b.grupos.forEach(g => {
-    h += '<div class="card ckg"><h3>'+esc(g.area)+(g.conexao?' <small class="meta">· '+esc(g.conexao)+'</small>':'')+'</h3>'
-      + '<div class="ckrow ckhead"><span></span><span>Check-in</span><span>Retirou</span><span>Devolveu</span></div>';
-    g.rows.forEach(r => { const m = M[r.k]||{}; const nm = r.nome || m.nome || '';
-      const box = (campo, rot) => '<label class="ckbox" title="'+rot+'"><input type="checkbox" data-ckk="'+esc(r.k)+'" data-campo="'+campo+'"'+(m[campo]?' checked':'')+' aria-label="'+esc(rot+' · '+(nm||r.fn))+'"><span></span></label>';
-      h += '<div class="ckrow'+(m.ci?' feito':'')+'"><span class="ckn">'+(r.nome ? '<b>'+esc(r.nome)+'</b>' : '<input class="inp ckin" data-cknome="'+esc(r.k)+'" placeholder="Digite o nome" value="'+esc(m.nome||'')+'">')+'<small>'+esc(r.fn)+'</small></span>'
-        + box('ci','Check-in') + box('ret','Retirou equipamento/crachá') + box('dev','Devolveu equipamento/crachá') + '</div>'; });
-    h += '</div>';
+    h += '<div class="card ckg"><h3>'+esc(g.area)+(g.conexao?' <small class="meta">· '+esc(g.conexao)+'</small>':'')+'</h3>' + g.rows.map(r => ckLinha(r.k, r.nome, r.fn, M[r.k])).join('') + '</div>';
   });
-  if (temGestao()) h += '<div class="bar" style="margin-top:6px"><button class="btn ghost small" data-ck-pdf="'+esc(S.ckD)+'|'+esc(S.ckC)+'">Baixar ficha em PDF</button></div>';
+  if (avs.length) h += '<div class="card ckg"><h3>Pessoas avulsas</h3>' + avs.map(m => ckLinha(m.chave, m.nome, 'Avulso', m)).join('') + '</div>';
+  h += '<div class="bar" style="margin-top:6px"><button class="btn ghost" data-ck-pessoa>+ pessoa (fora da escala)</button>'
+    + (temGestao() ? '<button class="btn ghost small" data-ck-pdf="'+esc(S.ckD)+'|'+esc(S.ckC)+'">Baixar ficha em PDF</button>' : '') + '</div>';
   return h;
 }
-async function ckSalvar(k, campo, valor){
-  if (!ckLivre() && !(ckEscalado() && datasCheckin().includes(S.ckD))) return;
-  const b = blocosCheckin(S.ckD, S.ckC);
-  let row = null, g0 = null; b.grupos.forEach(g => g.rows.forEach(r => { if (r.k===k) { row = r; g0 = g; } }));
-  const ant = (S.ckMarks||{})[k] || {};
-  const dado = {data:S.ckD, culto:S.ckC, chave:k, ci:!!ant.ci, ret:!!ant.ret, dev:!!ant.dev, nome: ant.nome||'', escalado: row ? row.nome : '', area: g0 ? g0.area : '', funcao: row ? row.fn : '', [campo]: valor};
-  S.ckMarks = {...(S.ckMarks||{}), [k]: dado}; if (campo !== 'nome') render();
+const ckPode = () => ckLivre() || (ckEscalado() && datasCheckin().includes(S.ckD));
+async function ckGravar(k, patch){
+  if (!ckPode()) return;
+  const ant = (S.ckMarks||{})[k] || {}, meta = ckMeta(k);
+  const itens = (patch.itens !== undefined ? patch.itens : ant.itens) || [];
+  const dado = {data:S.ckD, culto:S.ckC, chave:k, ci:!!ant.ci, nome:ant.nome||'', escalado:meta.escalado, area:meta.area, funcao:meta.funcao, ...patch,
+    itens, ret: itens.some(i => (i.ret||0) > 0), dev: itens.length > 0 && itens.every(i => (i.dev||0) >= (i.ret||0))};
+  S.ckMarks = {...(S.ckMarks||{}), [k]: {...ant, ...dado}};
+  S.ckDia = [...(S.ckDia||[]).filter(m => !(m.culto === S.ckC && m.chave === k)), {...ant, ...dado}];
+  if (!('nome' in patch && Object.keys(patch).length === 1)) render();
   try { const r = await sb.from('checkin_marcas').upsert(dado, {onConflict:'data,culto,chave'}); if (r.error) throw r.error; } catch(e){ falhaEscrita(e); }
 }
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.id === 'ckD' && t.value && ckLivre()) { S.ckD = t.value; render(); return; }
-  if (t.dataset && t.dataset.ckk) { ckSalvar(t.dataset.ckk, t.dataset.campo, t.checked); t.closest('.ckrow') && t.dataset.campo==='ci' && t.closest('.ckrow').classList.toggle('feito', t.checked); return; }
-  if (t.dataset && t.dataset.cknome) ckSalvar(t.dataset.cknome, 'nome', t.value.trim());
+  if (t.dataset && t.dataset.ckk && t.dataset.campo === 'ci') { const k = t.dataset.ckk, ant = (S.ckMarks||{})[k] || {}, meta = ckMeta(k);
+    // Ao fazer o check-in, os itens padrão da função já vêm como retirados (dá para tirar no ✕).
+    const itens = t.checked && !(ant.itens||[]).length ? ckPadrao(meta.areaId, meta.funcao).map(nome => ({nome, ret:1, dev:0})) : undefined;
+    ckGravar(k, itens ? {ci:t.checked, itens} : {ci:t.checked}); return; }
+  if (t.dataset && t.dataset.cknome) ckGravar(t.dataset.cknome, {nome:t.value.trim()});
 });
+document.addEventListener('click', async e => { const b = e.target.closest('button'); if (!b || S.tab !== 'checkin') return;
+  const alvo = v => { const [k, ix] = String(v).split('|'); const m = (S.ckMarks||{})[k] || {}; return {k, ix:Number(ix), itens:JSON.parse(JSON.stringify(m.itens||[]))}; };
+  if (b.dataset.ckDev) { const a = alvo(b.dataset.ckDev), it = a.itens[a.ix]; if (it) { it.dev = Math.min(it.ret, (it.dev||0) + 1); ckGravar(a.k, {itens:a.itens}); } }
+  if (b.dataset.ckUndev) { const a = alvo(b.dataset.ckUndev), it = a.itens[a.ix]; if (it) { it.dev = Math.max(0, (it.dev||0) - 1); ckGravar(a.k, {itens:a.itens}); } }
+  if (b.dataset.ckRm) { const a = alvo(b.dataset.ckRm); a.itens.splice(a.ix, 1); ckGravar(a.k, {itens:a.itens}); }
+  if (b.dataset.ckAdd) formCkItem(b.dataset.ckAdd);
+  if ('ckPessoa' in b.dataset) abrir('<form><h2>Pessoa fora da escala</h2><p class="hint">Para controlar empréstimo e devolução de quem não está na escala deste culto.</p><label class="f" for="ckPN">Nome</label><input class="inp" id="ckPN" name="nome" required maxlength="80">'
+      + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Adicionar</button></div></form>',
+    async fd => { const nome = String(fd.get('nome')||'').trim(); if (!nome) return false; await ckGravar('avulso_'+Date.now(), {nome, ci:true, area:'Pessoas avulsas', funcao:'Avulso'}); return true; });
+});
+// "+ item": da lista cadastrada ou digitado na hora, com quantidade. Admin/Gestão podem salvar o item novo na lista.
+function formCkItem(k){
+  const lista = (S.ckItens||[]).filter(i => i.ativo !== false);
+  abrir('<form><h2>Retirada de item</h2><label class="f" for="ckIN">Item</label><input class="inp" id="ckIN" name="nome" list="ckIL" required maxlength="60" placeholder="Escolha ou digite">'
+      + '<datalist id="ckIL">'+lista.map(i => '<option value="'+esc(i.nome)+'">').join('')+'</datalist>'
+      + '<div class="chips" style="flex-wrap:wrap;margin-top:8px">'+lista.map(i => '<button type="button" class="chip" data-ck-escolhe="'+esc(i.nome)+'">'+esc(i.nome)+'</button>').join('')+'</div>'
+      + '<label class="f" for="ckIQ">Quantidade</label><input class="inp" id="ckIQ" name="qtd" type="number" min="1" max="99" value="1" required inputmode="numeric">'
+      + (temGestao() ? '<label class="hint" style="display:block;margin-top:8px"><input type="checkbox" name="salvar"> Salvar este item na lista (se for novo)</label>' : '')
+      + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Adicionar</button></div></form>',
+    async fd => {
+      const nome = String(fd.get('nome')||'').trim(), qtd = Math.max(1, Math.min(99, parseInt(fd.get('qtd'), 10) || 1)); if (!nome) return false;
+      const conhecido = (S.ckItens||[]).find(i => normNome(i.nome) === normNome(nome)), nomeOk = conhecido ? conhecido.nome : nome;
+      const itens = JSON.parse(JSON.stringify(((S.ckMarks||{})[k]||{}).itens || [])), ja = itens.find(i => normNome(i.nome) === normNome(nomeOk));
+      if (ja) ja.ret = (ja.ret||0) + qtd; else itens.push({nome:nomeOk, ret:qtd, dev:0});
+      if (fd.get('salvar') && !conhecido && temGestao()) { const r = await sb.from('checkin_itens').insert({nome:nomeOk}); if (r.error) falhaEscrita(r.error); else await ckCarregarItens(); }
+      await ckGravar(k, {itens}); return true; },
+    body => body.addEventListener('click', e => { const c = e.target.closest('[data-ck-escolhe]'); if (c) { body.querySelector('#ckIN').value = c.dataset.ckEscolhe; body.querySelector('#ckIQ').focus(); } }));
+}
 document.addEventListener('click', e => { const c = e.target.closest('[data-ck-culto]'); if (c) { S.ckC = c.dataset.ckCulto; render(); } });
 
 /* ---------- planilha personalizada ---------- */
@@ -1240,7 +1358,11 @@ async function exportarPeriodo(tipo, btn){
     const titulo = ((S.cfg&&S.cfg.igreja)||'Igreja')+(ck?' · Check-in de ':' · Escala de ')+dataBR(de)+' a '+dataBR(ate)+(S.filtro!=='todas'?' · '+conexaoNome(S.filtro):'');
     const arq = (ck?'checkin-':'escala-')+de+'-a-'+ate;
     const HEAD = ck ? CK_HEAD : ['Área','Conexão','Função','Nome'];
-    const vals = r => ck ? [r.area, r.funcao, r.pessoa, '', '', ''] : [r.area, r.conexao, r.funcao, r.pessoa];
+    // Check-in: junta o que foi marcado no dia (check-in, retirou e devolveu) pela data, culto, função e nome.
+    const mks = {}; if (ck) { const rm = await sb.from('checkin_marcas').select('*').gte('data', de).lte('data', ate);
+      (rm.data||[]).forEach(m => { mks[m.data+'|'+cultoInfo(m.culto).nome+'|'+m.funcao+'|'+normNome(m.escalado || m.nome)] = m; }); }
+    const mkDe = r => mks[r.data+'|'+r.culto+'|'+r.funcao+'|'+normNome(r.pessoa)];
+    const vals = r => ck ? [r.area, r.funcao, r.pessoa, (mkDe(r)||{}).ci ? 'Sim' : '', ckRetTxt(mkDe(r)), ckDevTxt(mkDe(r))] : [r.area, r.conexao, r.funcao, r.pessoa];
     const nc = HEAD.length; const ult = String.fromCharCode(64+nc);
     if (tipo === 'pdf') {
       await carregar(JSPDF); await carregar(AUTOTABLE);
@@ -1707,6 +1829,7 @@ function viewAjustes(){
     + '<label class="f">Dias de culto</label><div class="chips">'+DIAS.map((d,i)=>'<label class="chip"><input type="checkbox" name="dia" value="'+i+'"'+(diasCulto().includes(i)?' checked':'')+'> '+d+'</label>').join('')+'</div>'
     + '<label class="f" for="cW">WhatsApp do administrador (recebe os avisos de cadastro)</label><input class="inp" id="cW" name="whatsAdm" type="tel" inputmode="tel" value="'+esc(S.whatsAdm||'')+'"><div class="hint">Com DDI e DDD, só números. Ex.: 5511999999999</div>'
     + '<div class="end"><button type="submit" class="btn">Salvar ajustes</button></div></form></div>';
+  html += cardCkItens();
   html += '<h2 class="section-title">Áreas da escala</h2><div class="card">' + areas().map(a => '<p class="fn" style="margin:0 0 10px"><strong>'+esc(a.nome)+'</strong>'+(a.porConexao?'<span class="tag">por conexão</span>':'')+'<br><span class="meta">'+a.funcoes.map(f=>esc(f.nome)+(f.vagas?' ('+f.vagas+')':' (livre)')+(Array.isArray(f.cultos)&&f.cultos.length?' · só '+f.cultos.map(c=>cultoInfo(c).nome.toLowerCase()).join(' e '):'')).join(', ')+'</span></p>').join('') + '<p class="hint">Para mudar áreas, funções ou quantidade de vagas, é só pedir ao Claude.</p></div>';
   html += '<h2 class="section-title">Convidar pelo WhatsApp</h2><div class="card"><p class="meta" style="margin:0">Mande para a pessoa o link do painel e o passo a passo para entrar e se cadastrar.</p>'
     + '<div class="row"><div><label class="f" for="cvN">Nome</label><input class="inp" id="cvN" autocomplete="off"></div><div><label class="f" for="cvW">WhatsApp com DDD</label><input class="inp" id="cvW" type="tel" inputmode="tel" placeholder="(11) 99999-9999"></div></div>'

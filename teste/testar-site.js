@@ -214,8 +214,25 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   await ir(p, 'checkin'); await p.fill('#ckD', '2026-11-01'); await p.dispatchEvent('#ckD', 'change'); await p.waitForTimeout(300);
   conferir((await p.textContent('.ckres')).includes('/'), 'check-in mostra o resumo');
   conferir(!(await p.textContent('#view')).includes('Ministros'), 'Louvor fica fora do check-in');
-  await p.click('.ckrow:not(.ckhead) .ckbox >> nth=0'); await p.waitForTimeout(200);
-  conferir((await p.textContent('.ckres b')) === '1' && !!(await p.$('.ckrow.feito')), 'marcar check-in fica verde e conta 1');
+  // Primeira linha é o Estacionamento da Direção do culto: o check-in já traz Crachá + Colete.
+  const k0 = await p.$eval('.ck2 input[data-ckk]', e => e.dataset.ckk);
+  await p.click('.ck2 .ckbox >> nth=0'); await p.waitForTimeout(250);
+  conferir((await p.textContent('.ckres b')) === '1' && !!(await p.$('.ck2.feito')), 'marcar check-in fica verde e conta 1');
+  const itens0 = await p.evaluate(k => window.__TABELAS.checkin_marcas.find(m => m.chave === k).itens.map(i => i.nome+'×'+i.ret).join(','), k0);
+  conferir(itens0 === 'Crachá×1,Colete×1', 'Estacionamento: check-in já vem com Crachá + Colete');
+  conferir(!!(await p.$('.ck2.pend')) && (await p.textContent('.ck2.pend .ck2-falta')).includes('Crachá ×1, Colete ×1') && (await p.textContent('.ck-pendentes')).includes('Ainda não devolvido'), 'linha amarela com "Falta" e resumo "Ainda não devolvido"');
+  await p.click('[data-ck-add="'+k0+'"]'); await p.waitForSelector('#dlg[open] #ckIN'); await p.click('[data-ck-escolhe="Rádio"]'); await p.fill('#ckIQ', '7'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(400);
+  conferir((await p.textContent('.ck-estoque')).includes('Rádios: 7 de 6 em uso') && !!(await p.$('.ck-estoque.passou')), 'estoque: "Rádios: 7 de 6 em uso" e aviso de que passou');
+  for (const ix of [0,1,2]) for (let n = 0; n < (ix === 2 ? 7 : 1); n++) { await p.click('[data-ck-dev="'+k0+'|'+ix+'"]'); await p.waitForTimeout(80); }
+  await p.waitForTimeout(250);
+  conferir(!!(await p.$('.ck2.ok')) && !(await p.$('.ck-pendentes')) && (await p.textContent('.ck-estoque')).includes('Rádios: 0 de 6'), 'devolveu tudo: linha verde, sem pendências');
+  await p.click('[data-ck-add="'+k0+'"]'); await p.waitForSelector('#dlg[open] #ckIN'); await p.fill('#ckIN', 'Chave da sala'); await p.check('#dlg input[name="salvar"]'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(400);
+  conferir(await p.evaluate(() => window.__TABELAS.checkin_itens.some(i => i.nome === 'Chave da sala')) && (await p.textContent('.ck2-falta')).includes('Chave da sala ×1'), 'item digitado na hora (e salvo na lista)');
+  await p.click('[data-ck-pessoa]'); await p.waitForSelector('#dlg[open] #ckPN'); await p.fill('#ckPN', 'Visitante Fulano'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(400);
+  conferir((await p.textContent('#view')).includes('Pessoas avulsas') && (await p.textContent('#view')).includes('Visitante Fulano'), '"+ pessoa" registra alguém fora da escala');
+  await foto(p, '12a-checkin-itens');
+  const dlck = p.waitForEvent('download'); await p.click('#view [data-ck-pdf]'); const ack = await dlck; await ack.saveAs(path.join(SAIDA, 'checkin-itens.pdf'));
+  conferir(ack.suggestedFilename().endsWith('.pdf'), 'ficha PDF com retirou/devolveu baixa');
   await foto(p, '12-admin-checkin');
   await ir(p, 'avisos'); await p.click('[data-novo-aviso]'); await p.fill('#aT', 'Aviso de teste'); await p.fill('#aX', 'Texto do aviso'); await p.click('#dlg [type=submit]');
   await p.waitForTimeout(300); conferir((await p.textContent('#view')).includes('Aviso de teste'), 'admin publica aviso');
