@@ -33,6 +33,6 @@ Pelo mesmo motivo, as mensagens de commit **não** devem ter a linha `Co-Authore
 (o Netlify conta o coautor como outro contribuidor e bloqueia a publicação).
 
 ## Endereço oficial
-O site oficial é **https://familia-alcancar.netlify.app**, publicado pelo Netlify a partir da branch **main**
-(só commits com `[publicar]` na mensagem geram publicação, para não esgotar os créditos do plano grátis).
-O GitHub Pages (`scripts/publicar-github-pages.sh`) é só uma cópia de reserva; convites e mensagens usam sempre o link oficial.
+O site oficial é **https://familiaalcancar-star.github.io/painel-alcancar/** (GitHub Pages, ramo `gh-pages`,
+publicado com `sh scripts/publicar-github-pages.sh` depois de salvar na `main`). Convites e mensagens usam sempre esse link.
+O Netlify (familia-alcancar.netlify.app) está sem créditos e fica parado; não é mais o oficial.
