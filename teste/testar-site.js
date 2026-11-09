@@ -504,6 +504,8 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.addInitScript(([e, m]) => { localStorage.setItem('mockFezCheckin', '1'); localStorage.setItem('mockPapel', 'midia2'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); localStorage.setItem('mockMarcas', JSON.stringify(m)); }, [escApoio, marcasAna]);
     await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(300); await irHoje(p);
     conferir((await p.textContent('.mk-eu')).includes('Apoio 2') && (await p.textContent('.mk-fn')).includes('✔ Ana ·'), 'Apoio 2 vê o que a Ana marcou, com nome e hora');
+    const ordApoio = await p.$$eval('.mk-fn.minha .mk-txt', l => l.map(e => e.firstChild.textContent));
+    conferir(ordApoio.slice(-3).join('|') === 'Oração final|Conferir mochila: iPhone, carregador, microfones e notebook|Entregar mochila', 'Apoio: mochila depois da Oração final, por último');
     conferir(await p.$eval('input[data-mk="ap0"]', e => e.checked && e.disabled) && !(await p.$eval('input[data-mk="ap1"]', e => e.disabled)), 'item marcado travado para o Apoio 2; os outros ele pode marcar');
     await p.click('label:has(input[data-mk="ap1"])'); await p.waitForTimeout(400);
     conferir(await p.evaluate(() => window.__TABELAS.checklist_marcas.length === 2), 'Apoio 2 marca outro item do mesmo checklist');

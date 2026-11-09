@@ -1444,3 +1444,8 @@ update public.config set d = d || '{"checkinPadrao":[{"area":"*","funcao":"*","i
 do $$ begin
   begin alter publication supabase_realtime add table public.checkin_itens; exception when others then null; end;
 end $$;
+
+-- ---------- Checklist do Apoio: mochila após a Oração final (09/11/2026) ----------
+insert into public.checklist_itens (funcao, bloco, ordem, texto)
+select 'Apoio', 'Após a oração final', o, t from (values (1010, 'Conferir mochila: iPhone, carregador, microfones e notebook'), (1020, 'Entregar mochila')) v(o, t)
+where not exists (select 1 from public.checklist_itens where funcao = 'Apoio' and texto = v.t);

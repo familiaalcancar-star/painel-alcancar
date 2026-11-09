@@ -23,7 +23,8 @@ const T = {
   checkin_marcas:[], historico:[], convites:[], checklist_marcas:[],
   checkin_itens:[['Crachá',null,10],['Colete',null,20],['Rádio',6,30],['Bastão de luz',null,40],['Guarda-chuva',null,50]].map(([nome, estoque, ordem]) => ({nome, estoque, ordem, ativo:true})),
   checklist_itens:[['Bloco 1 – Backgrounds','Wallpaper (tela de descanso)'],['Bloco 1 – Backgrounds','Fundo da letra das músicas'],['Bloco 2 – Cronômetro','Conferir se está no horário correto']].map(([bloco, texto], k) => ({id:'it'+k, funcao:'Projeção', bloco, texto, ordem:(k+1)*10, ativo:true})).concat([['Bloco 1 – Luzes da plataforma','Luz amarela direcionada à plataforma'],['Bloco 2 – Luzes da mídia','Teto – esquerda']].map(([bloco, texto], k) => ({id:'ap'+k, funcao:'Apoio', bloco, texto, ordem:(k+1)*10, ativo:true})))
-    .concat(['Projeção','Apoio'].flatMap(f => [{id:'or-ini-'+f, funcao:f, bloco:'Início', texto:'Oração inicial', ordem:0, ativo:true, destaque:true}, {id:'or-fim-'+f, funcao:f, bloco:'Encerramento', texto:'Oração final', ordem:1000, ativo:true, destaque:true}])),
+    .concat(['Projeção','Apoio'].flatMap(f => [{id:'or-ini-'+f, funcao:f, bloco:'Início', texto:'Oração inicial', ordem:0, ativo:true, destaque:true}, {id:'or-fim-'+f, funcao:f, bloco:'Encerramento', texto:'Oração final', ordem:1000, ativo:true, destaque:true}]))
+    .concat([{id:'ap-moch1', funcao:'Apoio', bloco:'Após a oração final', texto:'Conferir mochila: iPhone, carregador, microfones e notebook', ordem:1010, ativo:true}, {id:'ap-moch2', funcao:'Apoio', bloco:'Após a oração final', texto:'Entregar mochila', ordem:1020, ativo:true}]),
   chat:[{id:'m1', texto:'Bom dia, pessoal! Escala de domingo fechada?', por:U.betel, em:'2026-10-25T12:00:00.000Z'},
         {id:'m2', texto:'Falta só a recepção da noite.', por:U.gestao, em:new Date(Date.now()-3600e3).toISOString()},
         {id:'m3', texto:'Combinado, eu vejo isso.', por:U.admin, em:new Date(Date.now()-60e3).toISOString()}] };
