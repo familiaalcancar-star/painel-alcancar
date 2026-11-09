@@ -31,3 +31,8 @@ Este repositório já está configurado para assinar como `familiaalcancar-star`
 pessoa aparecem no Netlify como "Unrecognized Git contributor" e não são publicadas.
 Pelo mesmo motivo, as mensagens de commit **não** devem ter a linha `Co-Authored-By:`
 (o Netlify conta o coautor como outro contribuidor e bloqueia a publicação).
+
+## Endereço oficial
+O site oficial é **https://familia-alcancar.netlify.app**, publicado pelo Netlify a partir da branch **main**
+(só commits com `[publicar]` na mensagem geram publicação, para não esgotar os créditos do plano grátis).
+O GitHub Pages (`scripts/publicar-github-pages.sh`) é só uma cópia de reserva; convites e mensagens usam sempre o link oficial.

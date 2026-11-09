@@ -11,6 +11,9 @@ const DADOS = { config: ler('config.json'), escalas: ler('escalas.json'), avisos
 // Mídia como está no banco desde 08/11: 5 funções e Apoio 1/2 fixos (o banco converte as escalas antigas).
 const FIXOS = {'Apoio 1':'Pedro Morais', 'Apoio 2':'Augusto Cantuaria'};
 DADOS.config.midiaFixos = FIXOS;
+// Direção do culto como está no banco desde 09/11: limpeza só no culto da noite.
+DADOS.config.areas.forEach(a => { if (a.id === 'direcao') a.funcoes = [{nome:'Estacionamento', vagas:3}, {nome:'Recepção', vagas:4}, {nome:'Envelopes e lembrancinhas', vagas:2}, {nome:'Café + água do ministro da Palavra', vagas:1}, {nome:'Equipe de limpeza pós-culto', vagas:4, cultos:['noite']}]; });
+DADOS.escalas.forEach(e => { if (e.area === 'direcao') (e.funcoes||[]).forEach(f => { if (f.nome === 'Café') f.nome = 'Café + água do ministro da Palavra'; }); });
 DADOS.config.areas.forEach(a => { if (a.id === 'midia') a.funcoes = ['Projeção','Transmissão','Câmera','Apoio 1','Apoio 2'].map(nome => ({nome, vagas:1})); });
 DADOS.escalas.forEach(e => { if (e.area !== 'midia') return; const ns = (e.funcoes||[]).flatMap(f => f.pessoas||[]);
   const ehFixo = (n, f) => { const a = n.toLowerCase(), b = f.toLowerCase(); return a === b || a === b.split(' ')[0]; };
@@ -524,6 +527,22 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   await p.click('[data-convites]').catch(() => {}); await p.waitForTimeout(200);
   const cvOps = await p.$$eval('#cvP option', os => os.map(o => o.textContent)).catch(() => []);
   conferir(['Mídia','Louvor','Coro','Membro'].every(n => cvOps.includes(n)), 'convite por e-mail com Mídia, Louvor, Coro e Membro');
+  await p.context().close();
+
+  console.log('Direção do culto: limpeza só à noite e convocação');
+  p = await abrir('admin', '#escala'); await p.setViewportSize({ width: 1280, height: 900 });
+  await p.click('button.cell[data-det="2026-11-08|manha|direcao"]'); await p.waitForTimeout(150);
+  conferir(!(await p.textContent('#view')).includes('limpeza'), 'manhã: sem "Equipe de limpeza"');
+  await p.click('[data-esc]'); await p.waitForSelector('#dlg[open] legend');
+  conferir(!(await p.$$eval('#dlg legend', l => l.map(e => e.textContent))).some(t => t.includes('limpeza')), 'formulário da manhã sem a limpeza');
+  await p.click('#dlg [data-cancel]'); await p.waitForTimeout(300); await p.click('[data-voltar]');
+  await p.click('button.cell[data-det="2026-11-08|noite|direcao"]'); await p.waitForTimeout(150);
+  conferir((await p.textContent('#view')).includes('Equipe de limpeza pós-culto'), 'noite: com "Equipe de limpeza pós-culto"');
+  await p.evaluate(() => { window.__copiado = null; navigator.clipboard.writeText = async t => { window.__copiado = t; }; });
+  await p.click('[data-convocacao]'); await p.waitForTimeout(150);
+  const conv = await p.evaluate(() => window.__copiado || '');
+  const [cManha, cNoite] = conv.split('🌙');
+  conferir(conv.startsWith('❤️ ATENÇÃO, VOLUNTÁRIOS!') && conv.includes('DIREÇÃO DO CULTO · 08/11') && conv.includes('☀️ CULTO DA MANHÃ') && /Estacionamento:\n1\. .*\n2\. .*\n3\. /.test(cManha) && !cManha.includes('limpeza') && /Equipe de limpeza pós-culto:\n1\. .*\n2\. .*\n3\. .*\n4\. /.test(cNoite) && conv.trim().endsWith('🙏❤️'), 'convocação: manhã e noite, vagas numeradas, limpeza só à noite');
   await p.context().close();
 
   console.log('Notificações');
