@@ -216,28 +216,25 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   await ir(p, 'checkin'); await p.fill('#ckD', '2026-11-01'); await p.dispatchEvent('#ckD', 'change'); await p.waitForTimeout(300);
   conferir((await p.textContent('.ckres')).includes('/'), 'check-in mostra o resumo');
   conferir(!(await p.textContent('#view')).includes('Ministros'), 'Louvor fica fora do check-in');
-  // Primeira linha é o Estacionamento da Direção do culto: o check-in já traz Crachá + Colete.
+  // Primeira linha é o Estacionamento da Direção do culto (Crachá, Colete, Bastão de luz, Rádio).
   const k0 = await p.$eval('.ck2 input[data-ckk]', e => e.dataset.ckk);
-  conferir((await p.textContent('.ck2 >> nth=0')).includes('vai retirar: Crachá, Colete, Bastão de luz, Rádio') && (await p.textContent('.ck2 >> nth=1')).includes('vai retirar: Crachá'), 'antes do check-in: "vai retirar" com os itens padrão de cada função');
+  const linhas0 = await p.$$eval('.ck2 >> nth=0', l => [...l[0].querySelectorAll('.ckit2')].map(e => e.querySelector('.ckit2-n').textContent.trim()));
+  conferir(JSON.stringify(linhas0) === JSON.stringify(['Crachá','Colete','Bastão de luz','Rádio']) && await p.$$eval('.ck2 >> nth=0', l => [...l[0].querySelectorAll('input[data-ck-ent]')].every(e => !e.checked)), 'antes do check-in: um item por linha (Entregue/Devolvido desmarcados)');
+  conferir(await p.$$eval('.ck2 >> nth=0', l => [...l[0].querySelectorAll('input[data-ck-devol]')].every(e => e.disabled)), '"Devolvido" só libera depois de "Entregue"');
   await p.click('.ck2 .ckbox >> nth=0'); await p.waitForTimeout(250);
   conferir((await p.textContent('.ckres b')) === '1' && !!(await p.$('.ck2.feito')), 'marcar check-in fica verde e conta 1');
   const itens0 = await p.evaluate(k => window.__TABELAS.checkin_marcas.find(m => m.chave === k).itens.map(i => i.nome+'×'+i.ret).join(','), k0);
-  conferir(itens0 === 'Crachá×1,Colete×1,Bastão de luz×1,Rádio×1', 'Estacionamento: check-in já vem com Crachá, Colete, Bastão de luz e Rádio');
-  conferir(!!(await p.$('.ck2.pend')) && (await p.textContent('.ck2.pend .ck2-falta')).includes('Crachá ×1, Colete ×1, Bastão de luz ×1, Rádio ×1') && (await p.textContent('.ck-pendentes')).includes('Ainda não devolvido'), 'linha amarela com "Falta" e resumo "Ainda não devolvido"');
+  conferir(itens0 === 'Crachá×1,Colete×1,Bastão de luz×1,Rádio×1', 'check-in marca os itens padrão como entregues');
+  conferir(!!(await p.$('.ck2.pend')) && (await p.textContent('.ck2.pend .ck2-falta')).includes('Rádio ×1') && (await p.textContent('.ck-pendentes')).includes('Ainda não devolvido'), 'linha amarela com "Falta" e resumo "Ainda não devolvido"');
+  await p.click('label:has(input[data-ck-ent="'+k0+'|Bastão de luz"])'); await p.waitForTimeout(250);
+  conferir(await p.evaluate(k => window.__TABELAS.checkin_marcas.find(m => m.chave === k).itens.find(i => i.nome === 'Bastão de luz').ret === 0, k0), 'dá para desmarcar um item padrão (não entregue)');
   await p.click('[data-ck-add="'+k0+'"]'); await p.waitForSelector('#dlg[open] #ckIN'); await p.click('[data-ck-escolhe="Rádio"]'); await p.fill('#ckIQ', '7'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(400);
   conferir((await p.textContent('.ck-estoque')).includes('Rádios: 8 de 6 em uso') && !!(await p.$('.ck-estoque.passou')), 'estoque: "Rádios: 8 de 6 em uso" e aviso de que passou');
-  for (const ix of [0,1,2,3]) for (let n = 0; n < (ix === 3 ? 8 : 1); n++) { await p.click('[data-ck-dev="'+k0+'|'+ix+'"]'); await p.waitForTimeout(80); }
+  for (const nome of ['Crachá','Colete','Rádio']) { await p.click('label:has(input[data-ck-devol="'+k0+'|'+nome+'"])'); await p.waitForTimeout(150); }
   await p.waitForTimeout(250);
   conferir(!!(await p.$('.ck2.ok')) && !(await p.$('.ck-pendentes')) && (await p.textContent('.ck-estoque')).includes('Rádios: 0 de 6'), 'devolveu tudo: linha verde, sem pendências');
   await p.click('[data-ck-add="'+k0+'"]'); await p.waitForSelector('#dlg[open] #ckIN'); await p.fill('#ckIN', 'Chave da sala'); await p.check('#dlg input[name="salvar"]'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(400);
   conferir(await p.evaluate(() => window.__TABELAS.checkin_itens.some(i => i.nome === 'Chave da sala')) && (await p.textContent('.ck2-falta')).includes('Chave da sala ×1'), 'item digitado na hora (e salvo na lista)');
-  // Quem fez check-in antes da mudança (só com Crachá): botão "Aplicar itens padrão".
-  const k1 = await p.$eval('.ck2 >> nth=1', e => e.querySelector('input[data-ckk]').dataset.ckk);
-  await p.evaluate(k => { window.__TABELAS.checkin_marcas.push({data:'2026-11-01', culto:'manha', chave:k, ci:true, itens:[]}); }, k1);
-  await p.fill('#ckD', '2026-11-08'); await p.dispatchEvent('#ckD', 'change'); await p.waitForTimeout(250); await p.fill('#ckD', '2026-11-01'); await p.dispatchEvent('#ckD', 'change'); await p.waitForTimeout(400);
-  conferir(!!(await p.$('[data-ck-padrao="'+k1+'"]')), 'quem já tinha check-in sem itens ganha "Aplicar itens padrão"');
-  await p.click('[data-ck-padrao="'+k1+'"]'); await p.waitForTimeout(300);
-  conferir(await p.evaluate(k => window.__TABELAS.checkin_marcas.find(m => m.chave === k && m.data === '2026-11-01').itens.map(i => i.nome).join(','), k1) === 'Crachá', 'aplicar itens padrão com um toque');
   await p.click('[data-ck-pessoa]'); await p.waitForSelector('#dlg[open] #ckPN'); await p.fill('#ckPN', 'Visitante Fulano'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(400);
   conferir((await p.textContent('#view')).includes('Pessoas avulsas') && (await p.textContent('#view')).includes('Visitante Fulano'), '"+ pessoa" registra alguém fora da escala');
   await foto(p, '12a-checkin-itens');
