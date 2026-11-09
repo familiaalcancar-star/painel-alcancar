@@ -1674,7 +1674,7 @@ function viewAjuda(){
 
 /* ---------- convite pelo WhatsApp ---------- */
 // Endereço oficial do painel (o que vai nos convites e mensagens), qualquer que seja o endereço aberto agora.
-const LINK_PAINEL = () => 'https://familia-alcancar.netlify.app/';
+const LINK_PAINEL = () => 'https://familiaalcancar-star.github.io/painel-alcancar/';
 const msgConvite = n => 'Olá'+(n.trim()?', '+n.trim().split(' ')[0]:'')+'! Graça e paz! 🙌\n\nVocê foi convidado(a) para o Painel da '+((S.cfg&&S.cfg.igreja)||'igreja')+', onde ficam as escalas, os avisos e a agenda.\n\n*Como entrar:*\n1. Abra o painel por este link: '+LINK_PAINEL()+'#ajuda\n2. Toque em *Entrar*, no topo, e depois em *Continuar com Google* (se tiver Gmail). Sem Gmail: toque em *Criar conta*, cadastre e-mail e senha e confirme pelo link que chega no e-mail.\n3. Entre no painel.\n4. Na tela inicial, preencha o cadastro: nome completo, WhatsApp, sua conexão e se você é líder, auxiliar ou da organização.\n5. Aguarde a aprovação de um administrador. Depois disso, você já consegue preencher a escala da sua conexão.\n\nNa primeira vez, aparece um tutorial com o passo a passo de tudo. Ele fica sempre no botão ❓ Como usar, no topo.\n\nQualquer dúvida, é só me chamar!';
 const waUrl = (tel, txt) => { let d = String(tel||'').replace(/\D/g,''); if (d && d.length <= 11) d = '55'+d; return 'https://wa.me/'+d+'?text='+encodeURIComponent(txt); };
 document.addEventListener('input', e => { if (e.target.id==='cvN' || e.target.id==='cvW') { const a = $('#cvLink'); if (a) a.href = waUrl($('#cvW').value, msgConvite($('#cvN').value)); } });
