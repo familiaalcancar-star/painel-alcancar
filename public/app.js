@@ -1247,8 +1247,10 @@ const ckPlural = n => /\s/.test(n) || /s$/i.test(n) ? n : n+'s';
 const ckAvulsos = () => Object.values(S.ckMarks||{}).filter(m => String(m.chave).startsWith('avulso_')).sort((a, b) => String(a.chave).localeCompare(String(b.chave)));
 function ckMeta(k){ let meta = null; blocosCheckin(S.ckD, S.ckC).grupos.forEach(g => g.rows.forEach(r => { if (r.k === k) meta = {escalado:r.nome, area:g.area, areaId:g.id, funcao:r.fn}; }));
   const m = (S.ckMarks||{})[k]; return meta || {escalado:'', area:(m && m.area) || 'Pessoas avulsas', areaId:'', funcao:(m && m.funcao) || 'Avulso'}; }
-function ckLinha(k, nomeEsc, fn, m){
+function ckLinha(k, nomeEsc, fn, m, areaId){
   m = m || {}; const nm = nomeEsc || m.nome || '', itens = m.itens || [], falta = ckFalta(m);
+  // Itens padrão da função: antes do check-in aparecem como "vai retirar"; quem já fez check-in sem eles ganha "aplicar itens padrão".
+  const padrao = areaId ? ckPadrao(areaId, fn) : [], faltamPadrao = padrao.filter(n => !itens.some(i => normNome(i.nome) === normNome(n)));
   const st = itens.length ? (falta.length ? ' pend' : ' ok') : '';
   return '<div class="ck2'+(m.ci ? ' feito' : '')+st+'"><div class="ck2-top"><label class="ckbox" title="Check-in"><input type="checkbox" data-ckk="'+esc(k)+'" data-campo="ci"'+(m.ci?' checked':'')+' aria-label="'+esc('Check-in · '+(nm||fn))+'"><span></span></label>'
     + '<span class="ckn">'+(nomeEsc ? '<b>'+esc(nomeEsc)+'</b>' : '<input class="inp ckin" data-cknome="'+esc(k)+'" placeholder="Digite o nome" value="'+esc(m.nome||'')+'">')+'<small>'+esc(fn)+'</small></span></div>'
@@ -1257,6 +1259,8 @@ function ckLinha(k, nomeEsc, fn, m){
           + (!tudo ? '<button type="button" data-ck-dev="'+esc(k)+'|'+ix+'">↩ Devolveu</button>' : '')
           + ((it.dev||0) > 0 ? '<button type="button" class="mini" data-ck-undev="'+esc(k)+'|'+ix+'" aria-label="Desfazer devolução">−</button>' : '')
           + (!(it.dev||0) ? '<button type="button" class="mini" data-ck-rm="'+esc(k)+'|'+ix+'" aria-label="Tirar '+esc(it.nome)+'">✕</button>' : '') + '</span>'; }).join('')
+    + (!m.ci && !itens.length && padrao.length ? '<span class="ck-vai">vai retirar: '+esc(padrao.join(', '))+'</span>' : '')
+    + (m.ci && faltamPadrao.length ? '<button type="button" class="btn ghost small" data-ck-padrao="'+esc(k)+'">Aplicar itens padrão (+ '+esc(faltamPadrao.join(', '))+')</button>' : '')
     + '<button type="button" class="btn ghost small" data-ck-add="'+esc(k)+'">+ item</button></div>'
     + (falta.length ? '<div class="ck2-falta">Falta: '+esc(ckLista(falta))+'</div>' : '') + '</div>';
 }
@@ -1280,7 +1284,7 @@ function viewCheckin(){
     h += '<div class="ck-estoque'+(uso > i.estoque ? ' passou' : '')+'">'+esc(ckPlural(i.nome))+': <b>'+uso+'</b> de '+i.estoque+' em uso'+(uso > i.estoque ? ' · ⚠️ passou do total!' : '')+'</div>'; });
   if (pend.length) h += '<div class="card ck-pendentes"><h3>Ainda não devolvido</h3>'+pend.map(p => '<div>'+esc(p.nome)+' ×'+p.qtd+' — <b>'+esc(p.quem)+'</b></div>').join('')+'</div>';
   b.grupos.forEach(g => {
-    h += '<div class="card ckg"><h3>'+esc(g.area)+(g.conexao?' <small class="meta">· '+esc(g.conexao)+'</small>':'')+'</h3>' + g.rows.map(r => ckLinha(r.k, r.nome, r.fn, M[r.k])).join('') + '</div>';
+    h += '<div class="card ckg"><h3>'+esc(g.area)+(g.conexao?' <small class="meta">· '+esc(g.conexao)+'</small>':'')+'</h3>' + g.rows.map(r => ckLinha(r.k, r.nome, r.fn, M[r.k], g.id)).join('') + '</div>';
   });
   if (avs.length) h += '<div class="card ckg"><h3>Pessoas avulsas</h3>' + avs.map(m => ckLinha(m.chave, m.nome, 'Avulso', m)).join('') + '</div>';
   h += '<div class="bar" style="margin-top:6px"><button class="btn ghost" data-ck-pessoa>+ pessoa (fora da escala)</button>'
@@ -1314,6 +1318,8 @@ document.addEventListener('click', async e => { const b = e.target.closest('butt
   if (b.dataset.ckUndev) { const a = alvo(b.dataset.ckUndev), it = a.itens[a.ix]; if (it) { it.dev = Math.max(0, (it.dev||0) - 1); ckGravar(a.k, {itens:a.itens}); } }
   if (b.dataset.ckRm) { const a = alvo(b.dataset.ckRm); a.itens.splice(a.ix, 1); ckGravar(a.k, {itens:a.itens}); }
   if (b.dataset.ckAdd) formCkItem(b.dataset.ckAdd);
+  if (b.dataset.ckPadrao) { const k = b.dataset.ckPadrao, meta = ckMeta(k), itens = JSON.parse(JSON.stringify(((S.ckMarks||{})[k]||{}).itens || []));
+    ckPadrao(meta.areaId, meta.funcao).forEach(nome => { if (!itens.some(i => normNome(i.nome) === normNome(nome))) itens.push({nome, ret:1, dev:0}); }); ckGravar(k, {itens}); }
   if ('ckPessoa' in b.dataset) abrir('<form><h2>Pessoa fora da escala</h2><p class="hint">Para controlar empréstimo e devolução de quem não está na escala deste culto.</p><label class="f" for="ckPN">Nome</label><input class="inp" id="ckPN" name="nome" required maxlength="80">'
       + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Adicionar</button></div></form>',
     async fd => { const nome = String(fd.get('nome')||'').trim(); if (!nome) return false; await ckGravar('avulso_'+Date.now(), {nome, ci:true, area:'Pessoas avulsas', funcao:'Avulso'}); return true; });
