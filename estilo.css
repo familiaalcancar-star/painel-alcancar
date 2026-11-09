@@ -390,3 +390,19 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 
 /* Check-in: itens padrão antes do check-in */
 .ck-vai{font-size:12.5px;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:999px;padding:5px 10px}
+
+/* Check-in: um item por linha, com Entregue e Devolvido */
+.ck2-itens{flex-direction:column;align-items:stretch;gap:0;margin-left:44px}
+.ckit2{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px dotted var(--line);font-size:14px}
+.ckit2-n small{color:var(--muted)}
+.ckit2.fora .ckit2-n{color:var(--yellow)}
+.ckit2.volta .ckit2-n{color:var(--green)}
+.ckit2 button.mini{border:1px solid var(--line);background:none;color:var(--ink);border-radius:999px;padding:1px 8px;font-size:12px}
+.ckmini{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--muted);cursor:pointer;min-height:36px}
+.ckmini input{position:absolute;opacity:0;width:1px;height:1px}
+.ckmini span{width:24px;height:24px;border-radius:7px;border:2px solid #5a5a63;display:grid;place-items:center}
+.ckmini input:checked+span{background:var(--green);border-color:var(--green)}
+.ckmini input:checked+span::after{content:"";width:6px;height:11px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.ckmini input:focus-visible+span{outline:2px solid var(--yellow);outline-offset:2px}
+.ckmini.off{opacity:.4;cursor:default}
+.ck2-itens > .btn{align-self:flex-start;margin-top:6px}
