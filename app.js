@@ -1262,7 +1262,8 @@ function ckLinha(k, nomeEsc, fn, m, areaId){
   const st = entregues.length ? (falta.length ? ' pend' : ' ok') : '', padrao = areaId ? ckPadrao(areaId, fn) : [];
   const caixa = (attr, marcado, rot, desab) => '<label class="ckmini'+(desab ? ' off' : '')+'"><input type="checkbox" '+attr+(marcado ? ' checked' : '')+(desab ? ' disabled' : '')+'><span></span>'+rot+'</label>';
   return '<div class="ck2'+(m.ci ? ' feito' : '')+st+'"><div class="ck2-top"><label class="ckbox" title="Check-in"><input type="checkbox" data-ckk="'+esc(k)+'" data-campo="ci"'+(m.ci?' checked':'')+' aria-label="'+esc('Check-in · '+(nm||fn))+'"><span></span></label>'
-    + '<span class="ckn">'+(nomeEsc ? '<b>'+esc(nomeEsc)+'</b>' : '<input class="inp ckin" data-cknome="'+esc(k)+'" placeholder="Digite o nome" value="'+esc(m.nome||'')+'">')+'<small>'+esc(fn)+'</small></span></div>'
+    + '<span class="ckn">'+(nomeEsc ? '<b>'+esc(nomeEsc)+'</b>' : '<input class="inp ckin" data-cknome="'+esc(k)+'" placeholder="Digite o nome" value="'+esc(m.nome||'')+'">')+'<small>'+esc(fn)+'</small></span>'
+    + (nomeEsc && areaId && ckPode() ? '<button type="button" class="btn ghost small ck-troca" data-ck-troca="'+esc(k)+'">⇄ Trocar</button>' : '') + '</div>'
     + '<div class="ck2-itens">' + vistos.map(it => { const id = esc(k)+'|'+esc(it.nome), ent = it.ret > 0, volta = ent && (it.dev||0) >= it.ret;
         return '<div class="ckit2'+(ent ? (volta ? ' volta' : ' fora') : '')+'"><span class="ckit2-n">'+esc(it.nome)+(it.qtd > 1 ? ' ×'+it.qtd : '')
           + (it.salvo && !padrao.some(n => normNome(n) === normNome(it.nome)) && !ent ? ' <button type="button" class="mini" data-ck-rm="'+id+'" aria-label="Tirar '+esc(it.nome)+'">✕</button>' : '')
@@ -1330,10 +1331,60 @@ document.addEventListener('click', async e => { const b = e.target.closest('butt
   if (b.dataset.ckDev1) { const a = alvo(b.dataset.ckDev1), it = a.itens.find(i => i.nome === a.nome); if (it) { it.dev = Math.min(it.ret, (it.dev||0) + 1); ckGravar(a.k, {itens:a.itens}); } }
   if (b.dataset.ckRm) { const a = alvo(b.dataset.ckRm); ckGravar(a.k, {itens:a.itens.filter(i => i.nome !== a.nome)}); }
   if (b.dataset.ckAdd) formCkItem(b.dataset.ckAdd);
+  if (b.dataset.ckTroca && ckPode()) formCkTroca(b.dataset.ckTroca);
   if ('ckPessoa' in b.dataset) abrir('<form><h2>Pessoa fora da escala</h2><p class="hint">Para controlar empréstimo e devolução de quem não está na escala deste culto.</p><label class="f" for="ckPN">Nome</label><input class="inp" id="ckPN" name="nome" required maxlength="80">'
       + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Adicionar</button></div></form>',
     async fd => { const nome = String(fd.get('nome')||'').trim(); if (!nome) return false; await ckGravar('avulso_'+Date.now(), {nome, ci:true, area:'Pessoas avulsas', funcao:'Avulso'}); return true; });
 });
+/* Trocar escalado pelo check-in (rpc trocar_escalado): outra pessoa e/ou outra função, na escala desta semana.
+   As marcas de check-in ficam guardadas pela posição na lista (área_função_posição); depois da troca,
+   cada marca vai para a nova posição da mesma pessoa. Se entrou outra pessoa, quem saiu e já tinha
+   check-in ou itens vira "pessoa avulsa" (os itens entregues continuam com quem retirou). */
+function formCkTroca(k){
+  const meta = ckMeta(k), a = areaInfo(meta.areaId); if (!a) return;
+  const fns = a.funcoes.filter(f => noCulto(f, S.ckC)).map(f => f.nome);
+  const nomes = [...new Map(Object.values(S.names||{}).map(n => [normNome(n.apelido || n.nome), n])).values()].sort((x, y) => String(x.apelido||x.nome).localeCompare(String(y.apelido||y.nome), 'pt-BR'));
+  abrir('<form><h2>⇄ Trocar escalado</h2><p class="meta" style="margin:0">'+esc(meta.escalado)+' · '+esc(meta.funcao)+' · '+esc(a.nome)+'</p>'
+      + '<label class="f" for="ckTP">Pessoa</label><input class="inp" id="ckTP" name="pessoa" list="ckTL" value="'+esc(meta.escalado)+'" placeholder="Busque pelo nome ou digite" autocomplete="off">'
+      + '<datalist id="ckTL">'+nomes.map(n => '<option value="'+esc(n.apelido || n.nome)+'">'+esc(n.nome)+'</option>').join('')+'</datalist>'
+      + '<p class="hint">Escolha da lista de pessoas aprovadas ou digite o nome (como deve aparecer na escala).</p>'
+      + '<label class="f" for="ckTF">Função</label><select class="inp" id="ckTF" name="funcao">'+fns.map(f => '<option'+(f === meta.funcao ? ' selected' : '')+'>'+esc(f)+'</option>').join('')+'</select>'
+      + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Confirmar troca</button></div></form>',
+    async fd => {
+      const pessoa = String(fd.get('pessoa')||'').trim(), funcao = String(fd.get('funcao')||meta.funcao);
+      if (!pessoa) { toast('Informe a pessoa.'); return false; }
+      const outraPessoa = normNome(pessoa) !== normNome(meta.escalado);
+      if (!outraPessoa && funcao === meta.funcao) { toast('Nada mudou.'); return false; }
+      const m = (S.ckMarks||{})[k] || {}, falta = ckFalta(m);
+      const msg = 'Trocar '+meta.escalado+' ('+meta.funcao+') por '+(outraPessoa ? pessoa : meta.escalado)+' ('+funcao+')?'
+        + (outraPessoa && falta.length ? '\n\nAtenção: '+meta.escalado+' ainda está com '+ckLista(falta)+'. Os itens continuam com '+meta.escalado+' (aparece em "Pessoas avulsas").' : '');
+      $('#dlg').close(); if (!await confirmar(msg)) return false;
+      await ckTrocar(k, meta, outraPessoa ? pessoa : null, funcao !== meta.funcao ? funcao : null); return false;
+    });
+}
+async function ckTrocar(k, meta, nomeNovo, funcaoNova){
+  const id = docId(S.ckD, S.ckC, meta.areaId), antes = blocosCheckin(S.ckD, S.ckC).grupos.find(g => g.id === meta.areaId), M = S.ckMarks || {};
+  const r = await sb.rpc('trocar_escalado', {p_escala_id:id, p_funcao_atual:meta.funcao, p_nome_atual:meta.escalado, p_nome_novo:nomeNovo, p_funcao_nova:funcaoNova});
+  if (r.error) { toast(String(r.error.message || '').replace(/^.*?:\s*/, '') || 'Não foi possível trocar.'); return; }
+  // Aplica o novo "funcoes" em todas as cópias locais da escala e recalcula as linhas.
+  [S.ckDocs, S.prox, S.mesEsc].forEach(l => (l||[]).forEach(x => { if (x.id === id) x.funcoes = r.data; }));
+  const depois = blocosCheckin(S.ckD, S.ckC).grupos.find(g => g.id === meta.areaId) || {rows:[]}, usados = new Set(), finais = {};
+  const alvo = (nome, fn) => { const n = depois.rows.find(x => !usados.has(x.k) && normNome(x.nome) === normNome(nome) && x.fn === fn); if (n) usados.add(n.k); return n; };
+  let avulso = null;
+  ((antes && antes.rows) || []).forEach(o => { const mk = M[o.k]; if (!mk) return;
+    if (o.k === k && nomeNovo) { if (mk.ci || (mk.itens||[]).some(i => i.ret > 0)) avulso = {...mk, chave:'avulso_'+Date.now(), nome:o.nome, escalado:'', area:'Pessoas avulsas', funcao:o.fn+' (substituído)'}; return; }
+    const n = alvo(o.nome, o.k === k ? (funcaoNova || o.fn) : o.fn); if (n) finais[n.k] = {...mk, chave:n.k, escalado:n.nome, funcao:n.fn}; });
+  const velhos = Object.keys(M).filter(x => x.startsWith(meta.areaId+'_'));
+  try {
+    const grava = Object.values(finais).filter(f => JSON.stringify(f) !== JSON.stringify(M[f.chave])).map(({_v, ...f}) => f);
+    if (avulso) { const {_v, ...av} = avulso; grava.push(av); }
+    if (grava.length) { const u = await sb.from('checkin_marcas').upsert(grava, {onConflict:'data,culto,chave'}); if (u.error) throw u.error; }
+    const apagar = velhos.filter(x => !finais[x]);
+    if (apagar.length) { const d = await sb.from('checkin_marcas').delete().eq('data', S.ckD).eq('culto', S.ckC).in('chave', apagar); if (d.error) throw d.error; }
+  } catch(e){ falhaEscrita(e); }
+  await Promise.all([ckCarregarDocs(), ckCarregarMarcas()]); render();
+  toast(nomeNovo ? 'Troca feita: '+nomeNovo+' entrou como '+(funcaoNova || meta.funcao)+'.' : meta.escalado+' agora está em '+funcaoNova+'.');
+}
 // "+ item": da lista cadastrada ou digitado na hora, com quantidade. Admin/Gestão podem salvar o item novo na lista.
 function formCkItem(k){
   const lista = (S.ckItens||[]).filter(i => i.ativo !== false);
