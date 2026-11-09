@@ -19,6 +19,8 @@ insert into escalas(id,d) select 'mhoje', jsonb_build_object('data', hoje_sp(), 
   '[{"nome":"Projeção","pessoas":["Ana"]},{"nome":"Transmissão","pessoas":["Bia Transmissao"]},{"nome":"Câmera","pessoas":["Caio"]}]'::jsonb);
 insert into escalas(id,d) select 'mamanha', jsonb_build_object('data', to_char(now() + interval '7 days','YYYY-MM-DD'), 'culto','manha','area','midia','funcoes','[{"nome":"Projeção","pessoas":["Ana"]}]'::jsonb);
 select set_config('request.jwt.claim.sub','',false);
+select t('Sem check-in NÃO marca o checklist','a1',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'manha',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'bloq');
+insert into checkin_marcas(data,culto,chave,ci,nome,escalado) values (hoje_sp(),'manha','t1',true,'','Ana'),(hoje_sp(),'manha','t2',true,'','Bia Transmissao'),(hoje_sp(),'noite','t3',true,'','Ana'),(hoje_sp(),'noite','t4',true,'','Bruno');
 select t('Projeção marca item da Projeção hoje','a1',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'manha',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'ok');
 select t('Projeção NÃO marca em outro dia','a1',$q$insert into checklist_marcas(data,culto,item) select to_char(now() + interval '7 days','YYYY-MM-DD'),'manha',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'bloq');
 select t('Projeção NÃO marca no culto da noite (não escalada)','a1',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'bloq');

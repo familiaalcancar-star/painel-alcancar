@@ -25,3 +25,10 @@ select t('Escalado NÃO troca a data','b1',format($q$update escalas set d=d||jso
 select t('Escalado cria Ministração do dia','b1',format($q$insert into escalas(id,d) values ('ck1x', jsonb_build_object('data',%L,'culto','manha','area','ministracao'))$q$, to_char(now() + interval '2 days','YYYY-MM-DD')),'ok');
 select t('Escalado NÃO cria Direção (área por conexão)','b1',format($q$insert into escalas(id,d) values ('ck1y', jsonb_build_object('data',%L,'culto','noite','area','direcao','conexoes','["betel"]'::jsonb))$q$, to_char(now() + interval '2 days','YYYY-MM-DD')),'bloq');
 select t('Escalado NÃO edita escala de outro dia','b1',$q$update escalas set d=d||'{"obs":"x"}' where id='2026-11-01_manha_midia'$q$,'bloq');
+-- 09/11: Gestão de culto também faz check-in; papel Organização acessa o check-in.
+insert into escalas(id,d) select 'ck3', jsonb_build_object('data', to_char(now() + interval '3 days','YYYY-MM-DD'), 'culto','manha','area','staff',
+  'funcoes', '[{"nome":"Gestão de culto","pessoas":["Betel Lider"]}]'::jsonb);
+select t('Escalado em Gestão de culto marca check-in','b1',
+  format($q$insert into checkin_marcas(data,culto,chave,ci) values (%L,'manha','g',true)$q$, to_char(now() + interval '3 days','YYYY-MM-DD')),'ok');
+select t('Organização acessa o check-in (qualquer data)','f1',$q$insert into checkin_marcas(data,culto,chave,ci) values ('2099-01-01','manha','o',true)$q$,'ok');
+select t('Líder sem escala NÃO acessa o check-in','a5',$q$insert into checkin_marcas(data,culto,chave,ci) values ('2099-01-01','manha','o2',true)$q$,'bloq');

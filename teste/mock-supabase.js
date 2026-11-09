@@ -25,7 +25,7 @@ const T = {
     .concat(['Projeção','Apoio'].flatMap(f => [{id:'or-ini-'+f, funcao:f, bloco:'Início', texto:'Oração inicial', ordem:0, ativo:true, destaque:true}, {id:'or-fim-'+f, funcao:f, bloco:'Encerramento', texto:'Oração final', ordem:1000, ativo:true, destaque:true}])),
   chat:[{id:'m1', texto:'Bom dia, pessoal! Escala de domingo fechada?', por:U.betel, em:'2026-10-25T12:00:00.000Z'},
         {id:'m2', texto:'Falta só a recepção da noite.', por:U.gestao, em:new Date(Date.now()-3600e3).toISOString()},
-        {id:'m3', texto:'Combinado, eu vejo isso.', por:U.admin, em:new Date(Date.now()-1800e3).toISOString()}] };
+        {id:'m3', texto:'Combinado, eu vejo isso.', por:U.admin, em:new Date(Date.now()-60e3).toISOString()}] };
 // Teste do check-in por escalado: uma escala do Staff a mais, gravada antes de abrir a página.
 try { const ex = JSON.parse(localStorage.getItem('mockEscalaExtra') || 'null'); if (ex) { T.escalas = T.escalas.filter(e => e.id !== ex.id); T.escalas.push({id:ex.id, d:ex.d}); } } catch(e){}
 try { const mm = JSON.parse(localStorage.getItem('mockMarcas') || 'null'); if (mm) T.checklist_marcas = mm; } catch(e){}
@@ -84,7 +84,7 @@ class Q {
 }
 window.supabase = { createClient: () => ({
   from: t => new Q(t),
-  rpc: async (n, args) => (window.__rpc = window.__rpc || []).push([n, args]) && n === 'escalas_publicas' ? {data: T.escalas.filter(r => r.data >= args.p_de && r.data <= args.p_ate).sort((a,b) => a.data.localeCompare(b.data)).map(r => { const d = JSON.parse(JSON.stringify(r.d)); const qtd = (d.funcoes||[]).reduce((s,f) => s + (f.pessoas||[]).filter(x => String(x).trim()).length, 0); delete d.funcoes; return {id:r.id, d:{...d, qtd}}; }), error:null} : n === 'pessoas_nomes' ? {data: sessao ? T.pessoas.map(p => ({id:p.id, nome:p.nome, apelido:p.apelido})) : [], error:null} : {data:null, error:null},
+  rpc: async (n, args) => (window.__rpc = window.__rpc || []).push([n, args]) && n === 'fez_checkin' ? {data: !!(T.checkin_marcas||[]).some(c => c.data === args.p_data && c.culto === args.p_culto && c.ci) || localStorage.getItem('mockFezCheckin') === '1', error:null} : n === 'escalas_publicas' ? {data: T.escalas.filter(r => r.data >= args.p_de && r.data <= args.p_ate).sort((a,b) => a.data.localeCompare(b.data)).map(r => { const d = JSON.parse(JSON.stringify(r.d)); const qtd = (d.funcoes||[]).reduce((s,f) => s + (f.pessoas||[]).filter(x => String(x).trim()).length, 0); delete d.funcoes; return {id:r.id, d:{...d, qtd}}; }), error:null} : n === 'pessoas_nomes' ? {data: sessao ? T.pessoas.map(p => ({id:p.id, nome:p.nome, apelido:p.apelido})) : [], error:null} : {data:null, error:null},
   channel: () => ({ on(){ return this; }, subscribe(){ return this; } }), removeChannel(){},
   storage: { from: () => ({ upload: async () => ({data:{}, error:null}), getPublicUrl: () => ({data:{publicUrl:'imagens/rede-igPrev.webp'}}) }) },
   auth: {
