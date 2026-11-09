@@ -367,3 +367,23 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .mk-dest-btn{opacity:.35}
 .mk-dest-btn.on{opacity:1}
 @media (prefers-color-scheme: light){ .mk-item.dest{background:rgba(255,198,26,.18)} }
+
+/* Check-in: pessoa com itens retirados/devolvidos */
+.ck2{padding:10px 8px;border-top:1px solid var(--line);border-radius:10px;margin:2px -8px}
+.ck2-top{display:flex;align-items:center;gap:12px}
+.ck2-top .ckbox{flex:0 0 auto}
+.ck2.feito .ckn b{color:var(--green)}
+.ck2.ok{background:rgba(61,170,53,.12)}
+.ck2.pend{background:rgba(255,198,26,.12)}
+.ck2-itens{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0 44px;align-items:center}
+.ckit{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:4px 6px 4px 10px;font-size:13px;background:var(--surface)}
+.ckit small{color:var(--muted)}
+.ckit.volta{border-color:var(--green)}
+.ckit button{border:1px solid var(--line);background:none;color:var(--ink);border-radius:999px;padding:4px 10px;font-size:12.5px;min-height:30px}
+.ckit button.mini{padding:4px 9px}
+.ck2-falta{margin:6px 0 0 44px;color:var(--yellow);font-weight:600;font-size:13.5px}
+.ck-estoque{margin:0 0 8px;padding:8px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--line);font-size:14px}
+.ck-estoque.passou{border-color:#ff6b6b;color:#ff6b6b}
+.ck-pendentes{border-color:var(--yellow)}
+.ck-pendentes div{padding:4px 0;border-top:1px solid var(--line);font-size:14px}
+.ck-pendentes h3{margin:0 0 6px}
