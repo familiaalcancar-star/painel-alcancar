@@ -376,7 +376,7 @@ function blocoArea(lista, c, a){
     if (!a.porConexao) { const n = x ? (x.qtd || 0) : 0; resumo = n ? 'Equipe escalada' : (x && x.obs ? esc(x.obs) : '<span class="pend">A definir</span>'); }
     return '<div class="area fechada"><span><span class="an">'+esc(a.nome)+'</span><span class="ac">'+resumo+'</span></span></div>';
   }
-  const fx = a.funcoes.map(f => {
+  const fx = a.funcoes.filter(f => noCulto(f, c.culto)).map(f => {
     const salvo = x ? ((x.funcoes||[]).find(g=>g.nome===f.nome)||{}).pessoas || [] : [];
     const total = f.vagas ? Math.max(f.vagas, salvo.length) : salvo.length;
     if (!total) return '';
@@ -470,15 +470,32 @@ function viewDetalhe(){
   let h = '<button class="btn ghost small" data-voltar>‹ Voltar para a escala</button>'
     + '<h2 class="section-title" style="margin-top:16px">'+esc(a.nome)+'</h2><div class="meta" style="font-size:15px">'+esc(fmtDia(data))+' · Culto da '+esc(ci.nome.toLowerCase())+(ci.hora?' · '+esc(ci.hora):'')+'</div>';
   if (a.porConexao) h += '<p style="margin:10px 0 0"><span class="tag" style="margin:0;font-size:14px;padding:3px 12px">'+esc(conexoesTxt(x) || 'Conexão a definir')+'</span></p>';
-  h += '<div style="margin-top:14px">' + a.funcoes.map(f => {
+  h += '<div style="margin-top:14px">' + a.funcoes.filter(f => noCulto(f, culto)).map(f => {
     const salvo = x ? ((x.funcoes||[]).find(g => g.nome===f.nome)||{}).pessoas || [] : [];
     const total = f.vagas ? Math.max(f.vagas, salvo.length) : salvo.length;
     const itens = total ? Array.from({length:total}, (_,i) => '<li>'+(salvo[i] ? esc(salvo[i]) : '<span class="pend">vaga aberta</span>')+'</li>').join('') : '<li><span class="pend">ninguém escalado</span></li>';
     return '<section class="card fcard"><h3>'+esc(f.nome)+(f.vagas?' <span class="meta">· '+f.vagas+(f.vagas>1?' vagas':' vaga')+'</span>':'')+'</h3><ul>'+itens+'</ul></section>';
   }).join('') + '</div>' + (x && x.obs ? '<div class="notice">'+esc(x.obs)+'</div>' : '')
-    + (pode ? '<button class="btn" data-esc="1" data-d="'+data+'" data-c="'+esc(culto)+'" data-a="'+esc(area)+'">'+(x?'Editar escala':'Preencher escala')+'</button>' : '');
+    + (pode ? '<button class="btn" data-esc="1" data-d="'+data+'" data-c="'+esc(culto)+'" data-a="'+esc(area)+'">'+(x?'Editar escala':'Preencher escala')+'</button>' : '')
+    + (area === 'direcao' && veEquipes() ? '<div class="bar" style="margin-top:12px"><button class="btn ghost" data-convocacao="'+data+'">📋 Copiar convocação para o WhatsApp</button></div>' : '');
   return h;
 }
+// Convocação da Direção do culto (manhã e noite do domingo), com as tarefas e vagas da config e os nomes já escalados.
+function textoConvocacao(data){
+  const a = areaInfo('direcao'), dia = dataBR(data).slice(0,5);
+  const blocos = cultos().map(cu => { const x = escalaDe(todasEscalas(), data, cu.id, 'direcao');
+    const tarefas = a.funcoes.filter(f => noCulto(f, cu.id)).map(f => { const ps = ((x && (x.funcoes||[]).find(g => g.nome === f.nome)) || {}).pessoas || [];
+      const n = Math.max(f.vagas || 1, ps.length); return f.nome+':\n'+Array.from({length:n}, (_, k) => (k+1)+'. '+(ps[k] || '')).join('\n'); });
+    return (/noite/i.test(cu.nome) ? '🌙' : '☀️')+' CULTO DA '+cu.nome.toUpperCase()+(cu.hora ? ' ('+cu.hora+')' : '')+'\n'+tarefas.join('\n\n')+'\nObservação: '+((x && x.obs) || ''); });
+  return ['❤️ ATENÇÃO, VOLUNTÁRIOS!', 'Queridos, pedimos a todos que estarão servindo no culto que cheguem com 45 minutos de antecedência.',
+    'Esse tempinho é muito importante para organizarmos tudo com tranquilidade, alinharmos os últimos detalhes e realizarmos o check-in.', '',
+    'DIREÇÃO DO CULTO · '+dia, 'Nossa Conexão estará responsável na "Direção de culto" no domingo. Em qual tarefa deseja servir?', '',
+    blocos.join('\n\n'), '', 'Contamos com a pontualidade e o comprometimento de todos!',
+    'Que possamos servir com excelência, alegria e amor, fazendo tudo para a glória de Deus! 🙏❤️'].join('\n');
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-convocacao]'); if (!b) return; const t = textoConvocacao(b.dataset.convocacao);
+  const mostrar = () => abrir('<form><h2>Convocação</h2><p class="hint">Copie o texto abaixo e cole no WhatsApp.</p><textarea class="inp" readonly style="min-height:320px">'+esc(t)+'</textarea><div class="end"><button type="button" class="btn ghost" data-cancel>Fechar</button></div></form>', async () => true);
+  (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Convocação copiada. Cole no WhatsApp.'), mostrar); });
 const botoesDia = d => podeExportar() ? '<div class="bar" style="margin:6px 0 12px">'+(temGestao()?'<button class="btn ghost small" data-dia-ficha="'+d+'">Check-in do dia</button>':'')+'<button class="btn ghost small" data-dia-csv="'+d+'">Planilha do dia</button></div>' : '';
 const bannerCadastro = () => (!S.uid || S.tab==='inicio' || S.tab==='ajuda' || isAdm() || !S.cfg || S.pessoas[S.uid] || S.meuCad) ? '' : '<div class="notice"><b>É líder, auxiliar ou da organização da conexão?</b> Faça seu cadastro para poder preencher a escala da sua conexão.<div style="margin-top:8px"><button class="btn small" data-go="inicio">Fazer meu cadastro</button></div></div>';
 const msgAprovacao = () => 'Olá! Acabei de fazer meu cadastro no painel da Família Alcançar: '+((S.meuCad||{}).nome||'')+' · '+(PAPEIS[(S.meuCad||{}).papel]||'')+' da conexão '+conexaoNome((S.meuCad||{}).conexao)+'. Pode aprovar, por favor?';
@@ -705,13 +722,16 @@ const slotNome = (f, i, j, v) => '<input class="inp" name="f'+i+'_'+j+'" aria-la
 document.addEventListener('click', e => { const b = e.target.closest('[data-mais]'); if (!b) return; const grade = b.previousElementSibling; const i = b.dataset.mais, j = grade.children.length;
   grade.insertAdjacentHTML('beforeend', '<input class="inp" name="f'+i+'_'+j+'" placeholder="Nome '+(j+1)+'">'); grade.lastElementChild.focus(); });
 // Mídia: Apoio 1 e Apoio 2 têm pessoa fixa (config.midiaFixos); o trio do culto fica em Projeção, Transmissão e Câmera.
+// Funções que valem num culto: as com "cultos" (ex.: ["noite"]) só aparecem nesses cultos.
+const noCulto = (f, culto) => !Array.isArray(f.cultos) || !f.cultos.length || !culto || f.cultos.includes(culto);
 const midiaFixos = () => { const f = S.cfg && S.cfg.midiaFixos; return f && !Array.isArray(f) && typeof f === 'object' ? f : {'Apoio 1':'Pedro Moraes', 'Apoio 2':'Augusto Cantuaria'}; };
-function camposArea(a, x){
+function camposArea(a, x, culto){
   const minhasCon = conexoes();
   let h = '';
   if (a.porConexao && !isAdm()) h += '<p class="notice" style="margin-top:12px">Conexão: '+esc(conexoesTxt(x) || '—')+'</p>';
   else if (a.porConexao) h += '<label class="f">Conexões responsáveis</label><div class="chips" style="flex-wrap:wrap">'+minhasCon.map(c => '<label class="chip"><input type="checkbox" name="conexoes" value="'+esc(c.id)+'"'+(conexoesDe(x).includes(c.id)?' checked':'')+'> '+esc(c.nome)+'</label>').join('')+'</div><div class="hint">Marque mais de uma quando servirem juntas.</div>';
   a.funcoes.forEach((f, i) => {
+    if (!noCulto(f, culto)) return;
     let salvo = x ? ((x.funcoes||[]).find(g=>g.nome===f.nome)||{}).pessoas || [] : [];
     // Mídia: Apoio 1 e Apoio 2 já vêm com a pessoa fixa (o banco também garante); ficam recolhidos, para trocar só se alguém faltar.
     const fixo = a.id === 'midia' ? midiaFixos()[f.nome] : null;
@@ -741,7 +761,7 @@ function textoModelo(){
   const f = $('#dlgBody form'); const c = {data:f.data.value, area:f.area.value}; const a = areaInfo(c.area);
   const blocos = cultos().map(cu => { const x = todasEscalas().find(e => e.id === docId(c.data, cu.id, c.area));
     return [(/noite/i.test(cu.nome) ? '🌙' : '☀️')+' CULTO DA '+cu.nome.toUpperCase()+(cu.hora ? ' ('+cu.hora+')' : ''),
-      ...(a.porConexao && conexoesTxt(x) ? ['Conexão: '+conexoesTxt(x)] : []), ...a.funcoes.map(fn => fn.nome+': '), 'Observação: '].join('\n'); });
+      ...(a.porConexao && conexoesTxt(x) ? ['Conexão: '+conexoesTxt(x)] : []), ...a.funcoes.filter(fn => noCulto(fn, cu.id)).map(fn => fn.nome+': '), 'Observação: '].join('\n'); });
   return [a.nome.toUpperCase()+' · '+fmtDia(c.data), 'Escreva os nomes depois dos dois-pontos. Mais de um nome: separe por vírgula.', '', blocos.join('\n\n')].join('\n');
 }
 // Separa o texto por culto: linhas como "CULTO DA MANHÃ" ou "Noite" abrem a parte daquele culto.
@@ -797,7 +817,7 @@ async function preencherEscala(){
     if (Object.values(r.res).some(ps => ps.length) && podeArea(a, x2, f.data.value) && (x2 || isAdm() || !a.porConexao)) PRE.outros.push({culto:cu.id, res:r.res, obs:r.obs});
   });
   PRE.ctx = {data:f.data.value, area:a.id, culto:cultoAqui};
-  Object.entries(res).forEach(([i, ps]) => { const fn = a.funcoes[i]; if (!ps.length) return; n++;
+  Object.entries(res).forEach(([i, ps]) => { const fn = a.funcoes[i]; if (!ps.length || !noCulto(fn, cultoAqui)) return; n++;
     const grade = f.querySelector('[name="f'+i+'_0"]').parentNode;
     while (grade.children.length < ps.length) { const el = document.createElement('input'); el.className = 'inp'; el.name = 'f'+i+'_'+grade.children.length; el.placeholder = 'Nome '+(grade.children.length+1); grade.appendChild(el); }
     [...grade.children].forEach((el, j) => { el.value = ps[j] || ''; }); });
@@ -824,7 +844,7 @@ function formEscala(ctx){
       : '<div class="row"><div><label class="f" for="fData">Data</label><input class="inp" id="fData" name="data" type="date" required value="'+esc(ctx.data)+'"'+(ctx.livre?'':' readonly')+'></div>'
     + '<div><label class="f" for="fCulto">Culto</label><select class="inp" id="fCulto" name="culto" required>'+opts(cultos(), ctx.culto)+'</select></div></div>'
     + '<label class="f" for="fArea">Área</label><select class="inp" id="fArea" name="area" required>'+opts(editaveis, ctx.area)+'</select>')
-    + '<div id="campos">'+camposArea(areaInfo(ctx.area), x0)+'</div>'
+    + '<div id="campos">'+camposArea(areaInfo(ctx.area), x0, ctx.culto)+'</div>'
     + '<div class="end">'+(x0 && isAdm()?'<button type="submit" class="btn danger" data-limpar style="margin-right:auto">Limpar</button>':'')+'<button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Salvar escala</button></div></form>',
   async (fd, sub) => {
     const c = atual(); const a = areaInfo(c.area); const x = existente(c);
@@ -832,7 +852,7 @@ function formEscala(ctx){
     if (sub && 'limpar' in sub.dataset) { if (!x || !await confirmar('Apagar a escala de '+a.nome+' deste culto?')) return false; const ok = await excluir(r, semId(x), 'escala', resumoEscala(x)); if (ok) { toast('Escala apagada'); await RECARGA.escalas(); } return ok; }
     const cs = a.porConexao ? (isAdm() ? fd.getAll('conexoes') : conexoesDe(x)) : [];
     const data = { data:c.data, culto:c.culto, area:c.area, conexoes: cs, conexao: cs[0]||null,
-      funcoes: a.funcoes.map((f,i) => ({nome:f.nome, pessoas: [...$('#dlgBody form').querySelectorAll('[name^="f'+i+'_"]')].map(el=>el.value.trim()).filter(Boolean)})),
+      funcoes: a.funcoes.map((f,i) => ({f, i})).filter(({f}) => noCulto(f, c.culto)).map(({f, i}) => ({nome:f.nome, pessoas: [...$('#dlgBody form').querySelectorAll('[name^="f'+i+'_"]')].map(el=>el.value.trim()).filter(Boolean)})),
       obs: String(fd.get('obs')||'').trim(), atualizadoEm:new Date().toISOString() };
     if (a.porConexao && !cs.length) { toast('Marque pelo menos uma conexão.'); return false; }
     if (!podeArea(a, x, c.data)) { toast('Você só pode preencher a escala dos dias da sua conexão.'); return false; }
@@ -841,7 +861,7 @@ function formEscala(ctx){
     if (ok && PRE.ctx && PRE.ctx.data === c.data && PRE.ctx.area === c.area && PRE.ctx.culto === c.culto) {
       for (const o of PRE.outros) { const x2 = existente({data:c.data, culto:o.culto, area:c.area}); if (!podeArea(a, x2, c.data)) continue;
         const d2 = {data:c.data, culto:o.culto, area:c.area, conexoes: x2 ? conexoesDe(x2) : cs, conexao: x2 ? (conexoesDe(x2)[0]||null) : (cs[0]||null),
-          funcoes: a.funcoes.map((fn, i) => ({nome:fn.nome, pessoas: (o.res[i] && o.res[i].length) ? o.res[i] : ((x2 && ((x2.funcoes||[]).find(g => g.nome === fn.nome)||{}).pessoas) || [])})),
+          funcoes: a.funcoes.map((fn, i) => ({fn, i})).filter(({fn}) => noCulto(fn, o.culto)).map(({fn, i}) => ({nome:fn.nome, pessoas: (o.res[i] && o.res[i].length) ? o.res[i] : ((x2 && ((x2.funcoes||[]).find(g => g.nome === fn.nome)||{}).pessoas) || [])})),
           obs: o.obs ? o.obs : (x2 ? x2.obs || '' : ''), atualizadoEm:new Date().toISOString()};
         if (await salvar(ref('escalas', docId(c.data, o.culto, c.area)), d2, {acao:x2?'editou':'criou', tipo:'escala', resumo:resumoEscala(d2), antes:x2?semId(x2):null})) mais++; }
     }
@@ -850,7 +870,7 @@ function formEscala(ctx){
     return ok;
   },
   body => {
-    const refazer = () => { const c = atual(); body.querySelector('#campos').innerHTML = camposArea(areaInfo(c.area), existente(c)); };
+    const refazer = () => { const c = atual(); body.querySelector('#campos').innerHTML = camposArea(areaInfo(c.area), existente(c), c.culto); };
     if (!fixo) ['fData','fCulto','fArea'].forEach(id => body.querySelector('#'+id).addEventListener('change', refazer));
   });
 }
@@ -911,7 +931,7 @@ function blocosCheckin(d, c){
   const ci = cultoInfo(c), docs = todasEscalas().filter(x => x.data===d && x.culto===c);
   const grupos = areas().filter(a => !ehLouvor(a.nome)).map(a => {
     const x = docs.find(y => y.area===a.id); const rows = [];
-    (a.funcoes||[]).forEach((f, fi) => {
+    (a.funcoes||[]).forEach((f, fi) => { if (!noCulto(f, c)) return;
       const nomes = x ? (((x.funcoes||[]).find(g => g.nome===f.nome)||{}).pessoas||[]).map(n => String(n).trim()).filter(Boolean) : [];
       const n = nomes.length;
       for (let k = 0; k < n; k++) rows.push({funcao: k===0 ? f.nome : '', fn: f.nome, nome: nomes[k]||'', k: a.id+'_'+fi+'_'+k});
@@ -1653,7 +1673,8 @@ function viewAjuda(){
 }
 
 /* ---------- convite pelo WhatsApp ---------- */
-const LINK_PAINEL = () => location.origin + location.pathname;
+// Endereço oficial do painel (o que vai nos convites e mensagens), qualquer que seja o endereço aberto agora.
+const LINK_PAINEL = () => 'https://familia-alcancar.netlify.app/';
 const msgConvite = n => 'Olá'+(n.trim()?', '+n.trim().split(' ')[0]:'')+'! Graça e paz! 🙌\n\nVocê foi convidado(a) para o Painel da '+((S.cfg&&S.cfg.igreja)||'igreja')+', onde ficam as escalas, os avisos e a agenda.\n\n*Como entrar:*\n1. Abra o painel por este link: '+LINK_PAINEL()+'#ajuda\n2. Toque em *Entrar*, no topo, e depois em *Continuar com Google* (se tiver Gmail). Sem Gmail: toque em *Criar conta*, cadastre e-mail e senha e confirme pelo link que chega no e-mail.\n3. Entre no painel.\n4. Na tela inicial, preencha o cadastro: nome completo, WhatsApp, sua conexão e se você é líder, auxiliar ou da organização.\n5. Aguarde a aprovação de um administrador. Depois disso, você já consegue preencher a escala da sua conexão.\n\nNa primeira vez, aparece um tutorial com o passo a passo de tudo. Ele fica sempre no botão ❓ Como usar, no topo.\n\nQualquer dúvida, é só me chamar!';
 const waUrl = (tel, txt) => { let d = String(tel||'').replace(/\D/g,''); if (d && d.length <= 11) d = '55'+d; return 'https://wa.me/'+d+'?text='+encodeURIComponent(txt); };
 document.addEventListener('input', e => { if (e.target.id==='cvN' || e.target.id==='cvW') { const a = $('#cvLink'); if (a) a.href = waUrl($('#cvW').value, msgConvite($('#cvN').value)); } });
@@ -1673,7 +1694,7 @@ function viewAjustes(){
     + '<label class="f">Dias de culto</label><div class="chips">'+DIAS.map((d,i)=>'<label class="chip"><input type="checkbox" name="dia" value="'+i+'"'+(diasCulto().includes(i)?' checked':'')+'> '+d+'</label>').join('')+'</div>'
     + '<label class="f" for="cW">WhatsApp do administrador (recebe os avisos de cadastro)</label><input class="inp" id="cW" name="whatsAdm" type="tel" inputmode="tel" value="'+esc(S.whatsAdm||'')+'"><div class="hint">Com DDI e DDD, só números. Ex.: 5511999999999</div>'
     + '<div class="end"><button type="submit" class="btn">Salvar ajustes</button></div></form></div>';
-  html += '<h2 class="section-title">Áreas da escala</h2><div class="card">' + areas().map(a => '<p class="fn" style="margin:0 0 10px"><strong>'+esc(a.nome)+'</strong>'+(a.porConexao?'<span class="tag">por conexão</span>':'')+'<br><span class="meta">'+a.funcoes.map(f=>esc(f.nome)+(f.vagas?' ('+f.vagas+')':' (livre)')).join(', ')+'</span></p>').join('') + '<p class="hint">Para mudar áreas, funções ou quantidade de vagas, é só pedir ao Claude.</p></div>';
+  html += '<h2 class="section-title">Áreas da escala</h2><div class="card">' + areas().map(a => '<p class="fn" style="margin:0 0 10px"><strong>'+esc(a.nome)+'</strong>'+(a.porConexao?'<span class="tag">por conexão</span>':'')+'<br><span class="meta">'+a.funcoes.map(f=>esc(f.nome)+(f.vagas?' ('+f.vagas+')':' (livre)')+(Array.isArray(f.cultos)&&f.cultos.length?' · só '+f.cultos.map(c=>cultoInfo(c).nome.toLowerCase()).join(' e '):'')).join(', ')+'</span></p>').join('') + '<p class="hint">Para mudar áreas, funções ou quantidade de vagas, é só pedir ao Claude.</p></div>';
   html += '<h2 class="section-title">Convidar pelo WhatsApp</h2><div class="card"><p class="meta" style="margin:0">Mande para a pessoa o link do painel e o passo a passo para entrar e se cadastrar.</p>'
     + '<div class="row"><div><label class="f" for="cvN">Nome</label><input class="inp" id="cvN" autocomplete="off"></div><div><label class="f" for="cvW">WhatsApp com DDD</label><input class="inp" id="cvW" type="tel" inputmode="tel" placeholder="(11) 99999-9999"></div></div>'
     + '<div class="end"><a class="btn zap" id="cvLink" target="_blank" rel="noopener" href="'+esc(waUrl('', msgConvite('')))+'">Enviar passo a passo no WhatsApp</a></div>'
