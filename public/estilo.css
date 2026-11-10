@@ -409,3 +409,15 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 
 /* Check-in: botão Trocar ao lado do nome */
 .ck2-top .ck-troca{margin-left:auto;flex:0 0 auto;padding:4px 10px;font-size:13px}
+
+/* Checklist: item de porcentagem (bateria) */
+.mk-pct{padding:12px 2px;border-top:1px solid var(--line)}
+.mk-pct-t{font-size:16px;margin-bottom:8px}
+.mk-pct-rap{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.mk-pct-rap .chip{min-height:38px}
+.mk-pct-in{display:flex;align-items:center;gap:8px}
+.mk-pct-in .inp{width:110px;font-size:18px;text-align:center}
+.mk-pct-in span{font-size:18px;color:var(--muted)}
+.mk-pct-v{font-size:20px;font-weight:700;color:#3DAA35;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mk-pct-v small{font-size:13px;font-weight:400;color:#3DAA35}
+.mk-pct-v.vazio{color:var(--muted)}

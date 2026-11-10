@@ -54,3 +54,10 @@ select t('Apoio NÃO marca item da Projeção','a4',$q$insert into checklist_mar
 select ok('Orações inicial e final em destaque nas 4 funções', (select count(*) from checklist_itens where destaque and texto in ('Oração inicial','Oração final')) = 8);
 select t('Admin liga/desliga destaque','0a',$q$update checklist_itens set destaque = not destaque where texto='Oração final' and funcao='Apoio'$q$,'ok');
 select t('Não-admin NÃO muda destaque','a1',$q$update checklist_itens set destaque = false where texto='Oração final'$q$,'bloq');
+-- 10/11: itens de porcentagem (bateria).
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000a',false);
+insert into checklist_marcas(data,culto,item,valor) select '2099-03-01','manha',id,85 from checklist_itens where texto='Bateria ao retirar (%)';
+select ok('Porcentagem salva e no histórico', (select valor from checklist_marcas where data='2099-03-01') = 85 and exists (select 1 from historico where resumo like '%Bateria ao retirar (%)" = 85%%'));
+select set_config('request.jwt.claim.sub','',false);
+select t('Porcentagem sem valor NÃO grava','0a',$q$insert into checklist_marcas(data,culto,item) select '2099-03-02','manha',id from checklist_itens where texto='Bateria ao devolver (%)'$q$,'bloq');
+select t('Porcentagem acima de 100 NÃO grava','0a',$q$insert into checklist_marcas(data,culto,item,valor) select '2099-03-02','manha',id,101 from checklist_itens where texto='Bateria ao devolver (%)'$q$,'bloq');

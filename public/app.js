@@ -1103,7 +1103,7 @@ function viewMidia(){
   if (!temMidia()) return '<div class="empty">Só quem tem o cargo Mídia (e os administradores) vê esta aba.</div>';
   if (MK.editar && isAdm()) return viewMidiaEditar();
   mkAbrir();
-  let h = '<div class="bar"><h2 style="font-size:22px">Checklist da Mídia</h2><span style="flex:1"></span>'+(isAdm() ? '<button class="btn ghost small" data-mk-editar>✏️ Editar itens</button>' : '')+'</div>'
+  let h = '<div class="bar"><h2 style="font-size:22px">Checklist da Mídia</h2><span style="flex:1"></span>'+(isAdm() ? '<button class="btn ghost small" data-mk-pdf>PDF</button><button class="btn ghost small" data-mk-xls>Excel</button><button class="btn ghost small" data-mk-editar>✏️ Editar itens</button>' : '')+'</div>'
     + '<div class="card"><label class="f" for="mkD" style="margin-top:0">Culto</label><input class="inp" type="date" id="mkD" value="'+esc(MK.data)+'">'
     + '<div class="chips" style="margin-top:10px">'+cultos().map(c => '<button class="chip" aria-pressed="'+(c.id===MK.culto)+'" data-mk-culto="'+esc(c.id)+'">'+esc(c.nome)+(c.hora?' · '+esc(c.hora):'')+'</button>').join('')+'</div>'
     + '<div class="meta" style="margin-top:8px">'+esc(fmtDia(MK.data))+(MK.data === hoje() ? ' · <b>hoje</b>' : '')+'</div></div>';
@@ -1125,6 +1125,7 @@ function viewMidia(){
     mkBlocos(itens).forEach(b => {
       h += '<h4 class="mk-bloco">'+esc(b.nome)+'</h4>';
       b.itens.forEach(i => { const m = MK.marcas[i.id]; const trava = !pode || (m && !isAdm()); // marcado fica fixo: só administrador desmarca
+        if (i.tipo === 'percentual') { h += mkLinhaPct(i, m, pode, itens); return; }
         h += '<label class="mk-item'+(i.destaque ? ' dest' : '')+(m ? ' feito' : '')+(trava ? ' trava' : '')+'"><input type="checkbox" data-mk="'+esc(i.id)+'"'+(m ? ' checked' : '')+(trava ? ' disabled' : '')+'><span class="mk-caixa" aria-hidden="true"></span>'
           + '<span class="mk-txt">'+esc(i.texto)+(m ? '<small>✔ '+esc(m.por_nome || 'Alguém')+' · '+esc(horaSP(m.em))+'</small>' : '')+'</span></label>'; });
     });
@@ -1132,22 +1133,41 @@ function viewMidia(){
   });
   return h;
 }
-async function mkMarcar(id, marcar){
+// Item de porcentagem (ex.: bateria): escolhe ou digita 0–100% e salva; depois mostra 🔋 85%, travado (admin desfaz).
+// "Ao devolver" abaixo de "ao retirar" (mesmo bloco) mostra quanto gastou.
+function mkLinhaPct(i, m, pode, itens){
+  const top = '<div class="mk-pct'+(i.destaque ? ' dest' : '')+(m ? ' feito' : '')+'"><div class="mk-pct-t">'+esc(i.texto)+'</div>';
+  if (m) { let gasto = '';
+    if (/devolv/i.test(i.texto)) { const ret = itens.find(x => x.tipo === 'percentual' && x.bloco === i.bloco && /retir/i.test(x.texto)), mr = ret && MK.marcas[ret.id];
+      if (mr && mr.valor != null && m.valor < mr.valor) gasto = ' · gastou '+(mr.valor - m.valor)+'%'; }
+    return top + '<div class="mk-pct-v">🔋 '+esc(m.valor)+'%<small>✔ '+esc(m.por_nome || 'Alguém')+' · '+esc(horaSP(m.em))+esc(gasto)+'</small>'
+      + (isAdm() ? '<button type="button" class="btn ghost small" data-mk-desfaz="'+esc(i.id)+'">Desfazer</button>' : '') + '</div></div>'; }
+  if (!pode) return top + '<div class="mk-pct-v vazio">—</div></div>';
+  return top + '<div class="mk-pct-rap">'+[100,80,60,40,20].map(v => '<button type="button" class="chip" data-mk-pct-rap="'+esc(i.id)+'|'+v+'">'+v+'%</button>').join('')+'</div>'
+    + '<div class="mk-pct-in"><input class="inp" type="number" min="0" max="100" inputmode="numeric" placeholder="0–100" data-mk-pct="'+esc(i.id)+'"><span>%</span><button type="button" class="btn" data-mk-pct-salvar="'+esc(i.id)+'">Salvar</button></div></div>';
+}
+async function mkMarcar(id, marcar, valor){
   const i = (MK.itens||[]).find(x => x.id === id); if (!i) return;
   if (!mkPodeMarcar(i.funcao)) { toast(MK.data === hoje() ? 'Você não está escalado(a) nesta função neste culto.' : 'Só dá para marcar no dia do culto.'); render(); return; }
   const ant = MK.marcas[id];
   if (!marcar && (!isAdm() || !await confirmar('Desmarcar este item?\n"'+i.texto+'"'))) { if (!isAdm()) toast('Só um administrador pode desmarcar.'); render(); return; }
-  if (marcar) MK.marcas = {...MK.marcas, [id]: {item:id, por:S.uid, por_nome:nome(S.uid), em:new Date().toISOString()}};
+  if (marcar) MK.marcas = {...MK.marcas, [id]: {item:id, valor:valor ?? null, por:S.uid, por_nome:nome(S.uid), em:new Date().toISOString()}};
   else { const m = {...MK.marcas}; delete m[id]; MK.marcas = m; }
   render();
   try {
-    const r = marcar ? await sb.from('checklist_marcas').insert({data:MK.data, culto:MK.culto, item:id})
+    const r = marcar ? await sb.from('checklist_marcas').insert({data:MK.data, culto:MK.culto, item:id, ...(valor != null ? {valor} : {})})
       : await sb.from('checklist_marcas').delete().eq('data', MK.data).eq('culto', MK.culto).eq('item', id).select('item');
     if (r.error) throw r.error;
     if (!marcar && !(r.data||[]).length) throw new Error('Só um administrador pode desmarcar.');
   } catch(e){ console.warn(e); toast(/desmarcar/.test(e.message||'') ? e.message : 'Não foi possível salvar. Confira se você está escalado(a) neste culto.'); const m = {...MK.marcas}; if (ant) m[id] = ant; else delete m[id]; MK.marcas = m; }
   await mkCarregarMarcas(); render();
 }
+document.addEventListener('click', e => { const b = e.target.closest('button'); if (!b || S.tab !== 'midia') return;
+  if (b.dataset.mkPctRap) { const [id, v] = b.dataset.mkPctRap.split('|'); const inp = document.querySelector('[data-mk-pct="'+id+'"]'); if (inp) { inp.value = v; inp.focus(); } }
+  if (b.dataset.mkPctSalvar) { const id = b.dataset.mkPctSalvar, inp = document.querySelector('[data-mk-pct="'+id+'"]'), v = inp && inp.value !== '' ? Number(inp.value) : NaN;
+    if (!Number.isInteger(v) || v < 0 || v > 100) { toast('Escolha ou digite uma porcentagem de 0 a 100.'); return; } mkMarcar(id, true, v); }
+  if (b.dataset.mkDesfaz) mkMarcar(b.dataset.mkDesfaz, false);
+});
 document.addEventListener('change', e => { const t = e.target;
   if (t.dataset && t.dataset.mk) { mkMarcar(t.dataset.mk, t.checked); return; }
   if (t.id === 'mkD' && t.value) { MK.data = t.value; render(); } });
@@ -1155,6 +1175,29 @@ document.addEventListener('click', e => { const c = e.target.closest('[data-mk-c
   if (e.target.closest('[data-mk-editar]')) { MK.editar = true; render(); window.scrollTo(0,0); }
   if (e.target.closest('[data-mk-voltar]')) { MK.editar = false; render(); } });
 
+// Exportar o checklist do culto (admin): função, bloco, item, resultado (✔ ou a porcentagem), quem marcou e a hora.
+function mkLinhasExport(){
+  const rows = [];
+  MID_CHECKLISTS.forEach(c => { const its = mkItensDe(c.nome); its.forEach(i => { const m = MK.marcas[i.id]; let r = m ? (i.tipo === 'percentual' ? m.valor+'%' : 'OK') : '';
+    if (m && i.tipo === 'percentual' && /devolv/i.test(i.texto)) { const ret = its.find(x => x.tipo === 'percentual' && x.bloco === i.bloco && /retir/i.test(x.texto)), mr = ret && MK.marcas[ret.id]; if (mr && m.valor < mr.valor) r += ' (gastou '+(mr.valor - m.valor)+'%)'; }
+    rows.push([c.nome, i.bloco, i.texto, r, m ? (m.por_nome || '') : '', m ? horaSP(m.em) : '']); }); });
+  return rows;
+}
+async function mkExportar(tipo, btn){
+  if (!isAdm()) return; const rows = mkLinhasExport(), ci = cultoInfo(MK.culto), titulo = 'Checklist da Mídia · '+tituloDia(MK.data)+' · Culto da '+ci.nome.toLowerCase();
+  const HEAD = ['Função','Bloco','Item','Resultado','Marcado por','Hora'], arq = 'checklist-midia-'+MK.data+'-'+MK.culto, txt = btn.textContent; btn.textContent = '…'; btn.disabled = true;
+  try {
+    if (tipo === 'pdf') { await carregar(JSPDF); await carregar(AUTOTABLE);
+      const doc = new window.jspdf.jsPDF({orientation:'landscape', unit:'mm', format:'a4'}); doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.text(titulo, 12, 14);
+      doc.autoTable({ startY:20, theme:'grid', head:[HEAD], body:rows, showHead:'everyPage', styles:{fontSize:9.5, cellPadding:2}, headStyles:{fillColor:[25,25,25]}, columnStyles:{3:{fontStyle:'bold'}} });
+      await baixar(arq+'.pdf', doc.output('arraybuffer'));
+    } else { await carregar(EXCELJS); const wb = new window.ExcelJS.Workbook(), ws = wb.addWorksheet('Checklist', {pageSetup:{orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0}});
+      ws.columns = [{width:14},{width:34},{width:46},{width:20},{width:18},{width:10}]; ws.addRow([titulo]).font = {bold:true, size:13}; ws.addRow([]);
+      const h = ws.addRow(HEAD); h.font = {bold:true, color:{argb:'FFFFFFFF'}}; h.eachCell(c => c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF191919'}}); rows.forEach(r => ws.addRow(r));
+      await baixar(arq+'.xlsx', await wb.xlsx.writeBuffer()); }
+  } catch(e){ console.warn(e); toast('Não foi possível gerar o arquivo agora.'); } finally { btn.textContent = txt; btn.disabled = false; }
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-mk-pdf],[data-mk-xls]'); if (b) mkExportar('mkPdf' in b.dataset ? 'pdf' : 'xlsx', b); });
 // Administrador: adicionar, editar, reordenar e remover itens.
 function viewMidiaEditar(){
   if (!MK.itens) { mkCarregarItens().then(render); return '<div class="empty">Carregando…</div>'; }
@@ -1165,10 +1208,11 @@ function viewMidiaEditar(){
   blocos.forEach(b => { h += '<section class="card"><h3>'+esc(b.nome)+'</h3>' + b.itens.map(i => { const k = itens.indexOf(i);
     // Orações inicial/final ficam presas no começo e no fim: não sobem nem descem, e ninguém passa por elas.
     const sobe = k > 0 && !mkFixa(i) && !mkFixa(itens[k-1]), desce = k < itens.length-1 && !mkFixa(i) && !mkFixa(itens[k+1]);
-    return '<div class="mk-ed'+(i.destaque ? ' dest' : '')+'"><span>'+(i.destaque ? '🙏 ' : '')+esc(i.texto)+'</span><span class="mk-ed-b"><button class="icon-btn mk-dest-btn'+(i.destaque ? ' on' : '')+'" data-mk-dest="'+esc(i.id)+'" aria-pressed="'+(!!i.destaque)+'" aria-label="Destaque" title="Ligar/desligar destaque">⭐</button><button class="icon-btn" data-mk-sobe="'+esc(i.id)+'"'+(sobe?'':' disabled')+' aria-label="Subir">↑</button><button class="icon-btn" data-mk-desce="'+esc(i.id)+'"'+(desce?'':' disabled')+' aria-label="Descer">↓</button><button class="icon-btn" data-mk-edita="'+esc(i.id)+'" aria-label="Editar">✏️</button><button class="icon-btn" data-mk-remove="'+esc(i.id)+'" aria-label="Remover">🗑</button></span></div>'; }).join('') + '</section>'; });
+    return '<div class="mk-ed'+(i.destaque ? ' dest' : '')+'"><span>'+(i.destaque ? '🙏 ' : '')+esc(i.texto)+(i.tipo === 'percentual' ? ' <span class="tag">%</span>' : '')+'</span><span class="mk-ed-b"><button class="icon-btn mk-dest-btn'+(i.destaque ? ' on' : '')+'" data-mk-dest="'+esc(i.id)+'" aria-pressed="'+(!!i.destaque)+'" aria-label="Destaque" title="Ligar/desligar destaque">⭐</button><button class="icon-btn" data-mk-sobe="'+esc(i.id)+'"'+(sobe?'':' disabled')+' aria-label="Subir">↑</button><button class="icon-btn" data-mk-desce="'+esc(i.id)+'"'+(desce?'':' disabled')+' aria-label="Descer">↓</button><button class="icon-btn" data-mk-edita="'+esc(i.id)+'" aria-label="Editar">✏️</button><button class="icon-btn" data-mk-remove="'+esc(i.id)+'" aria-label="Remover">🗑</button></span></div>'; }).join('') + '</section>'; });
   h += '<section class="card"><h3>Adicionar item em '+esc(fn)+'</h3><form id="mkNovo"><label class="f" for="mkB">Bloco</label><input class="inp" id="mkB" name="bloco" required list="mkBlocos" placeholder="Ex.: Bloco 1 – Backgrounds">'
     + '<datalist id="mkBlocos">'+blocos.map(b => '<option value="'+esc(b.nome)+'">').join('')+'</datalist>'
     + '<label class="f" for="mkT">Item</label><input class="inp" id="mkT" name="texto" required maxlength="300">'
+    + '<label class="f" for="mkTp">Tipo</label><select class="inp" id="mkTp" name="tipo"><option value="check"'+('' !== 'percentual' ? ' selected' : '')+'>Caixinha (marcar)</option><option value="percentual"'+('' === 'percentual' ? ' selected' : '')+'>Porcentagem (0–100%)</option></select>'
     + '<div class="end"><button class="btn" type="submit">Adicionar</button></div><p class="hint">Escolha um bloco que já existe (aparece na lista) ou escreva o nome de um bloco novo. O item entra no fim do bloco.</p></form></section>';
   return h;
 }
@@ -1190,15 +1234,16 @@ document.addEventListener('click', async e => { if (!isAdm()) return; const b = 
   if (b.dataset.mkRemove) { const i = lista().find(x => x.id === b.dataset.mkRemove); if (i && await confirmar('Remover o item "'+i.texto+'" de '+i.funcao+'?\nAs marcações dos cultos anteriores continuam no histórico.')) await mkSalvarItem(i.id, {ativo:false}, 'Checklist da Mídia · '+i.funcao+': removeu "'+i.texto+'"'); }
   if (b.dataset.mkEdita) { const i = lista().find(x => x.id === b.dataset.mkEdita); if (!i) return;
     abrir('<form><h2>Editar item</h2><label class="f" for="mkEB">Bloco</label><input class="inp" id="mkEB" name="bloco" required value="'+esc(i.bloco)+'"><label class="f" for="mkET">Item</label><input class="inp" id="mkET" name="texto" required maxlength="300" value="'+esc(i.texto)+'">'
+      + '<label class="f" for="mkETp">Tipo</label><select class="inp" id="mkETp" name="tipo"><option value="check"'+(i.tipo !== 'percentual' ? ' selected' : '')+'>Caixinha (marcar)</option><option value="percentual"'+(i.tipo === 'percentual' ? ' selected' : '')+'>Porcentagem (0–100%)</option></select>'
       + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Salvar</button></div></form>',
-      async fd => mkSalvarItem(i.id, {bloco:String(fd.get('bloco')).trim(), texto:String(fd.get('texto')).trim()}, 'Checklist da Mídia · '+i.funcao+': editou "'+i.texto+'"')); }
+      async fd => mkSalvarItem(i.id, {bloco:String(fd.get('bloco')).trim(), texto:String(fd.get('texto')).trim(), tipo: fd.get('tipo') === 'percentual' ? 'percentual' : 'check'}, 'Checklist da Mídia · '+i.funcao+': editou "'+i.texto+'"')); }
 });
 document.addEventListener('submit', async e => { if (e.target.id !== 'mkNovo' || !isAdm()) return; e.preventDefault();
   const fd = new FormData(e.target), bloco = String(fd.get('bloco')).trim(), texto = String(fd.get('texto')).trim(); if (!bloco || !texto) return;
   const l = (MK.itens||[]).filter(i => i.funcao === MK.fnEd && i.ativo).sort(mkOrdena), doBloco = l.filter(i => i.bloco === bloco);
   let ordem; if (doBloco.length) { const ult = doBloco[doBloco.length-1], prox = l[l.indexOf(ult)+1]; ordem = prox ? (Number(ult.ordem) + Number(prox.ordem)) / 2 : Number(ult.ordem) + 10; }
   else { const fim = l.find(i => mkFixa(i) === 1), meio = l.filter(i => !mkFixa(i)), base = meio.length ? Number(meio[meio.length-1].ordem) : (l.find(i => mkFixa(i) === -1) || {ordem:0}).ordem; ordem = fim && Number(base) + 10 >= Number(fim.ordem) ? (Number(base) + Number(fim.ordem)) / 2 : Number(base) + 10; }
-  if (await mkSalvarItem(null, {funcao:MK.fnEd, bloco, texto, ordem}, 'Checklist da Mídia · '+MK.fnEd+': adicionou "'+texto+'"')) toast('Item adicionado.');
+  if (await mkSalvarItem(null, {funcao:MK.fnEd, bloco, texto, ordem, tipo: fd.get('tipo') === 'percentual' ? 'percentual' : 'check'}, 'Checklist da Mídia · '+MK.fnEd+': adicionou "'+texto+'"')) toast('Item adicionado.');
 });
 
 /* Ajustes (admin): itens do check-in, estoque e itens padrão por área/função. */
