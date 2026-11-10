@@ -15,3 +15,9 @@ insert into pessoas(id,nome,papel,status,conexao) values ('00000000-0000-0000-00
 select t('Louvor lê as escalas com nomes','f8','select * from escalas','ok');
 select t('Louvor NÃO edita o Louvor (só consulta)','f8',$q$update escalas set d=d||'{"obs":"x"}' where id='2026-11-01_manha_louvor'$q$,'bloq');
 select t('Louvor NÃO edita a Direção da própria conexão','f8',$q$update escalas set d=d||'{"obs":"x"}' where area='superkids'$q$,'bloq');
+-- 10/11: Voluntário
+insert into auth.users values ('00000000-0000-0000-0000-0000000000f9','vol@x') on conflict do nothing;
+select t('Cadastro de Voluntário','f9',$q$insert into cadastros(id,nome,email,whatsapp,conexao,papel) values (auth.uid(),'Vol Teste','vol@x.com','11988887777','betel','voluntario')$q$,'ok');
+insert into pessoas(id,nome,papel,status) values ('00000000-0000-0000-0000-0000000000f9','Vol Teste','voluntario','aprovado');
+select t('Voluntário vê os nomes da escala','f9','select * from escalas','ok');
+select t('Voluntário NÃO edita escala','f9',$q$update escalas set d=d||'{"obs":"x"}' where area='midia'$q$,'bloq');

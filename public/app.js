@@ -67,8 +67,9 @@ const conexoesTxt = x => conexoesDe(x).map(conexaoNome).filter(Boolean).join(' e
 const cultoInfo = id => cultos().find(c=>c.id===id) || {id, nome:id, hora:''};
 const areaInfo = id => areas().find(a=>a.id===id) || {id, nome:id, porConexao:false, funcoes:[{nome:'Equipe',vagas:0}]};
 // Funções. Mídia, Louvor, Coro e Membro (papel "leitura") só consultam; Mídia tem também o extra Mídia (Checklist).
-const PAPEIS = {admin:'Administrador', lider:'Líder', auxiliar:'Auxiliar', organizacao:'Organização', midia:'Mídia', louvor:'Louvor', coro:'Coro', leitura:'Membro'};
-const PAPEIS_CADASTRO = ['lider','auxiliar','organizacao','midia','louvor','coro','leitura'];
+// Voluntário: só consulta (como Membro) e vê quem serve; fica na lista de pessoas para escolher ao montar a escala.
+const PAPEIS = {admin:'Administrador', lider:'Líder', auxiliar:'Auxiliar', organizacao:'Organização', midia:'Mídia', louvor:'Louvor', coro:'Coro', voluntario:'Voluntário', leitura:'Membro'};
+const PAPEIS_CADASTRO = ['lider','auxiliar','organizacao','midia','louvor','coro','voluntario','leitura'];
 const STATUS = {pendente:'Pendente', aprovado:'Aprovado', removido:'Removido'};
 const statusDe = id => S.pessoas[id] ? (S.pessoas[id].status || 'aprovado') : 'pendente';
 const aprovado = id => !!S.pessoas[id] && statusDe(id) === 'aprovado';
@@ -723,9 +724,17 @@ function abrir(html, onSubmit, onReady){
   $('#dlgBody').querySelector('form').onsubmit = async ev => { ev.preventDefault(); const b = ev.target.querySelector('[type=submit]:not([data-limpar])') || ev.target.querySelector('[type=submit]'); b.disabled = true; const ok = await onSubmit(new FormData(ev.target), ev.submitter); b.disabled = false; if (ok && $('#dlgBody').firstChild === ev.target) d.close(); };
   if (onReady) onReady($('#dlgBody'));
 }
-const slotNome = (f, i, j, v) => '<input class="inp" name="f'+i+'_'+j+'" aria-label="'+esc(f.nome)+' '+(j+1)+'" placeholder="Nome '+(j+1)+'" value="'+esc(v||'')+'">';
+const slotNome = (f, i, j, v) => '<input class="inp" name="f'+i+'_'+j+'" list="dlPessoas" autocomplete="off" aria-label="'+esc(f.nome)+' '+(j+1)+'" placeholder="Nome '+(j+1)+'" value="'+esc(v||'')+'">';
+// Pessoas cadastradas para escolher nos campos da escala (em vez de digitar). Admin vê só as aprovadas.
+function listaPessoasEscala(){
+  const vistos = new Set(), ops = [];
+  Object.entries(S.names||{}).forEach(([id, n]) => { const p = S.pessoas[id]; if (isAdm() && p && p.status && p.status !== 'aprovado') return;
+    const v = String(n.apelido || n.nome || '').trim(); if (!v || vistos.has(normNome(v))) return; vistos.add(normNome(v)); ops.push({v, nome:n.nome || ''}); });
+  ops.sort((a, b) => a.v.localeCompare(b.v, 'pt-BR'));
+  return '<datalist id="dlPessoas">'+ops.map(o => '<option value="'+esc(o.v)+'">'+esc(o.nome !== o.v ? o.nome : '')+'</option>').join('')+'</datalist>';
+}
 document.addEventListener('click', e => { const b = e.target.closest('[data-mais]'); if (!b) return; const grade = b.previousElementSibling; const i = b.dataset.mais, j = grade.children.length;
-  grade.insertAdjacentHTML('beforeend', '<input class="inp" name="f'+i+'_'+j+'" placeholder="Nome '+(j+1)+'">'); grade.lastElementChild.focus(); });
+  grade.insertAdjacentHTML('beforeend', '<input class="inp" name="f'+i+'_'+j+'" list="dlPessoas" autocomplete="off" placeholder="Nome '+(j+1)+'">'); grade.lastElementChild.focus(); });
 // Mídia: Apoio 1 e Apoio 2 têm pessoa fixa (config.midiaFixos); o trio do culto fica em Projeção, Transmissão e Câmera.
 // Funções que valem num culto: as com "cultos" (ex.: ["noite"]) só aparecem nesses cultos.
 const noCulto = (f, culto) => !Array.isArray(f.cultos) || !f.cultos.length || !culto || f.cultos.includes(culto);
@@ -750,7 +759,7 @@ function camposArea(a, x, culto){
   });
   if (h.includes('mid-apoio')) h += '</details>';
   h += '<label class="f" for="fObs">Observação (opcional)</label><input class="inp" id="fObs" name="obs" value="'+esc(x?x.obs||'':'')+'">';
-  return blocoPreencher() + h;
+  return blocoPreencher() + listaPessoasEscala() + '<p class="hint" style="margin:8px 0 0">Toque num campo de nome para escolher entre as pessoas cadastradas (ou digite).</p>' + h;
 }
 /* ---------- preencher a escala por modelo (texto, Word, Excel ou PDF) ---------- */
 // Modelo: uma função por linha, "Função: nome, nome". A organizadora preenche e devolve; o painel coloca cada nome no campo certo.
@@ -824,7 +833,7 @@ async function preencherEscala(){
   PRE.ctx = {data:f.data.value, area:a.id, culto:cultoAqui};
   Object.entries(res).forEach(([i, ps]) => { const fn = a.funcoes[i]; if (!ps.length || !noCulto(fn, cultoAqui)) return; n++;
     const grade = f.querySelector('[name="f'+i+'_0"]').parentNode;
-    while (grade.children.length < ps.length) { const el = document.createElement('input'); el.className = 'inp'; el.name = 'f'+i+'_'+grade.children.length; el.placeholder = 'Nome '+(grade.children.length+1); grade.appendChild(el); }
+    while (grade.children.length < ps.length) { const el = document.createElement('input'); el.className = 'inp'; el.setAttribute('list', 'dlPessoas'); el.autocomplete = 'off'; el.name = 'f'+i+'_'+grade.children.length; el.placeholder = 'Nome '+(grade.children.length+1); grade.appendChild(el); }
     [...grade.children].forEach((el, j) => { el.value = ps[j] || ''; }); });
   if (obs !== null && obs !== '') f.obs.value = obs;
   const extra = PRE.outros.map(o => '<br>➕ Também encontrei o <b>culto da '+esc(cultoInfo(o.culto).nome.toLowerCase())+'</b>: ele será salvo junto quando você tocar em Salvar escala.').join('');

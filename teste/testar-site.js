@@ -120,7 +120,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   await p.click('.notice [data-go="inicio"]'); await p.waitForTimeout(150);
   conferir(await p.isVisible('#cadForm'), 'o botão leva ao formulário de cadastro');
   conferir(!(await p.$$eval('#kP option', os => os.map(o => o.value))).includes('admin'), 'Administrador não aparece no formulário');
-  conferir(JSON.stringify(await p.$$eval('#kP option', os => os.map(o => o.textContent))) === JSON.stringify(['Escolha…','Líder','Auxiliar','Organização','Mídia','Louvor','Coro','Membro']), 'funções: Líder, Auxiliar, Organização, Mídia, Louvor, Coro e Membro');
+  conferir(JSON.stringify(await p.$$eval('#kP option', os => os.map(o => o.textContent))) === JSON.stringify(['Escolha…','Líder','Auxiliar','Organização','Mídia','Louvor','Coro','Voluntário','Membro']), 'funções: Líder, Auxiliar, Organização, Mídia, Louvor, Coro, Voluntário e Membro');
   await p.fill('#kN', ''); await p.fill('#kE', ''); await p.click('#cadForm [type=submit]'); await p.waitForTimeout(150);
   const errosVazios = await p.$$eval('.erro-campo:not([hidden])', l => l.map(e => e.dataset.erro));
   conferir(JSON.stringify(errosVazios) === JSON.stringify(['nome','email','whatsapp','conexao','papel']) && !(await p.evaluate(() => window.__TABELAS.cadastros.some(c => c.email === 'nova.pessoa@gmail.com'))), 'enviar vazio não envia e mostra o erro embaixo de cada campo');
@@ -476,6 +476,8 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   conferir(JSON.stringify(legendas) === JSON.stringify(['Projeção','Transmissão','Câmera','Apoio 1','Apoio 2']), 'Mídia com Projeção, Transmissão, Câmera, Apoio 1 e Apoio 2');
   conferir(!(await p.isVisible('[name="f3_0"]')) && await p.inputValue('[name="f3_0"]') === 'Pedro Morais' && await p.inputValue('[name="f4_0"]') === 'Augusto Cantuaria', 'Apoio 1/2 já vêm com Pedro Morais e Augusto Cantuaria (recolhidos)');
   await p.locator('#dlg').screenshot({ path: path.join(SAIDA, '43-midia-funcoes.png') });
+  const ops = await p.$$eval('#dlPessoas option', l => l.map(o => o.value));
+  conferir(ops.length >= 3 && await p.$eval('[name="f0_0"]', e => e.getAttribute('list') === 'dlPessoas'), 'escala: campos de nome sugerem as pessoas cadastradas');
   await p.context().close();
 
   console.log('Checklist da Mídia');
@@ -575,7 +577,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   }
 
   console.log('Cadastro: funções novas e aprovação');
-  for (const [papel, nomeF] of [['louvor','Louvor'],['coro','Coro'],['leitura','Membro']]) {
+  for (const [papel, nomeF] of [['louvor','Louvor'],['coro','Coro'],['voluntario','Voluntário'],['leitura','Membro']]) {
     p = await abrir('novo'); await p.waitForSelector('#cadForm');
     await p.fill('#kN', 'Pessoa '+nomeF+' Teste'); await p.fill('#kE', papel+'@teste.com'); await p.fill('#kW', '11 97777-0000'); await p.selectOption('#kC', 'shalom'); await p.selectOption('#kP', papel);
     await p.click('#cadForm [type=submit]'); await p.waitForSelector('#dlg[open] [data-avisou]');
@@ -584,7 +586,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   }
   p = await abrir('admin', '#ajustes');
   const sel = '[data-p-papel="00000000-0000-0000-0000-0000000000d7"]';
-  conferir(JSON.stringify(await p.$$eval(sel+' option', os => os.map(o => o.textContent))) === JSON.stringify(['Administrador','Líder','Auxiliar','Organização','Mídia','Louvor','Coro','Membro']), 'aprovação: admin escolhe entre todas as funções');
+  conferir(JSON.stringify(await p.$$eval(sel+' option', os => os.map(o => o.textContent))) === JSON.stringify(['Administrador','Líder','Auxiliar','Organização','Mídia','Louvor','Coro','Voluntário','Membro']), 'aprovação: admin escolhe entre todas as funções');
   conferir(await p.inputValue(sel) === 'auxiliar', 'aprovação já vem com a função que a pessoa pediu');
   await p.selectOption(sel, 'midia');
   conferir(await p.isChecked('[data-p-midia="00000000-0000-0000-0000-0000000000d7"]'), 'trocar para Mídia liga o extra Mídia');
