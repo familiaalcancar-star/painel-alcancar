@@ -421,3 +421,15 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .mk-pct-v{font-size:20px;font-weight:700;color:#3DAA35;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .mk-pct-v small{font-size:13px;font-weight:400;color:#3DAA35}
 .mk-pct-v.vazio{color:var(--muted)}
+
+/* Detalhe da escala: navegação por culto e troca de área */
+.det-nav{display:flex;align-items:center;gap:10px;margin:14px 0 10px}
+.det-nav .icon-btn{flex:0 0 auto;min-width:44px;min-height:44px;font-size:22px}
+.det-nav .icon-btn:disabled{opacity:.3}
+.det-quando{flex:1;text-align:center;line-height:1.25}
+.det-quando b{display:block;font-size:17px}
+.det-quando b::first-letter{text-transform:uppercase}
+.det-quando small{color:var(--muted)}
+.det-areas{flex-wrap:nowrap;overflow-x:auto}
+.fcard li{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.det-alt{font-size:13px;flex:0 0 auto}
