@@ -142,9 +142,9 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
 
   console.log('Administrador');
   p = await abrir('admin');
-  conferir(JSON.stringify(await abas(p)) === JSON.stringify(['Início','Escala','Avisos','Check-in','Checklist','Histórico','Ajustes']), 'vê todas as abas');
+  conferir(JSON.stringify(await abas(p)) === JSON.stringify(['Início','Escala','Agenda','Avisos','Check-in','Checklist','Histórico','Ajustes']), 'vê todas as abas');
   conferir(await p.isVisible('.card.pend'), 'aviso amarelo de cadastro pendente');
-  conferir((await p.textContent('#tabs .badge')) === '1', 'bolinha vermelha com 1 em Ajustes');
+  conferir((await p.textContent('#tabs [data-tab="ajustes"] .badge')) === '1', 'bolinha vermelha com 1 em Ajustes');
   await foto(p, '10-admin-inicio');
   console.log('  Bate-papo');
   conferir((await p.textContent('[data-chat] .badge')) === '2', 'bolinha vermelha com 2 não lidas (a minha não conta)');
@@ -283,7 +283,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   await p.check('[data-p-gestao="00000000-0000-0000-0000-0000000000d7"]');
   await p.check('[data-p-esc="00000000-0000-0000-0000-0000000000d7"]');
   await p.click('[data-salvar-pessoas]'); await p.waitForTimeout(300);
-  conferir(!(await p.$('#tabs .badge')), 'depois de aprovar, a bolinha some');
+  conferir(!(await p.$('#tabs [data-tab="ajustes"] .badge')), 'depois de aprovar, a bolinha some');
   const pes = await p.evaluate(() => window.__TABELAS.pessoas.find(x => x.id.endsWith('d7')));
   conferir(pes && pes.papel === 'auxiliar' && pes.conexao === 'shalom' && pes.gestao === true && pes.escala === true && pes.whatsapp === '11977777777', 'pessoa aprovada com função, conexão, extra e WhatsApp');
   await p.click('[data-rm-pessoa="00000000-0000-0000-0000-0000000000d7"]'); await p.click('[data-r="1"]'); await p.waitForTimeout(300);
@@ -298,7 +298,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
 
   console.log('Líder da Betel (extra Avisos/Eventos)');
   p = await abrir('betel', '#escala'); await p.waitForTimeout(200);
-  conferir(JSON.stringify(await abas(p)) === JSON.stringify(['Início','Escala','Avisos']), 'sem Check-in, Histórico e Ajustes');
+  conferir(JSON.stringify(await abas(p)) === JSON.stringify(['Início','Escala','Agenda','Avisos']), 'sem Check-in, Histórico e Ajustes');
   conferir((await p.textContent('#subtitle')).includes('Líder · Conexão Betel') && (await p.textContent('#subtitle')).includes('Avisos/Eventos'), 'subtítulo com função, conexão e extra');
   await p.click('button.cell[data-det="2026-11-08|manha|superkids"]');
   conferir(await p.isVisible('[data-esc]'), 'pode editar Super Kids onde Betel está escalada');
@@ -350,7 +350,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
 
   console.log('Só consulta com extra Gestão');
   p = await abrir('gestao');
-  conferir(JSON.stringify(await abas(p)) === JSON.stringify(['Início','Escala','Avisos','Check-in']), 'vê a aba Check-in, sem Histórico e Ajustes');
+  conferir(JSON.stringify(await abas(p)) === JSON.stringify(['Início','Escala','Agenda','Avisos','Check-in']), 'vê a aba Check-in, sem Histórico e Ajustes');
   conferir(await p.isVisible('[data-dia-ficha]'), 'botão Check-in do dia na Início');
   await p.context().close();
 
@@ -639,6 +639,33 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   p = await abrir(null, '#escala'); await p.waitForTimeout(200);
   conferir(!(await p.$('[data-det-alt]')), 'visitante não vê "Alterar"');
   await p.context().close();
+
+  console.log('Minha agenda');
+  {
+    // Ana (cargo Mídia, apelido Ana) escalada na Projeção de um culto daqui a 2 dias; conexão Betel na Direção.
+    const hojeSP2 = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) + 'T12:00:00Z');
+    const d2 = new Date(hojeSP2); d2.setUTCDate(d2.getUTCDate() + 2); const dia2 = d2.toISOString().slice(0,10);
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    p = await ctx.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
+    await p.addInitScript(([e]) => { localStorage.setItem('mockPapel', 'midia'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); },
+      [{id: dia2+'_manha_midia', d:{data:dia2, culto:'manha', area:'midia', funcoes:[{nome:'Projeção', pessoas:['Ana']},{nome:'Transmissão', pessoas:['Outro']}]}}]);
+    await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(400);
+    conferir(JSON.stringify(await abas(p)).includes('Agenda') && (await p.textContent('#tabs [data-tab="minha"]')).includes('1'), 'aba Agenda (Minha agenda) com o número de compromissos da semana');
+    conferir((await p.textContent('.meu-prox')).includes('Mídia · Projeção'), 'Início mostra o próximo compromisso');
+    await p.click('#tabs [data-tab="minha"]'); await p.waitForTimeout(400);
+    if (dia2.slice(0,7) !== new Date().toISOString().slice(0,7) && !(await p.textContent('#view')).includes('Projeção')) { await p.click('[data-minha-mes="1"]'); await p.waitForTimeout(400); }
+    conferir((await p.textContent('#view')).includes('Mídia') && (await p.textContent('#view')).includes('Projeção'), 'Minha agenda lista onde a pessoa serve (área e função)');
+    await p.screenshot({ path: path.join(SAIDA, '49-minha-agenda.png'), fullPage: true });
+    await p.click('.minha-li'); await p.waitForTimeout(400);
+    conferir(!!(await p.$('.det-quando')) && (await p.textContent('h2.section-title')).includes('Mídia'), 'tocar no compromisso abre o detalhe da escala');
+    conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    await ctx.close();
+    p = await abrir('betel'); await p.click('#tabs [data-tab="minha"]'); await p.waitForTimeout(500);
+    for (let i = 0; i < 3 && !(await p.textContent('#view')).includes('Sua conexão'); i++) { await p.click('[data-minha-mes="1"]'); await p.waitForTimeout(400); }
+    conferir((await p.textContent('#view')).includes('Sua conexão (Betel) está escalada'), 'líder vê quando a conexão dele serve');
+    await p.context().close();
+    p = await abrir(null); conferir(!JSON.stringify(await abas(p)).includes('Agenda'), 'visitante não tem Minha agenda'); await p.context().close();
+  }
 
   console.log('Notificações');
   p = await abrir('admin');

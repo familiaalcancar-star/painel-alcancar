@@ -29,7 +29,7 @@ const S = { pronto:false, sessao:undefined, uid:null, email:'', cfg:null, cfgLoa
   prox:[], mesEsc:[], avisos:[], eventos:[], names:{}, tab:'inicio', filtro:'todas',
   mes: new Date().toISOString().slice(0,7) };
 const TABS = [
-  {id:'inicio', label:'Início', ic:'🏠'}, {id:'escala', label:'Escala', ic:'📋'}, {id:'avisos', label:'Avisos', ic:'📣'},
+  {id:'inicio', label:'Início', ic:'🏠'}, {id:'escala', label:'Escala', ic:'📋'}, {id:'minha', label:'Agenda', ic:'🗓️', eu:true}, {id:'avisos', label:'Avisos', ic:'📣'},
   {id:'checkin', label:'Check-in', ic:'✅', gestao:true}, {id:'midia', label:'Checklist', ic:'🎬', midia:true}, {id:'historico', label:'Histórico', ic:'🕘', owner:true},
   {id:'ajustes', label:'Ajustes', ic:'⚙️', owner:true}, {id:'ajuda', label:'Ajuda', ic:'❓', hidden:true}];
 const $ = s => document.querySelector(s);
@@ -395,10 +395,54 @@ function blocoArea(lista, c, a){
 const blocosCulto = (lista, c) => '<div class="areas">'+areas().map(a => blocoArea(lista, c, a)).join('')+'</div>';
 const cultoTitulo = c => { const i = cultoInfo(c.culto); return 'Culto da '+i.nome.toLowerCase()+(i.hora?' · '+i.hora:''); };
 
+/* ---------- MINHA AGENDA ---------- */
+// O que a pessoa logada (aprovada) vai fazer: onde o nome dela está na escala (qualquer área e função),
+// quando a conexão dela serve (Direção do culto, Super Kids) e, se for do Coro, quando o Coro serve no Louvor.
+// O nome na escala é ligado ao cadastro pela mesma regra do check-in/checklist (apelido, nome completo ou nome e sobrenome).
+const euPessoa = () => (aprovado(S.uid) ? S.pessoas[S.uid] : null);
+function meusCompromissos(lista){
+  const p = euPessoa(); if (!p) return [];
+  const out = [], ordC = id => { const i = cultos().findIndex(c => c.id === id); return i < 0 ? 99 : i; }, ordA = id => areas().findIndex(a => a.id === id);
+  lista.forEach(x => { const a = areaInfo(x.area); if (!a || !a.id) return; const coro = [];
+    (x.funcoes||[]).forEach(f => (f.pessoas||[]).forEach(n => {
+      if (midiaNomeBate(n, p)) out.push({x, a, tipo:'pessoa', txt:f.nome});
+      else if (p.papel === 'coro' && normNome(n) === 'coro') coro.push(f.nome); }));
+    if (coro.length) out.push({x, a, tipo:'coro', txt:'Coro ('+[...new Set(coro)].join(', ')+')'});
+    if (a.porConexao && p.conexao && conexoesDe(x).includes(p.conexao)) out.push({x, a, tipo:'conexao', txt:'Sua conexão ('+conexaoNome(p.conexao)+') está escalada'});
+  });
+  return out.sort((u, v) => u.x.data.localeCompare(v.x.data) || ordC(u.x.culto) - ordC(v.x.culto) || ordA(u.x.area) - ordA(v.x.area));
+}
+// Contador da aba: compromissos de hoje até daqui a 7 dias.
+const minhaSemana = () => { if (!veEquipes()) return 0; const fim = somaDias(hoje(), 7); return meusCompromissos(S.prox.filter(x => x.data >= hoje() && x.data <= fim)).length; };
+function cardMeuProximo(){
+  if (!veEquipes()) return ''; const c = meusCompromissos(S.prox.filter(x => x.data >= hoje() && x.data <= somaDias(hoje(), 14)))[0]; if (!c) return '';
+  return '<button class="card meu-prox" data-go="minha"><span>📅 <b>Você serve '+esc(fmtCurto(c.x.data))+' · '+esc(cultoInfo(c.x.culto).nome)+'</b><br><small>'+esc(c.a.nome)+' · '+esc(c.txt)+'</small></span><span class="meta">Minha agenda ›</span></button>';
+}
+async function minhaCarregar(){ const m = S.minhaMes; const l = linhas(await lerEscalas(m+'-01', m+'-31', 2000)); if (m === S.minhaMes) { S.minhaEsc = l; S.minhaOk = m; } }
+function viewMinha(){
+  if (!veEquipes()) return '<div class="empty">Entre com a sua conta aprovada para ver a sua agenda.</div>';
+  if (!S.minhaMes) S.minhaMes = hoje().slice(0,7);
+  if (S.minhaOk !== S.minhaMes) { minhaCarregar().then(() => { if (S.tab === 'minha') render(); }); }
+  const rot = new Date(S.minhaMes+'-15T12:00:00').toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
+  let h = '<div class="bar"><h2 style="font-size:22px">Minha agenda</h2></div>'
+    + '<div class="month"><button class="icon-btn" data-minha-mes="-1" aria-label="Mês anterior">‹</button><strong>'+esc(rot.charAt(0).toUpperCase()+rot.slice(1))+'</strong><button class="icon-btn" data-minha-mes="1" aria-label="Próximo mês">›</button></div>';
+  if (S.minhaOk !== S.minhaMes) return h + '<div class="empty">Carregando…</div>';
+  const l = meusCompromissos(S.minhaEsc || []);
+  if (!l.length) return h + '<div class="empty">Nenhum compromisso neste mês.<br><small>Aparece aqui quando o seu nome (igual ao cadastro) estiver na escala, ou quando a sua conexão servir.</small></div>';
+  const dias = [...new Set(l.map(c => c.x.data))];
+  return h + dias.map(d => '<section class="card lst minha-dia'+(d < hoje() ? ' passou' : '')+(d === hoje() ? ' hoje' : '')+'"><h3>'+esc(fmtDia(d))+(d === hoje() ? ' <span class="tag">hoje</span>' : '')+'</h3>'
+    + l.filter(c => c.x.data === d).map(c => { const ci = cultoInfo(c.x.culto);
+      return '<button class="li minha-li" data-det="'+esc(c.x.data)+'|'+esc(c.x.culto)+'|'+esc(c.a.id)+'" data-go-escala><span class="minha-c'+(/noite/i.test(ci.nome) ? ' noite' : '')+'">'+(/noite/i.test(ci.nome) ? '🌙' : '☀️')+' '+esc(ci.nome)+(ci.hora ? '<br><small>'+esc(ci.hora)+'</small>' : '')+'</span>'
+        + '<span class="lt"><b>'+esc(c.a.nome)+'</b><br><small>'+esc(c.txt)+'</small></span><span class="la" aria-hidden="true">›</span></button>'; }).join('') + '</section>').join('');
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-minha-mes]'); if (!b) return; const d = new Date(S.minhaMes+'-15T12:00:00'); d.setMonth(d.getMonth() + Number(b.dataset.minhaMes)); S.minhaMes = isoLocal(d).slice(0,7); render(); });
+// Tocar num compromisso abre o detalhe daquela escala (na aba Escala).
+document.addEventListener('click', e => { const b = e.target.closest('[data-go-escala]'); if (!b) return; e.stopPropagation(); const [d, c, a] = b.dataset.det.split('|');
+  S.tab = 'escala'; S.det = {data:d, culto:c, area:a}; history.replaceState(null, '', '#escala'); renderTabs(); render(); window.scrollTo(0,0); }, true);
 /* ---------- navegação ---------- */
 function renderTabs(){
-  $('#tabs').innerHTML = TABS.filter(t=>!t.hidden && (!t.owner || isAdm()) && (!t.gestao || veCheckin()) && (!t.midia || temMidia())).map(t =>
-    '<button data-tab="'+t.id+'"'+(S.tab===t.id?' aria-current="page"':'')+'><span class="ic" aria-hidden="true">'+t.ic+'</span>'+t.label+(t.id==='ajustes' && isAdm() && pendentes().length ? '<span class="badge">'+pendentes().length+'</span>' : '')+'</button>').join('');
+  $('#tabs').innerHTML = TABS.filter(t=>!t.hidden && (!t.owner || isAdm()) && (!t.gestao || veCheckin()) && (!t.midia || temMidia()) && (!t.eu || veEquipes())).map(t =>
+    '<button data-tab="'+t.id+'"'+(S.tab===t.id?' aria-current="page"':'')+'><span class="ic" aria-hidden="true">'+t.ic+'</span>'+t.label+(t.id==='ajustes' && isAdm() && pendentes().length ? '<span class="badge">'+pendentes().length+'</span>' : '')+(t.id==='minha' && minhaSemana() ? '<span class="badge">'+minhaSemana()+'</span>' : '')+'</button>').join('');
 }
 $('#tabs').addEventListener('click', e => { const b=e.target.closest('button[data-tab]'); if(!b) return; S.tab=b.dataset.tab; S.det=null; history.replaceState(null,'','#'+S.tab); renderTabs(); render(); window.scrollTo(0,0); });
 
@@ -411,9 +455,9 @@ function render(){
   const v = $('#view');
   if (!S.cfgLoaded) { v.innerHTML='<div class="empty">Carregando o painel…</div>'; return; }
   const t = TABS.find(x => x.id === S.tab);
-  if (!t || (t.owner && !isAdm()) || (t.gestao && !veCheckin()) || (t.midia && !temMidia())) S.tab = 'inicio';
+  if (!t || (t.owner && !isAdm()) || (t.gestao && !veCheckin()) || (t.midia && !temMidia()) || (t.eu && !veEquipes())) S.tab = 'inicio';
   if (!S.cfg && S.tab!=='ajustes') { v.innerHTML = isAdm() ? '<div class="empty">O painel ainda não está configurado.<br><br><button class="btn" data-go="ajustes">Configurar agora</button></div>' : '<div class="empty">Não foi possível carregar o painel agora. Confira a internet e tente de novo.</div>'; return; }
-  const fns = {inicio:viewInicio, escala:viewEscala, checkin:viewCheckin, midia:viewMidia, avisos:viewAvisos, historico:viewHistorico, ajustes:viewAjustes, ajuda:viewAjuda};
+  const fns = {inicio:viewInicio, escala:viewEscala, checkin:viewCheckin, midia:viewMidia, minha:viewMinha, avisos:viewAvisos, historico:viewHistorico, ajustes:viewAjustes, ajuda:viewAjuda};
   v.innerHTML = bannerCadastro() + fns[S.tab]();
   let k = 0; document.querySelectorAll('details.area').forEach(d => { d.dataset.k = S.tab+(k++); if (abertos.includes(d.dataset.k)) d.open = true; });
   if (S.tab==='historico' && isAdm()) carregarHistorico();
@@ -671,7 +715,7 @@ function viewInicio(){
   const lista = listaCultos(hoje(), somaDias(hoje(), 120), S.prox).filter(c => !horaPassou(c.data, cultoInfo(c.culto).hora));
   const datas = [...new Set(lista.map(c=>c.data))].slice(0, 2);
   const blocoDia = d => lista.filter(c=>c.data===d).map((c,i) => (i?'<hr class="div-culto">':'')+'<div class="culto-sec"><h3 class="culto-t'+(/noite/i.test(cultoInfo(c.culto).nome)?' noite':'')+'">'+esc(cultoTitulo(c))+'</h3>'+blocosCulto(S.prox, c)+'</div>').join('');
-  let html = cardCadastro() + cardPush();
+  let html = cardCadastro() + cardPush() + cardMeuProximo();
   if (isAdm() && pendentes().length) { const n = pendentes().length; html = '<button class="card pend" data-go="ajustes"><span>🔔 <b>'+n+' cadastro'+(n>1?'s':'')+' aguardando aprovação</b></span><span class="meta">Revisar ›</span></button>' + html; }
   if (!datas.length) html += '<div class="empty">Nenhum culto programado. Confira os dias de culto em Ajustes.</div>';
   else {

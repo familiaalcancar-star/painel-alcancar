@@ -433,3 +433,16 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .det-areas{flex-wrap:nowrap;overflow-x:auto}
 .fcard li{display:flex;align-items:center;gap:8px;justify-content:space-between}
 .det-alt{font-size:13px;flex:0 0 auto}
+
+/* Minha agenda */
+.meu-prox{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;border-color:var(--yellow);color:var(--ink)}
+.meu-prox small{color:var(--muted)}
+.minha-dia h3{margin:0 0 6px}
+.minha-dia.passou{opacity:.5}
+.minha-dia.hoje{border-color:var(--yellow)}
+.lst .li.minha-li{grid-template-columns:72px 1fr 14px}
+.minha-dia h3{padding-top:10px}
+.minha-c{font-size:13px;color:var(--yellow);line-height:1.2}
+.minha-c.noite{color:#1E88E5}
+.minha-c small{color:var(--muted)}
+.minha-li .lt small{color:var(--muted)}
