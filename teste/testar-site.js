@@ -16,7 +16,7 @@ DADOS.config.checkinPadrao = [{area:'*', funcao:'*', itens:['Crachá']}, {area:'
 // Direção do culto como está no banco desde 09/11: limpeza só no culto da noite.
 DADOS.config.areas.forEach(a => { if (a.id === 'direcao') a.funcoes = [{nome:'Estacionamento', vagas:3}, {nome:'Recepção', vagas:4}, {nome:'Envelopes e lembrancinhas', vagas:2}, {nome:'Café + água do ministro da Palavra', vagas:1}, {nome:'Equipe de limpeza pós-culto', vagas:4, cultos:['noite']}]; });
 DADOS.escalas.forEach(e => { if (e.area === 'direcao') (e.funcoes||[]).forEach(f => { if (f.nome === 'Café') f.nome = 'Café + água do ministro da Palavra'; }); });
-DADOS.config.areas.forEach(a => { if (a.id === 'midia') a.funcoes = ['Projeção','Transmissão','Câmera','Apoio 1','Apoio 2'].map(nome => ({nome, vagas:1})); });
+DADOS.config.areas.forEach(a => { if (a.id === 'midia') a.funcoes = ['Projeção','Transmissão','Câmera','Storymaker','Apoio 1','Apoio 2'].map(nome => ({nome, vagas:1})); });
 DADOS.escalas.forEach(e => { if (e.area !== 'midia') return; const ns = (e.funcoes||[]).flatMap(f => f.pessoas||[]);
   const ehFixo = (n, f) => { const a = n.toLowerCase(), b = f.toLowerCase(); return a === b || a === b.split(' ')[0]; };
   const resto = ns.filter(n => !ehFixo(n, FIXOS['Apoio 1']) && !ehFixo(n, FIXOS['Apoio 2']));
@@ -473,8 +473,8 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   p = await abrir('admin', '#escala'); await p.setViewportSize({ width: 1280, height: 900 });
   await p.click('button.cell[data-det="2026-11-08|manha|midia"]'); await p.click('[data-esc]'); await p.waitForSelector('#dlg[open] [name="f0_0"]');
   const legendas = await p.$$eval('#dlg legend', l => l.map(e => e.textContent.split(' ·')[0]));
-  conferir(JSON.stringify(legendas) === JSON.stringify(['Projeção','Transmissão','Câmera','Apoio 1','Apoio 2']), 'Mídia com Projeção, Transmissão, Câmera, Apoio 1 e Apoio 2');
-  conferir(!(await p.isVisible('[name="f3_0"]')) && await p.inputValue('[name="f3_0"]') === 'Pedro Morais' && await p.inputValue('[name="f4_0"]') === 'Augusto Cantuaria', 'Apoio 1/2 já vêm com Pedro Morais e Augusto Cantuaria (recolhidos)');
+  conferir(JSON.stringify(legendas) === JSON.stringify(['Projeção','Transmissão','Câmera','Storymaker','Apoio 1','Apoio 2']), 'Mídia com Projeção, Transmissão, Câmera, Storymaker, Apoio 1 e Apoio 2');
+  conferir(!(await p.isVisible('[name="f4_0"]')) && await p.inputValue('[name="f4_0"]') === 'Pedro Morais' && await p.inputValue('[name="f5_0"]') === 'Augusto Cantuaria', 'Apoio 1/2 já vêm com Pedro Morais e Augusto Cantuaria (recolhidos)');
   await p.locator('#dlg').screenshot({ path: path.join(SAIDA, '43-midia-funcoes.png') });
   const ops = await p.$$eval('#dlPessoas option', l => l.map(o => o.value));
   conferir(ops.length >= 3 && await p.$eval('[name="f0_0"]', e => e.getAttribute('list') === 'dlPessoas'), 'escala: campos de nome sugerem as pessoas cadastradas');
@@ -540,7 +540,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.context().close();
     p = await abrirMid('admin', escHoje); await irHoje(p);
     conferir((await p.textContent('#view')).includes('Administrador: você vê todos'), 'admin vê o aviso de administrador');
-    conferir(JSON.stringify(await p.$$eval('.mk-fn h3', l => l.map(e => e.textContent.split(' ')[0]))) === JSON.stringify(['Projeção','Transmissão','Câmera','Apoio']) && (await p.textContent('#view')).includes('Checklist ainda não cadastrado'), 'admin vê todas as funções, na ordem fixa');
+    conferir(JSON.stringify(await p.$$eval('.mk-fn h3', l => l.map(e => e.textContent.split(' ')[0]))) === JSON.stringify(['Projeção','Transmissão','Câmera','Storymaker','Apoio']) && (await p.textContent('#view')).includes('Checklist ainda não cadastrado'), 'admin vê todas as funções, na ordem fixa');
     await p.click('.mk-fn .mk-item >> nth=0'); await p.waitForTimeout(400);
     conferir(await p.evaluate(() => window.__TABELAS.checklist_marcas.length === 1), 'admin marca');
     await p.click('.mk-fn .mk-item >> nth=0'); await p.waitForSelector('[data-r="0"]'); await p.click('[data-r="0"]'); await p.waitForTimeout(300);

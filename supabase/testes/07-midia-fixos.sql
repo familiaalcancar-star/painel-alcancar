@@ -1,12 +1,12 @@
--- Mídia: funções Projeção/Transmissão/Câmera/Apoio 1/Apoio 2; Apoio 1 = Pedro Morais e Apoio 2 = Augusto Cantuaria por padrão.
+-- Mídia: funções Projeção/Transmissão/Câmera/Storymaker/Apoio 1/Apoio 2; Apoio 1 = Pedro Morais e Apoio 2 = Augusto Cantuaria por padrão.
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000a',false);
 insert into escalas(id,d) values ('mf1','{"data":"2099-01-04","culto":"manha","area":"midia","funcoes":[{"nome":"Mídia","pessoas":["Ana","augusto","Bia","Pedro Morais","Caio","Davi"]}]}');
 insert into escalas(id,d) values ('mf2','{"data":"2099-01-04","culto":"noite","area":"midia"}');
 insert into escalas(id,d) values ('mf3','{"data":"2099-01-11","culto":"manha","area":"midia","funcoes":[{"nome":"Projeção","pessoas":["Ana"]},{"nome":"Apoio 2","pessoas":["Fulano Substituto"]}]}');
 select ok('Escala antiga vira funções sem perder nomes', (select d->'funcoes' from escalas where id='mf1') =
-  '[{"nome":"Projeção","pessoas":["Ana"]},{"nome":"Transmissão","pessoas":["Bia"]},{"nome":"Câmera","pessoas":["Caio","Davi"]},{"nome":"Apoio 1","pessoas":["Pedro Morais"]},{"nome":"Apoio 2","pessoas":["Augusto Cantuaria"]}]');
-select ok('Escala nova já vem com Apoio 1 e Apoio 2', (select d->'funcoes'->3->'pessoas' = '["Pedro Morais"]' and d->'funcoes'->4->'pessoas' = '["Augusto Cantuaria"]' and d->'funcoes'->0->'pessoas' = '[]' from escalas where id='mf2'));
-select ok('Admin troca o Apoio 2 num culto (mantém a troca)', (select d->'funcoes'->4->'pessoas' = '["Fulano Substituto"]' and d->'funcoes'->3->'pessoas' = '["Pedro Morais"]' from escalas where id='mf3'));
+  '[{"nome":"Projeção","pessoas":["Ana"]},{"nome":"Transmissão","pessoas":["Bia"]},{"nome":"Câmera","pessoas":["Caio","Davi"]},{"nome":"Storymaker","pessoas":[]},{"nome":"Apoio 1","pessoas":["Pedro Morais"]},{"nome":"Apoio 2","pessoas":["Augusto Cantuaria"]}]');
+select ok('Escala nova já vem com Apoio 1 e Apoio 2', (select d->'funcoes'->4->'pessoas' = '["Pedro Morais"]' and d->'funcoes'->5->'pessoas' = '["Augusto Cantuaria"]' and d->'funcoes'->0->'pessoas' = '[]' from escalas where id='mf2'));
+select ok('Admin troca o Apoio 2 num culto (mantém a troca)', (select d->'funcoes'->5->'pessoas' = '["Fulano Substituto"]' and d->'funcoes'->4->'pessoas' = '["Pedro Morais"]' from escalas where id='mf3'));
 select ok('Outras áreas não mudam', (select not (d::text like '%Pedro Morais%') from escalas where id='2026-11-01_manha_louvor'));
 
 -- Checklist: cargo Mídia, escalado na função, no dia (hoje em São Paulo).
@@ -51,13 +51,14 @@ select t('Apoio 1 marca item do Apoio','a1',$q$insert into checklist_marcas(data
 select t('Apoio 2 marca item do Apoio','a4',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Apoio' order by ordem limit 1$q$,'ok');
 select t('Apoio NÃO marca item da Projeção','a4',$q$insert into checklist_marcas(data,culto,item) select hoje_sp(),'noite',id from checklist_itens where funcao='Projeção' order by ordem limit 1$q$,'bloq');
 -- Orações inicial e final em destaque nos 4 checklists.
-select ok('Orações inicial e final em destaque nas 4 funções', (select count(*) from checklist_itens where destaque and texto in ('Oração inicial','Oração final')) = 8);
+select ok('Orações inicial e final em destaque nas 5 funções', (select count(*) from checklist_itens where destaque and texto in ('Oração inicial','Oração final')) = 10);
 select t('Admin liga/desliga destaque','0a',$q$update checklist_itens set destaque = not destaque where texto='Oração final' and funcao='Apoio'$q$,'ok');
 select t('Não-admin NÃO muda destaque','a1',$q$update checklist_itens set destaque = false where texto='Oração final'$q$,'bloq');
 -- 10/11: itens de porcentagem (bateria).
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000a',false);
-insert into checklist_marcas(data,culto,item,valor) select '2099-03-01','manha',id,85 from checklist_itens where texto='Bateria ao retirar (%)';
-select ok('Porcentagem salva e no histórico', (select valor from checklist_marcas where data='2099-03-01') = 85 and exists (select 1 from historico where resumo like '%Bateria ao retirar (%)" = 85%%'));
+insert into checklist_marcas(data,culto,item,valor) select '2099-03-01','manha',id,85 from checklist_itens where texto='Bateria ao retirar (%)' and funcao='Storymaker';
+select ok('Porcentagem salva e no histórico', (select max(valor) from checklist_marcas where data='2099-03-01') = 85 and exists (select 1 from historico where resumo like '%Bateria ao retirar (%)" = 85%%'));
 select set_config('request.jwt.claim.sub','',false);
-select t('Porcentagem sem valor NÃO grava','0a',$q$insert into checklist_marcas(data,culto,item) select '2099-03-02','manha',id from checklist_itens where texto='Bateria ao devolver (%)'$q$,'bloq');
+select t('Porcentagem sem valor NÃO grava','0a',$q$insert into checklist_marcas(data,culto,item) select '2099-03-02','manha',id from checklist_itens where texto='Bateria ao devolver (%)' and funcao='Storymaker'$q$,'bloq');
 select t('Porcentagem acima de 100 NÃO grava','0a',$q$insert into checklist_marcas(data,culto,item,valor) select '2099-03-02','manha',id,101 from checklist_itens where texto='Bateria ao devolver (%)'$q$,'bloq');
+select ok('Mídia tem as 6 funções na ordem (Storymaker depois de Câmera)', (select array(select x->>'nome' from jsonb_array_elements(d->'funcoes') x) = array['Projeção','Transmissão','Câmera','Storymaker','Apoio 1','Apoio 2'] from escalas where id='mf2'));
