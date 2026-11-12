@@ -95,7 +95,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   await p.click('[data-sec="sec-eventos"]'); await p.waitForTimeout(400); await foto(p, '04-visitante-eventos');
   console.log('  Login (Google, e-mail e senha)');
   await p.click('[data-entrar]'); await p.waitForSelector('#dlg[open] [data-google]'); await p.waitForTimeout(400);
-  conferir((await p.textContent('#dlg [data-google]')).includes('Continuar com Google'), 'botão principal "Continuar com Google"');
+  conferir((await p.textContent('#dlg [data-google]')).includes('Continuar com Google') && await p.evaluate(() => !!(document.querySelector('#lE').compareDocumentPosition(document.querySelector('[data-google]')) & Node.DOCUMENT_POSITION_FOLLOWING)), 'e-mail e senha primeiro; "Continuar com Google" embaixo');
   conferir(await p.isVisible('#lE') && await p.isVisible('#lS') && await p.isVisible('[data-criar-conta]') && await p.isVisible('[data-esqueci]'), 'e-mail, senha, Criar conta e Esqueci minha senha');
   await foto(p, '05-login');
   await p.click('[data-google]'); await p.waitForTimeout(100);
@@ -618,6 +618,38 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   const cvOps = await p.$$eval('#cvP option', os => os.map(o => o.textContent)).catch(() => []);
   conferir(['Mídia','Louvor','Coro','Membro'].every(n => cvOps.includes(n)), 'convite por e-mail com Mídia, Louvor, Coro e Membro');
   await p.context().close();
+
+  console.log('Contas duplicadas (outro e-mail / outro jeito de entrar)');
+  {
+    p = await abrir('novo'); await p.waitForSelector('#cadForm');
+    conferir((await p.textContent('.conta-atual')).includes('novo@x') && (await p.textContent('.conta-atual')).includes('e-mail e senha'), 'cadastro mostra com qual conta a pessoa entrou');
+    await p.fill('#kN', 'Ana Duplicada'); await p.fill('#kE', 'ana.nova@icloud.com'); await p.fill('#kW', '(11) 95555-5555'); await p.selectOption('#kC', 'betel'); await p.selectOption('#kP', 'midia');
+    await p.click('#cadForm [type=submit]'); await p.waitForSelector('#dlg[open] [data-enviar-mesmo]');
+    conferir((await p.textContent('#dlg')).includes('Você já tem cadastro') && (await p.textContent('#dlg')).includes('mi•••@x') && !(await p.evaluate(() => window.__TABELAS.cadastros.some(c => c.email === 'ana.nova@icloud.com'))), 'WhatsApp já cadastrado em outra conta: avisa qual conta usar e não envia');
+    await foto(p, '51-conta-duplicada');
+    await p.click('#dlg [data-cancel]'); await p.waitForTimeout(250);
+    conferir(await p.inputValue('#kW') === '(11) 95555-5555' && await p.inputValue('#kP') === 'midia', 'Voltar mantém o que foi digitado');
+    await p.click('#cadForm [type=submit]'); await p.waitForSelector('#dlg[open] [data-enviar-mesmo]');
+    await p.click('[data-enviar-mesmo]'); await p.waitForSelector('#dlg[open] [data-avisou]');
+    conferir(await p.evaluate(() => window.__TABELAS.cadastros.some(c => c.email === 'ana.nova@icloud.com')), '"Enviar cadastro mesmo assim" envia');
+    await p.click('#dlg [data-cancel]'); await p.waitForTimeout(150);
+    await p.context().close();
+    p = await abrir('novo'); await p.waitForSelector('#cadForm');
+    await p.click('[data-sair-direto]'); await p.waitForSelector('#dlg[open] #lE');
+    conferir((await p.textContent('.ultimo-login')).includes('no•••@x') && (await p.textContent('.ultimo-login')).includes('e-mail e senha'), 'Entrar mostra como a pessoa entrou da última vez neste aparelho');
+    conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    await p.context().close();
+    // Admin: Maria (pendente) tem o mesmo WhatsApp de uma conta antiga removida → passa o cadastro para a conta nova.
+    p = await abrir('admin', '#ajustes');
+    await p.evaluate(() => localStorage.setItem('mockPessoasExtra', JSON.stringify([{id:'00000000-0000-0000-0000-0000000000d8', email:'maria.antiga@icloud.com', nome:'Maria Antiga Souza', apelido:'Mari', whatsapp:'(11) 97777-7777', conexao:'shalom', papel:'auxiliar', status:'aprovado', gestao:true}])));
+    await p.reload(); await p.waitForSelector('[data-transferir]');
+    conferir((await p.textContent('.dup')).includes('Maria Antiga Souza'), 'admin vê "Já tem cadastro em outra conta" no pendente');
+    await p.click('[data-transferir]'); await p.waitForSelector('[data-r="1"]'); await p.click('[data-r="1"]'); await p.waitForTimeout(400);
+    conferir(await p.evaluate(() => { const n = window.__TABELAS.pessoas.find(q => q.id === '00000000-0000-0000-0000-0000000000d7'), v = window.__TABELAS.pessoas.find(q => q.id === '00000000-0000-0000-0000-0000000000d8');
+      return n && n.status === 'aprovado' && n.papel === 'auxiliar' && n.gestao && v.status === 'removido'; }) && (await p.evaluate(() => (window.__rpc||[]).some(r => r[0] === 'transferir_pessoa'))), 'admin passa o cadastro para a conta nova (antiga fica removida)');
+    conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    await p.context().close();
+  }
 
   console.log('Direção do culto: limpeza só à noite e convocação');
   p = await abrir('admin', '#escala'); await p.setViewportSize({ width: 1280, height: 900 });

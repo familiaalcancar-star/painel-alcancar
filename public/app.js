@@ -237,14 +237,20 @@ function erroLogin(e){
 function aviso(titulo, html){
   abrir('<form><h2>'+titulo+'</h2><div class="notice" style="margin:0">'+html+'</div><div class="end"><button type="button" class="btn ghost" data-cancel>Fechar</button><button type="submit" class="btn">Entendi</button></div></form>', async () => true);
 }
+// Como a pessoa entrou da última vez neste aparelho (para não criar uma segunda conta sem querer).
+const mascaraEmail = e => String(e||'').replace(/^(.{2})[^@]*(@.*)$/, '$1•••$2');
+const PROV_NOME = {google:'Continuar com Google', email:'e-mail e senha', ambos:'e-mail e senha ou Google'};
+function ultimoLoginAviso(){ let u = null; try { u = JSON.parse(localStorage.getItem('ultimoLogin') || 'null'); } catch(e){}
+  return u && u.email ? '<div class="notice ultimo-login">Da última vez, neste aparelho, você entrou com <b>'+esc(PROV_NOME[u.prov] || 'e-mail e senha')+'</b> ('+esc(u.email)+').</div>' : ''; }
 function formLogin(email){
   abrir('<form id="loginForm"><h2>Entrar</h2><p class="meta" style="margin:0">Só quem vai preencher escalas, publicar avisos, fazer check-in ou usar o bate-papo precisa entrar. Para só consultar, não precisa.</p>'
-    + '<button type="button" class="btn-google" data-google>'+IC_G+'<span>Continuar com Google</span></button>'
-    + '<div class="ou">ou entre com e-mail e senha</div>'
+    + ultimoLoginAviso()
     + '<label class="f" for="lE">E-mail</label><input class="inp" id="lE" name="email" type="email" required autocomplete="username" inputmode="email" placeholder="voce@exemplo.com" value="'+esc(email||'')+'">'
     + '<label class="f" for="lS">Senha</label><input class="inp" id="lS" name="senha" type="password" required autocomplete="current-password">'
     + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Entrar</button></div>'
-    + '<div class="login-links"><button type="button" class="link" data-criar-conta>Criar conta</button><button type="button" class="link" data-esqueci>Esqueci minha senha</button></div></form>',
+    + '<div class="login-links"><button type="button" class="link" data-criar-conta>Criar conta com e-mail e senha</button><button type="button" class="link" data-esqueci>Esqueci minha senha</button></div>'
+    + '<div class="ou">ou</div><button type="button" class="btn-google" data-google>'+IC_G+'<span>Continuar com Google</span></button>'
+    + '<p class="hint">Entre sempre do mesmo jeito: se você criou a conta com e-mail e senha (iCloud, Hotmail…), use e-mail e senha. O Google só serve para a conta do Google (Gmail). Cada jeito diferente vira outra conta e pede um cadastro novo.</p></form>',
   async fd => {
     const { error } = await sb.auth.signInWithPassword({ email: String(fd.get('email')||'').trim().toLowerCase(), password: String(fd.get('senha')||'') });
     if (error) { console.warn(error); toast(erroLogin(error)); return false; }
@@ -252,7 +258,7 @@ function formLogin(email){
   });
 }
 function formCriarConta(email){
-  abrir('<form><h2>Criar conta</h2><p class="meta" style="margin:0">Se você tem Gmail, é mais fácil usar <b>Continuar com Google</b>, sem criar senha.</p>'
+  abrir('<form><h2>Criar conta</h2><p class="meta" style="margin:0">Serve para qualquer e-mail (iCloud, Hotmail, Gmail…). Depois, entre sempre com este mesmo e-mail e senha.</p>'
     + '<label class="f" for="cE">E-mail</label><input class="inp" id="cE" name="email" type="email" required autocomplete="username" inputmode="email" value="'+esc(email||'')+'">'
     + '<label class="f" for="cS">Crie uma senha</label><input class="inp" id="cS" name="senha" type="password" required minlength="8" autocomplete="new-password">'
     + '<label class="f" for="cS2">Repita a senha</label><input class="inp" id="cS2" name="senha2" type="password" required minlength="8" autocomplete="new-password"><p class="hint">Pelo menos 8 caracteres, misturando letras e números.</p>'
@@ -324,8 +330,10 @@ async function aplicarSessao(session){
   const uid = session ? session.user.id : null;
   if (uid === S.sessao) return;
   S.sessao = uid; S.uid = uid; S.email = session ? (session.user.email||'') : '';
+  S.provedor = session ? ((session.user.app_metadata||{}).provider || 'email') : '';
   S.nomeConta = session ? ((session.user.user_metadata||{}).full_name || (session.user.user_metadata||{}).name || '') : '';
   if (uid) {
+    try { const am = session.user.app_metadata || {}; localStorage.setItem('ultimoLogin', JSON.stringify({prov: am.provider === 'google' ? 'google' : 'email', email: mascaraEmail(S.email)})); } catch(e){}
     try { await sb.from('acessos').upsert({id:uid, email:S.email, visto:new Date().toISOString()}); } catch(e){}
     try { if (!localStorage.getItem('tutorialVisto')) { S.tab = 'ajuda'; localStorage.setItem('tutorialVisto', '1'); } } catch(e){}
   } else if (!TABS.some(t => t.id===S.tab && !t.owner && !t.gestao)) S.tab = 'inicio';
@@ -605,6 +613,19 @@ function avisarAdmin(){
     + '<div class="end"><button type="button" class="btn ghost" data-cancel>Fechar</button></div></form>', async () => true);
 }
 document.addEventListener('click', e => { if (e.target.closest('[data-avisou]')) setTimeout(() => { const d = $('#dlg'); if (d.open) d.close(); }, 300); });
+let CAD_PEND = null;
+function contaExistente(dup, data){ CAD_PEND = data;
+  abrir('<form><h2>Você já tem cadastro</h2><p style="margin:0">Esse WhatsApp já está cadastrado em outra conta: <b>'+esc(dup.email)+'</b>.</p>'
+    + '<p class="meta">Para entrar nela, use <b>'+esc(PROV_NOME[dup.provedor] || 'e-mail e senha')+'</b> com esse e-mail. Assim você não precisa de outro cadastro nem de nova aprovação.</p>'
+    + (dup.provedor !== 'google' ? '<p class="hint">Esqueceu a senha? Na tela Entrar, toque em <b>Esqueci minha senha</b>.</p>' : '')
+    + '<button type="submit" class="btn big">Sair e entrar com a outra conta</button>'
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Voltar</button><button type="button" class="btn ghost" data-enviar-mesmo>Enviar cadastro mesmo assim</button></div></form>',
+  async () => { await pushSair(); await sb.auth.signOut(); setTimeout(() => formLogin(), 300); return true; });
+}
+document.addEventListener('click', async e => {
+  if (e.target.closest('[data-enviar-mesmo]')) { const d = $('#dlg'); if (d.open) d.close(); const data = CAD_PEND; CAD_PEND = null; if (data) setTimeout(() => enviarCadastro(data), 50); }
+  if (e.target.closest('[data-sair-direto]')) { await pushSair(); await sb.auth.signOut(); setTimeout(() => formLogin(), 300); }
+});
 function cardCadastro(){
   if (S.uid && statusDe(S.uid) === 'removido') return '<div class="notice">Seu acesso foi removido. Você pode consultar as informações públicas. Para solicitar a reativação, fale com um administrador.</div>';
   if (S.uid && aprovado(S.uid)) return '';
@@ -613,14 +634,15 @@ function cardCadastro(){
   if (S.meuCad) { const msg = msgAprovacao();
     return '<div class="notice">Cadastro enviado: '+esc(S.meuCad.nome||'')+' · '+esc(PAPEIS[S.meuCad.papel]||'')+' da conexão '+esc(conexaoNome(S.meuCad.conexao))+'. Agora é só aguardar a aprovação de um administrador. Para agilizar, avise pelo WhatsApp:<a class="btn" style="display:block;text-align:center;margin-top:12px;text-decoration:none;background:#25D366;color:#fff" href="https://wa.me/'+ADM_WPP()+'?text='+encodeURIComponent(msg)+'" target="_blank" rel="noopener">Avisar o administrador pelo WhatsApp</a></div>'; }
   // Todos os campos são obrigatórios (o banco também confere); o erro aparece embaixo do campo.
-  const erro = k => '<p class="erro-campo" data-erro="'+k+'" hidden></p>';
-  return '<section class="card"><h3>Faça seu cadastro</h3><p class="meta" style="margin:4px 0 0">Depois da aprovação de um administrador, você vê quem está escalado em cada função. Líderes, auxiliares e organização também preenchem a escala da conexão.</p><form id="cadForm" novalidate>'
-    + '<label class="f" for="kN">Nome completo</label><input class="inp" id="kN" name="nome" autocomplete="name" value="'+esc(S.nomeConta||'')+'">'+erro('nome')
-    + '<label class="f" for="kE">E-mail</label><input class="inp" id="kE" name="email" type="email" autocomplete="email" inputmode="email" value="'+esc(S.email||'')+'">'+erro('email')
-    + '<label class="f" for="kA">Me chamar: (apelido, opcional)</label><input class="inp" id="kA" name="apelido" placeholder="Como você prefere ser chamado">'
-    + '<label class="f" for="kW">WhatsApp (com DDD)</label><input class="inp" id="kW" name="whatsapp" type="tel" inputmode="tel" placeholder="(11) 99999-9999">'+erro('whatsapp')
-    + '<label class="f" for="kC">Conexão</label><select class="inp" id="kC" name="conexao"><option value="">Escolha…</option>'+opts(conexoes(), '')+'</select>'+erro('conexao')
-    + '<label class="f" for="kP">Função na igreja</label><select class="inp" id="kP" name="papel"><option value="">Escolha…</option>'+opts(PAPEIS_CADASTRO.map(id => ({id, nome:PAPEIS[id]})), '')+'</select>'+erro('papel')
+  const erro = k => '<p class="erro-campo" data-erro="'+k+'" hidden></p>', v = CAD_PEND || {}; // ao voltar do aviso de conta repetida, o que foi digitado continua
+  return '<div class="notice conta-atual">Você entrou com <b>'+esc(S.email||'esta conta')+'</b>'+(S.provedor === 'google' ? ' (Google)' : ' (e-mail e senha)')+'.<br>Já fez cadastro antes com <b>outro e-mail ou outro jeito de entrar</b>? Não precisa fazer de novo: <button type="button" class="link" data-sair-direto>saia e entre com aquela conta</button>.</div>'
+    + '<section class="card"><h3>Faça seu cadastro</h3><p class="meta" style="margin:4px 0 0">Depois da aprovação de um administrador, você vê quem está escalado em cada função. Líderes, auxiliares e organização também preenchem a escala da conexão.</p><form id="cadForm" novalidate>'
+    + '<label class="f" for="kN">Nome completo</label><input class="inp" id="kN" name="nome" autocomplete="name" value="'+esc(v.nome||S.nomeConta||'')+'">'+erro('nome')
+    + '<label class="f" for="kE">E-mail</label><input class="inp" id="kE" name="email" type="email" autocomplete="email" inputmode="email" value="'+esc(v.email||S.email||'')+'">'+erro('email')
+    + '<label class="f" for="kA">Me chamar: (apelido, opcional)</label><input class="inp" id="kA" name="apelido" placeholder="Como você prefere ser chamado" value="'+esc(v.apelido||'')+'">'
+    + '<label class="f" for="kW">WhatsApp (com DDD)</label><input class="inp" id="kW" name="whatsapp" type="tel" inputmode="tel" placeholder="(11) 99999-9999" value="'+esc(v.whatsapp||'')+'">'+erro('whatsapp')
+    + '<label class="f" for="kC">Conexão</label><select class="inp" id="kC" name="conexao"><option value="">Escolha…</option>'+opts(conexoes(), v.conexao||'')+'</select>'+erro('conexao')
+    + '<label class="f" for="kP">Função na igreja</label><select class="inp" id="kP" name="papel"><option value="">Escolha…</option>'+opts(PAPEIS_CADASTRO.map(id => ({id, nome:PAPEIS[id]})), v.papel||'')+'</select>'+erro('papel')
     + '<p class="hint">Escolha uma função. Depois de enviado, a conexão e a função só podem ser alteradas por um administrador.</p>'
     + '<div class="end"><button type="submit" class="btn">Enviar cadastro</button></div></form></section>';
 }
@@ -704,13 +726,20 @@ document.addEventListener('submit', async e => {
   const primeiroErro = Object.keys(erros).find(k => erros[k]);
   if (primeiroErro) { e.target.querySelector('[name="'+primeiroErro+'"]').focus(); toast('Falta preencher: confira os campos em vermelho.'); return; }
   const b = e.target.querySelector('[type=submit]'); b.disabled = true;
+  let dup = null;
+  try { const r = await sb.rpc('conta_do_whatsapp', {p_whats:data.whatsapp}); dup = !r.error && (r.data||[])[0]; } catch(x){}
+  if (dup) { b.disabled = false; contaExistente(dup, data); return; }
+  await enviarCadastro(data, b);
+});
+async function enviarCadastro(data, b){
+  if (S.meuCad) { toast('Seu cadastro já foi enviado.'); return; }
   try {
     const r = await sb.from('cadastros').insert({id:S.uid, email:S.email, ...data}); if (r.error) throw r.error;
     await logar('criou','config','Pedido de cadastro: '+(PAPEIS[data.papel]||'')+' · '+conexaoNome(data.conexao), null, {nome:data.nome, papel:data.papel, conexao:data.conexao});
     await carregarPessoas(); renderTabs(); render();
     if (pessoaDe(S.uid)) toast('Cadastro aprovado: seu acesso já está liberado.'); else avisarAdmin();
-  } catch(err){ falhaEscrita(err); b.disabled = false; }
-});
+  } catch(err){ falhaEscrita(err); if (b) b.disabled = false; }
+}
 function viewInicio(){
   const lista = listaCultos(hoje(), somaDias(hoje(), 120), S.prox).filter(c => !horaPassou(c.data, cultoInfo(c.culto).hora));
   const datas = [...new Set(lista.map(c=>c.data))].slice(0, 2);
@@ -2066,7 +2095,8 @@ function viewAjustes(){
   else html += '<div class="card tbl-wrap"><table class="lead"><thead><tr><th>Pessoa</th><th>Status</th><th>Pediu</th><th>Função</th><th>Conexão</th><th>Extras</th><th></th></tr></thead><tbody>'
     + ids.map(id => { const atual = S.pessoas[id]; const ped = (S.cadastros||{})[id]; const base = atual || ped || {papel:'leitura', conexao:''};
       const wpp = base.whatsapp || (ped && ped.whatsapp) || '';
-      return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+(emailDe(id) && nomeComp(id)!==emailDe(id)?'<br><span class="meta">✉️ '+esc(emailDe(id))+'</span>':'')+(wpp?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(wpp).replace(/\D/g,'').length<=11?'55':'')+String(wpp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(wpp)+'</a>':'')+'</td><td>'+celulaStatus(id)+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
+      const dupId = statusDe(id) === 'pendente' ? contaDupDe(id, wpp) : null;
+      return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+(dupId ? '<div class="dup">⚠️ Já tem cadastro em outra conta: <b>'+esc(nomeComp(dupId))+'</b>'+(emailDe(dupId) ? ' ('+esc(emailDe(dupId))+')' : '')+' · '+ROT_STATUS[statusDe(dupId)]+'<br><button type="button" class="btn small" data-transferir="'+esc(dupId)+'|'+esc(id)+'">Passar o cadastro para esta conta</button></div>' : '')+(emailDe(id) && nomeComp(id)!==emailDe(id)?'<br><span class="meta">✉️ '+esc(emailDe(id))+'</span>':'')+(wpp?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(wpp).replace(/\D/g,'').length<=11?'55':'')+String(wpp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(wpp)+'</a>':'')+'</td><td>'+celulaStatus(id)+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
         + '<td><select class="inp" data-p-papel="'+esc(id)+'">'+opts(Object.entries(PAPEIS).map(([k,v])=>({id:k,nome:v})), base.papel)+'</select></td>'
         + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-midia="'+esc(id)+'"'+((atual&&atual.midia) || base.papel==='midia' ?' checked':'')+'> Mídia</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; }).join('')
     + '</tbody></table><div class="end"><button class="btn" data-salvar-pessoas>Salvar pessoas</button></div></div>';
@@ -2123,6 +2153,20 @@ document.addEventListener('click', async e => {
 // (ou "Reativar", para quem foi removido) e salvar.
 // E-mail vem do login (não é digitado): acessos, pessoas ou cadastro, o que tiver.
 const emailDe = id => S.emails[id] || (S.pessoas[id]||{}).email || ((S.cadastros||{})[id]||{}).email || '';
+const so11 = w => String(w||'').replace(/\D/g,'').slice(-11);
+// Outra conta (aprovada ou removida) com o mesmo WhatsApp: provavelmente a mesma pessoa entrando por outro e-mail.
+const contaDupDe = (id, wpp) => { const w = so11(wpp); if (w.length < 10) return null;
+  return (Object.values(S.pessoas||{}).find(p => p.id !== id && so11(p.whatsapp) === w && ['aprovado','removido'].includes(statusDe(p.id))) || {}).id || null; };
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-transferir]'); if (!b || !isAdm()) return;
+  const [de, para] = b.dataset.transferir.split('|');
+  if (!await confirmar('Passar o cadastro de '+nomeComp(de)+' para a conta '+(emailDe(para) || 'nova')+'?\n\nA conta nova fica aprovada com a mesma função, conexão e extras. A conta antiga ('+(emailDe(de) || '')+') fica Removida. O histórico continua.')) return;
+  b.disabled = true;
+  try { const r = await sb.rpc('transferir_pessoa', {p_de:de, p_para:para}); if (r.error) throw r.error;
+    await logar('editou', 'config', 'Cadastro passado para outra conta: '+nome(de)+' ('+(emailDe(de)||'?')+' → '+(emailDe(para)||'?')+')', null, null);
+    toast('Pronto: '+nome(de)+' já pode usar a conta nova.'); await carregarPessoas(); renderTabs(); render();
+  } catch(err){ falhaEscrita(err); b.disabled = false; }
+});
 const ROT_STATUS = {pendente:'Pendente', aprovado:'Aprovado', removido:'Removido'};
 function celulaStatus(id){
   const st = statusDe(id);

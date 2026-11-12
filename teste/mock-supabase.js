@@ -38,7 +38,8 @@ Object.keys(T).forEach(t => T[t].forEach(r => derivados(t, r)));
 const chaves = {checkin_itens:['nome'], checkin_marcas:['data','culto','chave'], checklist_marcas:['data','culto','item'], convites:['email']};
 const mesma = (t, a, b) => (chaves[t]||['id']).every(k => a[k] === b[k]);
 let sessao = null; const ouvintes = [];
-try { const p = localStorage.getItem('mockPapel'); if (p && U[p]) sessao = {user:{id:U[p], email:p+'@x'}}; } catch(e){}
+try { JSON.parse(localStorage.getItem('mockPessoasExtra') || '[]').forEach(q => T.pessoas.push(q)); } catch(e){}
+try { const p = localStorage.getItem('mockPapel'); if (p && U[p]) sessao = {user:{id:U[p], email:p+'@x', app_metadata:{provider: localStorage.getItem('mockProv') || 'email'}}}; } catch(e){}
 const emitir = ev => ouvintes.forEach(cb => setTimeout(() => cb(ev, sessao), 0));
 window.__mockRecuperar = () => { sessao = {user:{id:U.novo, email:'nova.pessoa@gmail.com', user_metadata:{}}}; emitir('PASSWORD_RECOVERY'); };
 class Q {
@@ -94,6 +95,10 @@ window.supabase = { createClient: () => ({
       if (ix < 0) return {data:null, error:{message:'Pessoa não encontrada nessa função.'}};
       f.pessoas.splice(ix, 1); const novo = args.p_nome_novo || args.p_nome_atual, fn = args.p_funcao_nova || args.p_funcao_atual;
       let g = fs.find(x => x.nome === fn); if (!g) fs.push(g = {nome:fn, pessoas:[]}); g.pessoas.push(novo); e.d.funcoes = fs; return {data:fs, error:null}; })()
+    : n === 'conta_do_whatsapp' ? (() => { const w = String(args.p_whats||'').replace(/\D/g,'').slice(-11); const o = T.pessoas.find(q => sessao && q.id !== sessao.user.id && String(q.whatsapp||'').replace(/\D/g,'').slice(-11) === w && (q.status||'aprovado') !== 'removido');
+        return {data: o ? [{email: String(o.email).replace(/^(.{2})[^@]*(@.*)$/, '$1•••$2'), provedor:'email'}] : [], error:null}; })()
+    : n === 'transferir_pessoa' ? (() => { const o = T.pessoas.find(q => q.id === args.p_de); if (!o) return {data:null, error:{message:'conta antiga sem cadastro'}};
+        T.pessoas = T.pessoas.filter(q => q.id !== args.p_para); T.pessoas.push({...o, id:args.p_para, status:'aprovado'}); o.status = 'removido'; T.cadastros = T.cadastros.filter(c => c.id !== args.p_para); return {data:null, error:null}; })()
     : n === 'fez_checkin' ? {data: !!(T.checkin_marcas||[]).some(c => c.data === args.p_data && c.culto === args.p_culto && c.ci) || localStorage.getItem('mockFezCheckin') === '1', error:null} : n === 'escalas_publicas' ? {data: T.escalas.filter(r => r.data >= args.p_de && r.data <= args.p_ate).sort((a,b) => a.data.localeCompare(b.data)).map(r => { const d = JSON.parse(JSON.stringify(r.d)); const qtd = (d.funcoes||[]).reduce((s,f) => s + (f.pessoas||[]).filter(x => String(x).trim()).length, 0); delete d.funcoes; return {id:r.id, d:{...d, qtd}}; }), error:null} : n === 'pessoas_nomes' ? {data: sessao ? T.pessoas.map(p => ({id:p.id, nome:p.nome, apelido:p.apelido})) : [], error:null} : {data:null, error:null},
   channel: () => ({ on(){ return this; }, subscribe(){ return this; } }), removeChannel(){},
   storage: { from: () => ({ upload: async () => ({data:{}, error:null}), getPublicUrl: () => ({data:{publicUrl:'imagens/rede-igPrev.webp'}}) }) },
