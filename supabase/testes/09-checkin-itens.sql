@@ -1,5 +1,5 @@
 -- Itens de retirada/devolução no check-in.
-select ok('Itens iniciais com Rádio = 6', (select estoque from checkin_itens where nome='Rádio') = 6 and (select count(*) from checkin_itens) = 5);
+select ok('Itens iniciais com Rádio = 6 (+ iPhone e Microfone de lapela)', (select estoque from checkin_itens where nome='Rádio') = 6 and (select count(*) from checkin_itens) = 7 and exists (select 1 from checkin_itens where nome='Microfone de lapela'));
 select t('Gestão lê os itens','c0','select 1 from checkin_itens union all select 1','ok');
 select t('Organização lê os itens','f1','select 1 from checkin_itens union all select 1','ok');
 select t('Líder sem escala NÃO lê os itens','a5','select * from checkin_itens','bloq');
