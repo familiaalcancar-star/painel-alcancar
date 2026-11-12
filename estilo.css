@@ -446,3 +446,8 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .minha-c.noite{color:#1E88E5}
 .minha-c small{color:var(--muted)}
 .minha-li .lt small{color:var(--muted)}
+.ultimo-login{margin:12px 0 0}
+.conta-atual{line-height:1.5}
+.conta-atual .link{color:var(--ink);font-size:inherit;font-weight:700}
+.dup .btn{margin-top:6px}
+.dup{margin-top:8px;padding:8px 10px;border:1px solid var(--yellow);border-radius:10px;font-size:13px;color:var(--ink)}
