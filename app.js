@@ -67,8 +67,9 @@ const conexoesTxt = x => conexoesDe(x).map(conexaoNome).filter(Boolean).join(' e
 const cultoInfo = id => cultos().find(c=>c.id===id) || {id, nome:id, hora:''};
 const areaInfo = id => areas().find(a=>a.id===id) || {id, nome:id, porConexao:false, funcoes:[{nome:'Equipe',vagas:0}]};
 // Funções. Mídia, Louvor, Coro e Membro (papel "leitura") só consultam; Mídia tem também o extra Mídia (Checklist).
-const PAPEIS = {admin:'Administrador', lider:'Líder', auxiliar:'Auxiliar', organizacao:'Organização', midia:'Mídia', louvor:'Louvor', coro:'Coro', leitura:'Membro'};
-const PAPEIS_CADASTRO = ['lider','auxiliar','organizacao','midia','louvor','coro','leitura'];
+// Voluntário: só consulta (como Membro) e vê quem serve; fica na lista de pessoas para escolher ao montar a escala.
+const PAPEIS = {admin:'Administrador', lider:'Líder', auxiliar:'Auxiliar', organizacao:'Organização', midia:'Mídia', louvor:'Louvor', coro:'Coro', voluntario:'Voluntário', leitura:'Membro'};
+const PAPEIS_CADASTRO = ['lider','auxiliar','organizacao','midia','louvor','coro','voluntario','leitura'];
 const STATUS = {pendente:'Pendente', aprovado:'Aprovado', removido:'Removido'};
 const statusDe = id => S.pessoas[id] ? (S.pessoas[id].status || 'aprovado') : 'pendente';
 const aprovado = id => !!S.pessoas[id] && statusDe(id) === 'aprovado';
@@ -468,23 +469,71 @@ function tabelaEscala(lista){
     + lista.map(c => { const ci = cultoInfo(c.culto); return '<tr class="'+(/noite/i.test(ci.nome)?'noite':'manha')+'"><th scope="row"><span class="dt">'+dataBR(c.data)+'</span><span class="ct">'+esc(ci.nome)+(ci.hora?' · '+esc(ci.hora):'')+'</span></th>'+areas().map(a => celula(S.mesEsc, c, a)).join('')+(temGestao()?'<td><button class="cell dl" data-ck-pdf="'+c.data+'|'+esc(c.culto)+'">Baixar PDF</button></td><td><button class="cell dl" data-ck-xls="'+c.data+'|'+esc(c.culto)+'">Baixar Excel</button></td>':'')+'</tr>'; }).join('')
     + '</tbody></table></div><p class="hint">'+(veEquipes() ? 'Toque no nome para ver quem está escalado em cada função.' : 'Para ver quem vai servir, toque em <b>Entrar</b> (só para cadastrados aprovados).')+'</p>';
 }
+// Detalhe da escala: setas para o culto anterior/próximo da mesma área (inclui cultos extras), troca de área no topo
+// e "Alterar" em cada nome ou vaga aberta (para quem pode editar essa escala).
+async function detGarantir(d, forcar){
+  const r = S.detRange; if (!forcar && r && d >= somaDias(r.de, 14) && d <= somaDias(r.ate, -14)) return;
+  const de = somaDias(d, -60), ate = somaDias(d, 60); S.detRange = {de, ate};
+  S.detEsc = linhas(await lerEscalas(de, ate, 2000));
+}
+function detVizinhos(){
+  const {data, culto} = S.det, l = listaCultos(somaDias(data, -50), somaDias(data, 50), todasEscalas()), k = l.findIndex(c => c.data === data && c.culto === culto);
+  return {ant: k > 0 ? l[k-1] : null, prox: k >= 0 && k < l.length-1 ? l[k+1] : null};
+}
 function viewDetalhe(){
   const {data, culto, area} = S.det; const a = areaInfo(area); const ci = cultoInfo(culto);
+  { const r = S.detRange; if (!r || data < r.de || data > r.ate) detGarantir(data).then(() => render()); }
   const x = escalaDe(todasEscalas(), data, culto, area);
-  const pode = podeArea(a, x, data);
+  const pode = podeArea(a, x, data) && veEquipes(), v = detVizinhos(), rot = c => fmtCurto(c.data)+' · '+cultoInfo(c.culto).nome;
   let h = '<button class="btn ghost small" data-voltar>‹ Voltar para a escala</button>'
-    + '<h2 class="section-title" style="margin-top:16px">'+esc(a.nome)+'</h2><div class="meta" style="font-size:15px">'+esc(fmtDia(data))+' · Culto da '+esc(ci.nome.toLowerCase())+(ci.hora?' · '+esc(ci.hora):'')+'</div>';
+    + '<div class="det-nav"><button class="icon-btn" data-det-mov="ant"'+(v.ant ? ' aria-label="Culto anterior: '+esc(rot(v.ant))+'"' : ' disabled')+'>‹</button>'
+    + '<div class="det-quando"><b>'+esc(fmtDia(data))+'</b><small>Culto da '+esc(ci.nome.toLowerCase())+(ci.hora?' · '+esc(ci.hora):'')+'</small></div>'
+    + '<button class="icon-btn" data-det-mov="prox"'+(v.prox ? ' aria-label="Próximo culto: '+esc(rot(v.prox))+'"' : ' disabled')+'>›</button></div>'
+    + '<div class="chips det-areas">'+areas().map(ar => '<button class="chip" data-det-area="'+esc(ar.id)+'" aria-pressed="'+(ar.id === area)+'">'+esc(ar.nome)+'</button>').join('')+'</div>'
+    + '<h2 class="section-title" style="margin-top:6px">'+esc(a.nome)+'</h2>';
+  if (!x) h += '<div class="notice">Sem escala neste culto.</div>';
   if (a.porConexao) h += '<p style="margin:10px 0 0"><span class="tag" style="margin:0;font-size:14px;padding:3px 12px">'+esc(conexoesTxt(x) || 'Conexão a definir')+'</span></p>';
+  const alt = pode && (x || !a.porConexao);
+  const botao = (fn, k) => alt ? ' <button type="button" class="link det-alt" data-det-alt="'+esc(fn)+'|'+k+'">Alterar</button>' : '';
   h += '<div style="margin-top:14px">' + a.funcoes.filter(f => noCulto(f, culto)).map(f => {
     const salvo = x ? ((x.funcoes||[]).find(g => g.nome===f.nome)||{}).pessoas || [] : [];
-    const total = f.vagas ? Math.max(f.vagas, salvo.length) : salvo.length;
-    const itens = total ? Array.from({length:total}, (_,i) => '<li>'+(salvo[i] ? esc(salvo[i]) : '<span class="pend">vaga aberta</span>')+'</li>').join('') : '<li><span class="pend">ninguém escalado</span></li>';
+    const total = Math.max(f.vagas || (alt ? 1 : 0), salvo.length);
+    const itens = total ? Array.from({length:total}, (_,i) => '<li>'+(salvo[i] ? esc(salvo[i]) : '<span class="pend">vaga aberta</span>')+botao(f.nome, i)+'</li>').join('') : '<li><span class="pend">ninguém escalado</span></li>';
     return '<section class="card fcard"><h3>'+esc(f.nome)+(f.vagas?' <span class="meta">· '+f.vagas+(f.vagas>1?' vagas':' vaga')+'</span>':'')+'</h3><ul>'+itens+'</ul></section>';
   }).join('') + '</div>' + (x && x.obs ? '<div class="notice">'+esc(x.obs)+'</div>' : '')
     + (pode ? '<button class="btn" data-esc="1" data-d="'+data+'" data-c="'+esc(culto)+'" data-a="'+esc(area)+'">'+(x?'Editar escala':'Preencher escala')+'</button>' : '')
-    + (area === 'direcao' && veEquipes() ? '<div class="bar" style="margin-top:12px"><button class="btn ghost" data-convocacao="'+data+'">📋 Copiar convocação para o WhatsApp</button></div>' : '');
+    + (area === 'direcao' && veEquipes() ? '<div class="bar" style="margin-top:12px"><button class="btn ghost" data-convocacao="'+data+'">📋 Copiar convocação para o WhatsApp</button></div>' : '')
+    + listaPessoasEscala();
   return h;
 }
+function detFormAlterar(fn, k){
+  const {data, culto, area} = S.det, a = areaInfo(area), x = escalaDe(todasEscalas(), data, culto, area);
+  const atual = x ? ((((x.funcoes||[]).find(g => g.nome === fn)) || {}).pessoas || [])[k] || '' : '';
+  abrir('<form><h2>'+(atual ? 'Alterar' : 'Preencher vaga')+'</h2><p class="meta" style="margin:0">'+esc(a.nome)+' · '+esc(fmtCurto(data))+' · '+esc(cultoInfo(culto).nome)+' · <b>'+esc(fn)+'</b></p>'
+      + listaPessoasEscala() + '<label class="f" for="detN">Pessoa</label><input class="inp" id="detN" name="pessoa" list="dlPessoas" autocomplete="off" value="'+esc(atual)+'" placeholder="Busque pelo nome ou digite">'
+      + '<p class="hint">Escolha da lista de pessoas cadastradas ou digite o nome.'+(atual ? ' Deixe vazio para tirar '+esc(atual)+' e deixar a vaga aberta.' : '')+'</p>'
+      + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Confirmar</button></div></form>',
+    async fd => { const novo = String(fd.get('pessoa')||'').trim();
+      if (novo === atual) { toast('Nada mudou.'); return false; }
+      const msg = a.nome+' · '+dataBR(data).slice(0,5)+' '+cultoInfo(culto).nome.toLowerCase()+' · '+fn+':\n'+(atual || 'vaga aberta')+' → '+(novo || 'vaga aberta')+'?';
+      $('#dlg').close(); if (!await confirmar(msg)) return false; await detAlterar(fn, k, novo, atual); return false; });
+}
+async function detAlterar(fn, k, novo, atual){
+  const {data, culto, area} = S.det, a = areaInfo(area), x = escalaDe(todasEscalas(), data, culto, area);
+  if (!podeArea(a, x, data) || (!x && a.porConexao)) { toast('Você não pode alterar esta escala.'); return; }
+  const base = x ? JSON.parse(JSON.stringify(semId(x))) : {data, culto, area, conexoes:[], conexao:null, funcoes:a.funcoes.filter(f => noCulto(f, culto)).map(f => ({nome:f.nome, pessoas:[]})), obs:''};
+  base.funcoes = base.funcoes || []; let g = base.funcoes.find(f => f.nome === fn); if (!g) base.funcoes.push(g = {nome:fn, pessoas:[]});
+  g.pessoas = g.pessoas || []; if (novo) { if (k < g.pessoas.length) g.pessoas[k] = novo; else g.pessoas.push(novo); } else g.pessoas.splice(k, 1);
+  base.atualizadoEm = new Date().toISOString();
+  const resumo = a.nome+' · '+dataBR(data).slice(0,5)+' '+cultoInfo(culto).nome.toLowerCase()+' · '+fn+': '+(atual || 'vaga aberta')+' → '+(novo || 'vaga aberta');
+  if (await salvar(ref('escalas', docId(data, culto, area)), base, {acao:x?'editou':'criou', tipo:'escala', resumo, antes:x?semId(x):null})) {
+    toast('Escala atualizada.'); await Promise.all([RECARGA.escalas(), detGarantir(data, true)]); render(); }
+}
+document.addEventListener('click', async e => { const b = e.target.closest('button'); if (!b || !S.det) return;
+  if (b.dataset.detMov) { const v = detVizinhos()[b.dataset.detMov]; if (!v) return; S.det = {...S.det, data:v.data, culto:v.culto}; await detGarantir(v.data); render(); window.scrollTo(0,0); }
+  if (b.dataset.detArea) { S.det = {...S.det, area:b.dataset.detArea}; render(); }
+  if (b.dataset.detAlt) { const p = b.dataset.detAlt.split('|'), k = Number(p.pop()); detFormAlterar(p.join('|'), k); }
+});
 // Convocação da Direção do culto (manhã e noite do domingo), com as tarefas e vagas da config e os nomes já escalados.
 function textoConvocacao(data){
   const a = areaInfo('direcao'), dia = dataBR(data).slice(0,5);
@@ -713,7 +762,7 @@ document.addEventListener('click', async e => {
   if (t.dataset.diaCsv || t.dataset.diaFicha) { const d = t.dataset.diaCsv || t.dataset.diaFicha; const rows = linhasDe(todasEscalas().filter(x => x.data === d));
     if (t.dataset.diaCsv) exportarCSV(rows, 'escala-'+d+'.csv'); else checkinDiaPDF(d, t); }
 });
-const todasEscalas = () => { const m = new Map(); [...S.prox, ...S.mesEsc, ...(S.ckDocs||[])].forEach(x => m.set(x.id, x)); return [...m.values()]; };
+const todasEscalas = () => { const m = new Map(); [...(S.detEsc||[]), ...S.prox, ...S.mesEsc, ...(S.ckDocs||[])].forEach(x => m.set(x.id, x)); return [...m.values()]; };
 const resumoEscala = x => fmtCurto(x.data)+' · '+cultoInfo(x.culto).nome+' · '+areaInfo(x.area).nome+(conexoesDe(x).length?' ('+conexoesTxt(x)+')':'');
 function opts(list, sel){ return list.map(o => '<option value="'+esc(o.id)+'"'+(o.id===sel?' selected':'')+'>'+esc(o.nome)+'</option>').join(''); }
 function abrir(html, onSubmit, onReady){
@@ -723,9 +772,17 @@ function abrir(html, onSubmit, onReady){
   $('#dlgBody').querySelector('form').onsubmit = async ev => { ev.preventDefault(); const b = ev.target.querySelector('[type=submit]:not([data-limpar])') || ev.target.querySelector('[type=submit]'); b.disabled = true; const ok = await onSubmit(new FormData(ev.target), ev.submitter); b.disabled = false; if (ok && $('#dlgBody').firstChild === ev.target) d.close(); };
   if (onReady) onReady($('#dlgBody'));
 }
-const slotNome = (f, i, j, v) => '<input class="inp" name="f'+i+'_'+j+'" aria-label="'+esc(f.nome)+' '+(j+1)+'" placeholder="Nome '+(j+1)+'" value="'+esc(v||'')+'">';
+const slotNome = (f, i, j, v) => '<input class="inp" name="f'+i+'_'+j+'" list="dlPessoas" autocomplete="off" aria-label="'+esc(f.nome)+' '+(j+1)+'" placeholder="Nome '+(j+1)+'" value="'+esc(v||'')+'">';
+// Pessoas cadastradas para escolher nos campos da escala (em vez de digitar). Admin vê só as aprovadas.
+function listaPessoasEscala(){
+  const vistos = new Set(), ops = [];
+  Object.entries(S.names||{}).forEach(([id, n]) => { const p = S.pessoas[id]; if (isAdm() && p && p.status && p.status !== 'aprovado') return;
+    const v = String(n.apelido || n.nome || '').trim(); if (!v || vistos.has(normNome(v))) return; vistos.add(normNome(v)); ops.push({v, nome:n.nome || ''}); });
+  ops.sort((a, b) => a.v.localeCompare(b.v, 'pt-BR'));
+  return '<datalist id="dlPessoas">'+ops.map(o => '<option value="'+esc(o.v)+'">'+esc(o.nome !== o.v ? o.nome : '')+'</option>').join('')+'</datalist>';
+}
 document.addEventListener('click', e => { const b = e.target.closest('[data-mais]'); if (!b) return; const grade = b.previousElementSibling; const i = b.dataset.mais, j = grade.children.length;
-  grade.insertAdjacentHTML('beforeend', '<input class="inp" name="f'+i+'_'+j+'" placeholder="Nome '+(j+1)+'">'); grade.lastElementChild.focus(); });
+  grade.insertAdjacentHTML('beforeend', '<input class="inp" name="f'+i+'_'+j+'" list="dlPessoas" autocomplete="off" placeholder="Nome '+(j+1)+'">'); grade.lastElementChild.focus(); });
 // Mídia: Apoio 1 e Apoio 2 têm pessoa fixa (config.midiaFixos); o trio do culto fica em Projeção, Transmissão e Câmera.
 // Funções que valem num culto: as com "cultos" (ex.: ["noite"]) só aparecem nesses cultos.
 const noCulto = (f, culto) => !Array.isArray(f.cultos) || !f.cultos.length || !culto || f.cultos.includes(culto);
@@ -750,7 +807,7 @@ function camposArea(a, x, culto){
   });
   if (h.includes('mid-apoio')) h += '</details>';
   h += '<label class="f" for="fObs">Observação (opcional)</label><input class="inp" id="fObs" name="obs" value="'+esc(x?x.obs||'':'')+'">';
-  return blocoPreencher() + h;
+  return blocoPreencher() + listaPessoasEscala() + '<p class="hint" style="margin:8px 0 0">Toque num campo de nome para escolher entre as pessoas cadastradas (ou digite).</p>' + h;
 }
 /* ---------- preencher a escala por modelo (texto, Word, Excel ou PDF) ---------- */
 // Modelo: uma função por linha, "Função: nome, nome". A organizadora preenche e devolve; o painel coloca cada nome no campo certo.
@@ -824,7 +881,7 @@ async function preencherEscala(){
   PRE.ctx = {data:f.data.value, area:a.id, culto:cultoAqui};
   Object.entries(res).forEach(([i, ps]) => { const fn = a.funcoes[i]; if (!ps.length || !noCulto(fn, cultoAqui)) return; n++;
     const grade = f.querySelector('[name="f'+i+'_0"]').parentNode;
-    while (grade.children.length < ps.length) { const el = document.createElement('input'); el.className = 'inp'; el.name = 'f'+i+'_'+grade.children.length; el.placeholder = 'Nome '+(grade.children.length+1); grade.appendChild(el); }
+    while (grade.children.length < ps.length) { const el = document.createElement('input'); el.className = 'inp'; el.setAttribute('list', 'dlPessoas'); el.autocomplete = 'off'; el.name = 'f'+i+'_'+grade.children.length; el.placeholder = 'Nome '+(grade.children.length+1); grade.appendChild(el); }
     [...grade.children].forEach((el, j) => { el.value = ps[j] || ''; }); });
   if (obs !== null && obs !== '') f.obs.value = obs;
   const extra = PRE.outros.map(o => '<br>➕ Também encontrei o <b>culto da '+esc(cultoInfo(o.culto).nome.toLowerCase())+'</b>: ele será salvo junto quando você tocar em Salvar escala.').join('');
