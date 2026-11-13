@@ -1396,7 +1396,7 @@ function cardCkItens(){
     + '</tbody></table></div>'
     + '<label class="f" for="ckiNovo">Novo item (opcional)</label><div class="row"><div><input class="inp" id="ckiNovo" name="novo" maxlength="60" placeholder="Ex.: Chave da sala"></div><div><input class="inp" name="novoEst" type="number" min="0" placeholder="Estoque (vazio = sem limite)"></div></div>'
     + '<label class="f" for="ckiPadrao">Itens padrão (já vêm marcados no check-in)</label><textarea class="inp" id="ckiPadrao" name="padrao" style="min-height:90px">'+esc(ckRegras().map(ckRegraTxt).join('\n'))+'</textarea>'
-    + '<p class="hint">Uma regra por linha: <b>Área | Função | itens separados por vírgula</b>. Use <b>Todas</b> para valer em todas. A regra mais específica vence. Ex.: <code>Direção do culto | Estacionamento | Crachá, Colete</code></p>'
+    + '<p class="hint">Uma regra por linha: <b>Área | Função | itens separados por vírgula</b>. Use <b>Todas</b> para valer em todas. A regra mais específica vence: área + função, depois área + Todas, depois Todas. Ex.: <code>Direção do culto | Estacionamento | Crachá, Colete</code> ou <code>Super Kids | Todas | Crachá, Avental, Pulseiras, Canetas</code></p>'
     + '<div class="end"><button type="submit" class="btn">Salvar itens do check-in</button></div></form>';
 }
 document.addEventListener('submit', async e => { if (e.target.id !== 'ckItensForm' || !isAdm()) return; e.preventDefault();
@@ -1417,13 +1417,16 @@ document.addEventListener('submit', async e => { if (e.target.id !== 'ckItensFor
 /* Retirada e devolução de itens: cada marcação guarda itens = [{nome, ret, dev}] (quantidades). */
 const CK_PADRAO_INICIAL = [{area:'*', funcao:'*', itens:['Crachá']}, {area:'direcao', funcao:'Estacionamento', itens:['Crachá','Colete']}];
 const ckRegras = () => (S.cfg && Array.isArray(S.cfg.checkinPadrao)) ? S.cfg.checkinPadrao : CK_PADRAO_INICIAL;
-// Itens que já vêm marcados no check-in: a regra mais específica (área + função) vence.
+// Itens que já vêm no check-in: vale a regra mais específica.
+// Prioridade: área + função > área + "*" (todas as funções da área) > "*" + função > "*" + "*".
+const ckPeso = r => (r.area !== '*' ? 2 : 0) + (r.funcao !== '*' ? 1 : 0);
 function ckPadrao(areaId, fn){
   const bateArea = r => r.area === '*' || normNome(r.area) === normNome(areaId) || normNome(r.area) === normNome((areaInfo(areaId)||{}).nome);
   const rs = ckRegras().filter(r => bateArea(r) && (r.funcao === '*' || normNome(r.funcao) === normNome(fn)))
-    .sort((a, b) => ((b.area !== '*') + (b.funcao !== '*')) - ((a.area !== '*') + (a.funcao !== '*')));
+    .sort((a, b) => ckPeso(b) - ckPeso(a));
   return rs.length ? rs[0].itens || [] : [];
 }
+window.ckPadrao = (a, f) => ckPadrao(a, f); // usado pelos testes
 const ckFalta = m => ((m && m.itens) || []).filter(i => (i.dev||0) < (i.ret||0)).map(i => ({nome:i.nome, qtd:(i.ret||0) - (i.dev||0)}));
 const ckLista = l => l.map(i => i.nome+' ×'+i.qtd).join(', ');
 const ckRetTxt = m => ckLista(((m && m.itens) || []).filter(i => i.ret > 0).map(i => ({nome:i.nome, qtd:i.ret})));
