@@ -451,3 +451,6 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .conta-atual .link{color:var(--ink);font-size:inherit;font-weight:700}
 .dup .btn{margin-top:6px}
 .dup{margin-top:8px;padding:8px 10px;border:1px solid var(--yellow);border-radius:10px;font-size:13px;color:var(--ink)}
+.ck-quem{display:block;color:var(--muted);font-size:12px;font-weight:400;margin-top:2px}
+.ckn .ck-quem{color:var(--green)}
+.mk-conf{margin:-4px 0 10px 44px}

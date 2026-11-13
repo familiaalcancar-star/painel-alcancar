@@ -232,6 +232,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   conferir((await p.textContent('.ckres b')) === '1' && !!(await p.$('.ck2.feito')), 'marcar check-in fica verde e conta 1');
   const itens0 = await p.evaluate(k => window.__TABELAS.checkin_marcas.find(m => m.chave === k).itens.map(i => i.nome+'×'+i.ret).join(','), k0);
   conferir(itens0 === 'Crachá×1,Colete×1,Bastão de luz×1,Rádio×1', 'check-in marca os itens padrão como entregues');
+  conferir((await p.textContent('.ck2 >> nth=0')).includes('Check-in por Augusto') && (await p.textContent('.ck2 >> nth=0')).includes('Entregue por Augusto'), 'check-in e "Entregue" mostram quem marcou e a hora');
   conferir(!!(await p.$('.ck2.pend')) && (await p.textContent('.ck2.pend .ck2-falta')).includes('Rádio ×1') && (await p.textContent('.ck-pendentes')).includes('Ainda não devolvido'), 'linha amarela com "Falta" e resumo "Ainda não devolvido"');
   await p.click('label:has(input[data-ck-ent="'+k0+'|Bastão de luz"])'); await p.waitForTimeout(250);
   conferir(await p.evaluate(k => window.__TABELAS.checkin_marcas.find(m => m.chave === k).itens.find(i => i.nome === 'Bastão de luz').ret === 0, k0), 'dá para desmarcar um item padrão (não entregue)');
@@ -240,6 +241,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   for (const nome of ['Crachá','Colete','Rádio']) { await p.click('label:has(input[data-ck-devol="'+k0+'|'+nome+'"])'); await p.waitForTimeout(150); }
   await p.waitForTimeout(250);
   conferir(!!(await p.$('.ck2.ok')) && !(await p.$('.ck-pendentes')) && (await p.textContent('.ck-estoque')).includes('Rádios: 0 de 6'), 'devolveu tudo: linha verde, sem pendências');
+  conferir((await p.textContent('.ck2 >> nth=0')).includes('Devolvido por Augusto') && await p.evaluate(k => { const it = window.__TABELAS.checkin_marcas.find(m => m.chave === k).itens.find(i => i.nome === 'Crachá'); return it.ret_nome === 'Augusto' && it.dev_nome === 'Augusto' && !!it.dev_em; }, k0), '"Devolvido" mostra quem marcou e a hora');
   await p.click('[data-ck-add="'+k0+'"]'); await p.waitForSelector('#dlg[open] #ckIN'); await p.fill('#ckIN', 'Chave da sala'); await p.check('#dlg input[name="salvar"]'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(400);
   conferir(await p.evaluate(() => window.__TABELAS.checkin_itens.some(i => i.nome === 'Chave da sala')) && (await p.textContent('.ck2-falta')).includes('Chave da sala ×1'), 'item digitado na hora (e salvo na lista)');
   // Trocar escalado: Ana (Recepção) dá lugar à "Maria Nova"; a marca de check-in da Ana vira avulsa, a do Carlos fica com o Carlos.
@@ -528,6 +530,9 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.addInitScript(([e, m]) => { localStorage.setItem('mockFezCheckin', '1'); localStorage.setItem('mockPapel', 'midia2'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); localStorage.setItem('mockMarcas', JSON.stringify(m)); }, [escApoio, marcasAna]);
     await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(300); await irHoje(p);
     conferir((await p.textContent('.mk-eu')).includes('Apoio 2') && (await p.textContent('.mk-fn')).includes('✔ Ana ·'), 'Apoio 2 vê o que a Ana marcou, com nome e hora');
+    conferir(!!(await p.$('[data-mk-conf="ap0"]')), 'Apoio 2 pode confirmar o item que a Ana marcou ("Eu também conferi")');
+    await p.click('[data-mk-conf="ap0"]'); await p.waitForTimeout(500);
+    conferir(await p.evaluate(() => { const m = window.__TABELAS.checklist_marcas.find(q => q.item === 'ap0'); return m.confirmado_nome === 'Bruno'; }) && (await p.textContent('.mk-fn')).includes('✔ Bruno') && !(await p.$('[data-mk-conf="ap0"]')), 'confirmou: aparecem os dois nomes (Ana e Bruno)');
     const ordApoio = await p.$$eval('.mk-fn.minha .mk-txt', l => l.map(e => e.firstChild.textContent));
     conferir(ordApoio.slice(-3).join('|') === 'Oração final|Conferir mochila: iPhone, carregador, microfones e notebook|Entregar mochila', 'Apoio: mochila depois da Oração final, por último');
     conferir(await p.$eval('input[data-mk="ap0"]', e => e.checked && e.disabled) && !(await p.$eval('input[data-mk="ap1"]', e => e.disabled)), 'item marcado travado para o Apoio 2; os outros ele pode marcar');

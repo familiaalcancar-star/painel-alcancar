@@ -1265,7 +1265,7 @@ function viewMidia(){
       b.itens.forEach(i => { const m = MK.marcas[i.id]; const trava = !pode || (m && !isAdm()); // marcado fica fixo: só administrador desmarca
         if (i.tipo === 'percentual') { h += mkLinhaPct(i, m, pode, itens); return; }
         h += '<label class="mk-item'+(i.destaque ? ' dest' : '')+(m ? ' feito' : '')+(trava ? ' trava' : '')+'"><input type="checkbox" data-mk="'+esc(i.id)+'"'+(m ? ' checked' : '')+(trava ? ' disabled' : '')+'><span class="mk-caixa" aria-hidden="true"></span>'
-          + '<span class="mk-txt">'+esc(i.texto)+(m ? '<small>✔ '+esc(m.por_nome || 'Alguém')+' · '+esc(horaSP(m.em))+'</small>' : '')+'</span></label>'; });
+          + '<span class="mk-txt">'+esc(i.texto)+(m ? '<small>'+mkQuem(m)+'</small>' : '')+'</span></label>'+mkBtnConf(i, m); });
     });
     h += '</section>';
   });
@@ -1273,12 +1273,23 @@ function viewMidia(){
 }
 // Item de porcentagem (ex.: bateria): escolhe ou digita 0–100% e salva; depois mostra 🔋 85%, travado (admin desfaz).
 // "Ao devolver" abaixo de "ao retirar" (mesmo bloco) mostra quanto gastou.
+// Quem marcou e, se for o caso, quem confirmou depois (ex.: admin marcou antes, o escalado confere).
+const mkQuem = m => '✔ '+esc(m.por_nome || 'Alguém')+' · '+esc(horaSP(m.em))+(m.confirmado_nome ? ' · ✔ '+esc(m.confirmado_nome)+(m.confirmado_em ? ' · '+esc(horaSP(m.confirmado_em)) : '') : '');
+// O escalado pode confirmar um item que outra pessoa (ex.: o admin) já marcou: o nome dele aparece junto.
+const mkPodeConfirmar = (i, m) => !!m && !isAdm() && m.por !== S.uid && !m.confirmado_por && mkPodeMarcar(i.funcao);
+const mkBtnConf = (i, m) => mkPodeConfirmar(i, m) ? '<button type="button" class="btn small mk-conf" data-mk-conf="'+esc(i.id)+'">Eu também conferi</button>' : '';
+async function mkConfirmar(id){
+  try { const r = await sb.rpc('checklist_confirmar', {p_data:MK.data, p_culto:MK.culto, p_item:id}); if (r.error) throw r.error; toast('Confirmado com o seu nome.'); }
+  catch(e){ console.warn(e); toast(e.message && /escalado|marcado/.test(e.message) ? e.message : 'Não foi possível confirmar agora.'); }
+  await mkCarregarMarcas(); render();
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-mk-conf]'); if (b && S.tab === 'midia') { b.disabled = true; mkConfirmar(b.dataset.mkConf); } });
 function mkLinhaPct(i, m, pode, itens){
   const top = '<div class="mk-pct'+(i.destaque ? ' dest' : '')+(m ? ' feito' : '')+'"><div class="mk-pct-t">'+esc(i.texto)+'</div>';
   if (m) { let gasto = '';
     if (/devolv/i.test(i.texto)) { const ret = itens.find(x => x.tipo === 'percentual' && x.bloco === i.bloco && /retir/i.test(x.texto)), mr = ret && MK.marcas[ret.id];
       if (mr && mr.valor != null && m.valor < mr.valor) gasto = ' · gastou '+(mr.valor - m.valor)+'%'; }
-    return top + '<div class="mk-pct-v">🔋 '+esc(m.valor)+'%<small>✔ '+esc(m.por_nome || 'Alguém')+' · '+esc(horaSP(m.em))+esc(gasto)+'</small>'
+    return top + '<div class="mk-pct-v">🔋 '+esc(m.valor)+'%<small>'+mkQuem(m)+esc(gasto)+'</small>'+mkBtnConf(i, m)
       + (isAdm() ? '<button type="button" class="btn ghost small" data-mk-desfaz="'+esc(i.id)+'">Desfazer</button>' : '') + '</div></div>'; }
   if (!pode) return top + '<div class="mk-pct-v vazio">—</div></div>';
   return top + '<div class="mk-pct-rap">'+[100,80,60,40,20].map(v => '<button type="button" class="chip" data-mk-pct-rap="'+esc(i.id)+'|'+v+'">'+v+'%</button>').join('')+'</div>'
@@ -1318,7 +1329,7 @@ function mkLinhasExport(){
   const rows = [];
   mkChecklists().forEach(c => { const its = mkItensDe(c.nome); its.forEach(i => { const m = MK.marcas[i.id]; let r = m ? (i.tipo === 'percentual' ? m.valor+'%' : 'OK') : '';
     if (m && i.tipo === 'percentual' && /devolv/i.test(i.texto)) { const ret = its.find(x => x.tipo === 'percentual' && x.bloco === i.bloco && /retir/i.test(x.texto)), mr = ret && MK.marcas[ret.id]; if (mr && m.valor < mr.valor) r += ' (gastou '+(mr.valor - m.valor)+'%)'; }
-    rows.push([c.nome, i.bloco, i.texto, r, m ? (m.por_nome || '') : '', m ? horaSP(m.em) : '']); }); });
+    rows.push([c.nome, i.bloco, i.texto, r, m ? (m.por_nome || '') + (m.confirmado_nome ? ' + '+m.confirmado_nome+' ('+horaSP(m.confirmado_em)+')' : '') : '', m ? horaSP(m.em) : '']); }); });
   return rows;
 }
 window.mkLinhasExport = mkLinhasExport; // usado pelos testes
@@ -1449,12 +1460,15 @@ function ckLinha(k, nomeEsc, fn, m, areaId){
   const st = entregues.length ? (falta.length ? ' pend' : ' ok') : '', padrao = areaId ? ckPadrao(areaId, fn) : [];
   const caixa = (attr, marcado, rot, desab) => '<label class="ckmini'+(desab ? ' off' : '')+'"><input type="checkbox" '+attr+(marcado ? ' checked' : '')+(desab ? ' disabled' : '')+'><span></span>'+rot+'</label>';
   return '<div class="ck2'+(m.ci ? ' feito' : '')+st+'"><div class="ck2-top"><label class="ckbox" title="Check-in"><input type="checkbox" data-ckk="'+esc(k)+'" data-campo="ci"'+(m.ci?' checked':'')+' aria-label="'+esc('Check-in · '+(nm||fn))+'"><span></span></label>'
-    + '<span class="ckn">'+(nomeEsc ? '<b>'+esc(nomeEsc)+'</b>' : '<input class="inp ckin" data-cknome="'+esc(k)+'" placeholder="Digite o nome" value="'+esc(m.nome||'')+'">')+'<small>'+esc(fn)+'</small></span>'
+    + '<span class="ckn">'+(nomeEsc ? '<b>'+esc(nomeEsc)+'</b>' : '<input class="inp ckin" data-cknome="'+esc(k)+'" placeholder="Digite o nome" value="'+esc(m.nome||'')+'">')+'<small>'+esc(fn)+'</small>'
+      + (m.ci && m.ci_nome ? '<small class="ck-quem">✔ Check-in por '+esc(m.ci_nome)+(m.ci_em ? ' · '+esc(horaSP(m.ci_em)) : '')+'</small>' : '')+'</span>'
     + (nomeEsc && areaId && ckPode() ? '<button type="button" class="btn ghost small ck-troca" data-ck-troca="'+esc(k)+'">⇄ Trocar</button>' : '') + '</div>'
     + '<div class="ck2-itens">' + vistos.map(it => { const id = esc(k)+'|'+esc(it.nome), ent = it.ret > 0, volta = ent && (it.dev||0) >= it.ret;
         return '<div class="ckit2'+(ent ? (volta ? ' volta' : ' fora') : '')+'"><span class="ckit2-n">'+esc(it.nome)+(it.qtd > 1 ? ' ×'+it.qtd : '')
           + (it.salvo && !padrao.some(n => normNome(n) === normNome(it.nome)) && !ent ? ' <button type="button" class="mini" data-ck-rm="'+id+'" aria-label="Tirar '+esc(it.nome)+'">✕</button>' : '')
-          + (ent && it.ret > 1 && !volta ? ' <small>voltou '+(it.dev||0)+'/'+it.ret+' <button type="button" class="mini" data-ck-dev1="'+id+'">+1</button></small>' : '') + '</span>'
+          + (ent && it.ret > 1 && !volta ? ' <small>voltou '+(it.dev||0)+'/'+it.ret+' <button type="button" class="mini" data-ck-dev1="'+id+'">+1</button></small>' : '')
+          + (ent && it.ret_nome ? '<small class="ck-quem">Entregue por '+esc(it.ret_nome)+(it.ret_em ? ' · '+esc(horaSP(it.ret_em)) : '')
+              + ((it.dev||0) > 0 && it.dev_nome ? '<br>Devolvido por '+esc(it.dev_nome)+(it.dev_em ? ' · '+esc(horaSP(it.dev_em)) : '') : '')+'</small>' : '') + '</span>'
           + caixa('data-ck-ent="'+id+'"', ent, 'Entregue', false) + caixa('data-ck-devol="'+id+'"', volta, 'Devolvido', !ent) + '</div>'; }).join('')
     + '<button type="button" class="btn ghost small" data-ck-add="'+esc(k)+'">+ item</button></div>'
     + (falta.length ? '<div class="ck2-falta">Falta: '+esc(ckLista(falta))+'</div>' : '') + '</div>';
@@ -1496,7 +1510,10 @@ async function ckGravar(k, patch){
   S.ckMarks = {...(S.ckMarks||{}), [k]: {...ant, ...dado}};
   S.ckDia = [...(S.ckDia||[]).filter(m => !(m.culto === S.ckC && m.chave === k)), {...ant, ...dado}];
   if (!('nome' in patch && Object.keys(patch).length === 1)) render();
-  try { const r = await sb.from('checkin_marcas').upsert(dado, {onConflict:'data,culto,chave'}); if (r.error) throw r.error; } catch(e){ falhaEscrita(e); }
+  try { const r = await sb.from('checkin_marcas').upsert(dado, {onConflict:'data,culto,chave'}).select('chave,ci_nome,ci_em,itens'); if (r.error) throw r.error;
+    const v = (r.data||[])[0]; if (v && S.ckMarks && S.ckMarks[k]) { S.ckMarks = {...S.ckMarks, [k]: {...S.ckMarks[k], ci_nome:v.ci_nome, ci_em:v.ci_em, itens:v.itens}};
+      S.ckDia = (S.ckDia||[]).map(m => m.culto === S.ckC && m.chave === k ? {...m, ci_nome:v.ci_nome, ci_em:v.ci_em, itens:v.itens} : m); if (!document.activeElement || !document.activeElement.matches('[data-cknome]')) render(); }
+  } catch(e){ falhaEscrita(e); }
 }
 document.addEventListener('change', e => {
   const t = e.target;

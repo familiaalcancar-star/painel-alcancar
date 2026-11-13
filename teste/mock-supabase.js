@@ -68,7 +68,14 @@ class Q {
         if (i >= 0 && this.op === 'insert') return {data:null, error:{code:'23505', message:'duplicate key'}};
         if (this.t === 'historico') { const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}; Object.assign(n, {id:tab.length+1, por:sessao && sessao.user.id, em:agora, por_nome: eu.apelido || String(eu.nome||'').split(' ')[0]}); }
         if (['avisos','eventos','escalas'].includes(this.t) && i < 0) { n.autor = sessao && sessao.user.id; n.criado_em = agora; }
-        if (this.t === 'checkin_marcas') { n.por = sessao && sessao.user.id; n.em = agora; }
+        if (this.t === 'checkin_marcas') { n.por = sessao && sessao.user.id; n.em = agora;
+          // Igual ao gatilho checkin_guarda: carimba quem marcou o check-in, o "Entregue" e o "Devolvido".
+          const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}, quem = eu.apelido || String(eu.nome||'').split(' ')[0], old = i >= 0 ? tab[i] : null;
+          if (!n.ci) { n.ci_nome = null; n.ci_em = null; } else if (!old || !old.ci) { n.ci_nome = quem; n.ci_em = agora; } else { n.ci_nome = old.ci_nome; n.ci_em = old.ci_em; }
+          n.itens = (n.itens || []).map(it => { const a = old && (old.itens||[]).find(o => o.nome === it.nome); const r = {...it}; delete r.ret_nome; delete r.ret_em; delete r.dev_nome; delete r.dev_em;
+            if ((r.ret||0) > 0) Object.assign(r, a && (a.ret||0) === r.ret && a.ret_nome ? {ret_nome:a.ret_nome, ret_em:a.ret_em} : {ret_nome:quem, ret_em:agora});
+            if ((r.dev||0) > 0) Object.assign(r, a && (a.dev||0) === r.dev && a.dev_nome ? {dev_nome:a.dev_nome, dev_em:a.dev_em} : {dev_nome:quem, dev_em:agora});
+            return r; }); }
         if (this.t === 'checklist_marcas') { const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}; Object.assign(n, {por:sessao && sessao.user.id, por_nome: eu.apelido || String(eu.nome||'').split(' ')[0], em:agora}); }
         if (this.t === 'checklist_itens' && !n.id) { n.id = 'i'+Date.now()+Math.random().toString(36).slice(2,6); n.ativo = n.ativo !== false; }
         if (this.t === 'chat') { n.id = 'm'+Date.now(); n.por = sessao && sessao.user.id; n.em = agora; }
@@ -99,6 +106,8 @@ window.supabase = { createClient: () => ({
         return {data: o ? [{email: String(o.email).replace(/^(.{2})[^@]*(@.*)$/, '$1•••$2'), provedor:'email'}] : [], error:null}; })()
     : n === 'transferir_pessoa' ? (() => { const o = T.pessoas.find(q => q.id === args.p_de); if (!o) return {data:null, error:{message:'conta antiga sem cadastro'}};
         T.pessoas = T.pessoas.filter(q => q.id !== args.p_para); T.pessoas.push({...o, id:args.p_para, status:'aprovado'}); o.status = 'removido'; T.cadastros = T.cadastros.filter(c => c.id !== args.p_para); return {data:null, error:null}; })()
+    : n === 'checklist_confirmar' ? (() => { const m = T.checklist_marcas.find(q => q.data === args.p_data && q.culto === args.p_culto && q.item === args.p_item); if (!m) return {data:null, error:{message:'Item ainda não marcado.'}};
+        const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}; if (m.por !== sessao.user.id && !m.confirmado_por) Object.assign(m, {confirmado_por:sessao.user.id, confirmado_nome: eu.apelido || String(eu.nome||'').split(' ')[0], confirmado_em:new Date().toISOString()}); return {data:null, error:null}; })()
     : n === 'fez_checkin' ? {data: !!(T.checkin_marcas||[]).some(c => c.data === args.p_data && c.culto === args.p_culto && c.ci) || localStorage.getItem('mockFezCheckin') === '1', error:null} : n === 'escalas_publicas' ? {data: T.escalas.filter(r => r.data >= args.p_de && r.data <= args.p_ate).sort((a,b) => a.data.localeCompare(b.data)).map(r => { const d = JSON.parse(JSON.stringify(r.d)); const qtd = (d.funcoes||[]).reduce((s,f) => s + (f.pessoas||[]).filter(x => String(x).trim()).length, 0); delete d.funcoes; return {id:r.id, d:{...d, qtd}}; }), error:null} : n === 'pessoas_nomes' ? {data: sessao ? T.pessoas.map(p => ({id:p.id, nome:p.nome, apelido:p.apelido})) : [], error:null} : {data:null, error:null},
   channel: () => ({ on(){ return this; }, subscribe(){ return this; } }), removeChannel(){},
   storage: { from: () => ({ upload: async () => ({data:{}, error:null}), getPublicUrl: () => ({data:{publicUrl:'imagens/rede-igPrev.webp'}}) }) },
