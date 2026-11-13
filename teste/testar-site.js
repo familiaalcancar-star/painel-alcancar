@@ -12,7 +12,8 @@ const DADOS = { config: ler('config.json'), escalas: ler('escalas.json'), avisos
 const FIXOS = {'Apoio 1':'Pedro Morais', 'Apoio 2':'Augusto Cantuaria'};
 DADOS.config.midiaFixos = FIXOS;
 DADOS.config.checkinPadrao = [{area:'*', funcao:'*', itens:['Crachá']}, {area:'direcao', funcao:'Estacionamento', itens:['Crachá','Colete','Bastão de luz','Rádio']},
-  {area:'midia', funcao:'Apoio 1', itens:['Crachá','Rádio']}, {area:'midia', funcao:'Apoio 2', itens:['Crachá','Rádio']}, {area:'staff', funcao:'Gestão de culto', itens:['Crachá','Rádio']}];
+  {area:'midia', funcao:'Apoio 1', itens:['Crachá','Rádio']}, {area:'midia', funcao:'Apoio 2', itens:['Crachá','Rádio']}, {area:'staff', funcao:'Gestão de culto', itens:['Crachá','Rádio']},
+  {area:'superkids', funcao:'*', itens:['Crachá','Avental','Pulseiras','Canetas']}, {area:'*', funcao:'Berçário', itens:['Crachá','Fraldas']}, {area:'superkids', funcao:'Recepção', itens:['Crachá','Lista']}];
 // Direção do culto como está no banco desde 09/11: limpeza só no culto da noite.
 DADOS.config.areas.forEach(a => { if (a.id === 'direcao') a.funcoes = [{nome:'Estacionamento', vagas:3}, {nome:'Recepção', vagas:4}, {nome:'Envelopes e lembrancinhas', vagas:2}, {nome:'Café + água do ministro da Palavra', vagas:1}, {nome:'Equipe de limpeza pós-culto', vagas:4, cultos:['noite']}]; });
 DADOS.escalas.forEach(e => { if (e.area === 'direcao') (e.funcoes||[]).forEach(f => { if (f.nome === 'Café') f.nome = 'Café + água do ministro da Palavra'; }); });
@@ -216,6 +217,12 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   await ir(p, 'checkin'); await p.fill('#ckD', '2026-11-01'); await p.dispatchEvent('#ckD', 'change'); await p.waitForTimeout(300);
   conferir((await p.textContent('.ckres')).includes('/'), 'check-in mostra o resumo');
   conferir(!(await p.textContent('#view')).includes('Ministros'), 'Louvor fica fora do check-in');
+  {
+    const pd = await p.evaluate(() => [ckPadrao('superkids','Berçário'), ckPadrao('superkids','Louvor kids'), ckPadrao('superkids','Recepção'), ckPadrao('direcao','Estacionamento'), ckPadrao('direcao','Café'), ckPadrao('direcao','Berçário')].map(l => l.join(',')));
+    conferir(pd[1] === 'Crachá,Avental,Pulseiras,Canetas' && pd[0] === 'Crachá,Avental,Pulseiras,Canetas', 'Super Kids: regra da área (todas as funções) com Crachá, Avental, Pulseiras e Canetas');
+    conferir(pd[2] === 'Crachá,Lista' && pd[3] === 'Crachá,Colete,Bastão de luz,Rádio', 'área + função vence área + todas');
+    conferir(pd[4] === 'Crachá' && pd[5] === 'Crachá,Fraldas', 'sem regra da área: vale a geral (ou todas as áreas + função)');
+  }
   // Primeira linha é o Estacionamento da Direção do culto (Crachá, Colete, Bastão de luz, Rádio).
   const k0 = await p.$eval('.ck2 input[data-ckk]', e => e.dataset.ckk);
   const linhas0 = await p.$$eval('.ck2 >> nth=0', l => [...l[0].querySelectorAll('.ckit2')].map(e => e.querySelector('.ckit2-n').textContent.trim()));
