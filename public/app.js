@@ -64,7 +64,18 @@ const diasCulto = () => (S.cfg && S.cfg.diasCulto) || [0];
 const conexaoNome = id => (conexoes().find(c=>c.id===id)||{}).nome || '';
 const conexoesDe = x => !x ? [] : (x.conexoes && x.conexoes.length ? x.conexoes : (x.conexao ? [x.conexao] : []));
 const conexoesTxt = x => conexoesDe(x).map(conexaoNome).filter(Boolean).join(' e ');
-const cultoInfo = id => cultos().find(c=>c.id===id) || {id, nome:id, hora:''};
+const cultoBase = id => cultos().find(c=>c.id===id) || {id, nome:id, hora:''};
+// Culto com nome e/ou horário próprio naquele dia (ex.: congresso às 20h): vem da escala, nos campos d.cultoNome e d.hora.
+// Sem data (ou sem esses campos), vale o culto padrão (Manhã 9h30 / Noite 18h30).
+function cultoExtra(id, data, lista){
+  if (!data) return null;
+  let l = lista || []; try { l = l.concat(todasEscalas()).concat(MK.esc ? [doRow(MK.esc)] : [], S.minhaEsc || []); } catch(e){ return null; }
+  const x = l.find(e => e && e.data === data && e.culto === id && (e.cultoNome || e.hora)); return x ? {nome:String(x.cultoNome||'').trim(), hora:String(x.hora||'').trim()} : null;
+}
+// nome/hora para mostrar; base = nome padrão (cor: noite = azul); titulo = "Culto da noite · 18h30" ou "Congresso de Homens · 20h".
+function cultoInfo(id, data, lista){ const b = cultoBase(id), x = cultoExtra(id, data, lista);
+  const nome = (x && x.nome) || b.nome, hora = (x && x.hora) || b.hora, especial = !!(x && x.nome);
+  return {...b, nome, hora, base:b.nome, especial, noite:/noite/i.test(b.nome), titulo:(especial ? nome : 'Culto da '+String(nome).toLowerCase())+(hora ? ' · '+hora : '')}; }
 const areaInfo = id => areas().find(a=>a.id===id) || {id, nome:id, porConexao:false, funcoes:[{nome:'Equipe',vagas:0}]};
 // Funções. Mídia, Louvor, Coro e Membro (papel "leitura") só consultam; Mídia tem também o extra Mídia (Checklist).
 // Voluntário: só consulta (como Membro) e vê quem serve; fica na lista de pessoas para escolher ao montar a escala.
@@ -401,7 +412,7 @@ function blocoArea(lista, c, a){
   return '<details class="area"><summary><span><span class="an">'+esc(a.nome)+'</span><span class="ac">'+resumo+'</span></span><span class="chev" aria-hidden="true">›</span></summary><div class="fx">'+fx+'</div></details>';
 }
 const blocosCulto = (lista, c) => '<div class="areas">'+areas().map(a => blocoArea(lista, c, a)).join('')+'</div>';
-const cultoTitulo = c => { const i = cultoInfo(c.culto); return 'Culto da '+i.nome.toLowerCase()+(i.hora?' · '+i.hora:''); };
+const cultoTitulo = c => cultoInfo(c.culto, c.data).titulo;
 
 /* ---------- MINHA AGENDA ---------- */
 // O que a pessoa logada (aprovada) vai fazer: onde o nome dela está na escala (qualquer área e função),
@@ -424,7 +435,7 @@ function meusCompromissos(lista){
 const minhaSemana = () => { if (!veEquipes()) return 0; const fim = somaDias(hoje(), 7); return meusCompromissos(S.prox.filter(x => x.data >= hoje() && x.data <= fim)).length; };
 function cardMeuProximo(){
   if (!veEquipes()) return ''; const c = meusCompromissos(S.prox.filter(x => x.data >= hoje() && x.data <= somaDias(hoje(), 14)))[0]; if (!c) return '';
-  return '<button class="card meu-prox" data-go="minha"><span>📅 <b>Você serve '+esc(fmtCurto(c.x.data))+' · '+esc(cultoInfo(c.x.culto).nome)+'</b><br><small>'+esc(c.a.nome)+' · '+esc(c.txt)+'</small></span><span class="meta">Minha agenda ›</span></button>';
+  return '<button class="card meu-prox" data-go="minha"><span>📅 <b>Você serve '+esc(fmtCurto(c.x.data))+' · '+esc(cultoInfo(c.x.culto, c.x.data).nome)+'</b><br><small>'+esc(c.a.nome)+' · '+esc(c.txt)+'</small></span><span class="meta">Minha agenda ›</span></button>';
 }
 async function minhaCarregar(){ const m = S.minhaMes; const l = linhas(await lerEscalas(m+'-01', m+'-31', 2000)); if (m === S.minhaMes) { S.minhaEsc = l; S.minhaOk = m; } }
 function viewMinha(){
@@ -439,8 +450,8 @@ function viewMinha(){
   if (!l.length) return h + '<div class="empty">Nenhum compromisso neste mês.<br><small>Aparece aqui quando o seu nome (igual ao cadastro) estiver na escala, ou quando a sua conexão servir.</small></div>';
   const dias = [...new Set(l.map(c => c.x.data))];
   return h + dias.map(d => '<section class="card lst minha-dia'+(d < hoje() ? ' passou' : '')+(d === hoje() ? ' hoje' : '')+'"><h3>'+esc(fmtDia(d))+(d === hoje() ? ' <span class="tag">hoje</span>' : '')+'</h3>'
-    + l.filter(c => c.x.data === d).map(c => { const ci = cultoInfo(c.x.culto);
-      return '<button class="li minha-li" data-det="'+esc(c.x.data)+'|'+esc(c.x.culto)+'|'+esc(c.a.id)+'" data-go-escala><span class="minha-c'+(/noite/i.test(ci.nome) ? ' noite' : '')+'">'+(/noite/i.test(ci.nome) ? '🌙' : '☀️')+' '+esc(ci.nome)+(ci.hora ? '<br><small>'+esc(ci.hora)+'</small>' : '')+'</span>'
+    + l.filter(c => c.x.data === d).map(c => { const ci = cultoInfo(c.x.culto, c.x.data);
+      return '<button class="li minha-li" data-det="'+esc(c.x.data)+'|'+esc(c.x.culto)+'|'+esc(c.a.id)+'" data-go-escala><span class="minha-c'+(ci.noite ? ' noite' : '')+'">'+(ci.noite ? '🌙' : '☀️')+' '+esc(ci.nome)+(ci.hora ? '<br><small>'+esc(ci.hora)+'</small>' : '')+'</span>'
         + '<span class="lt"><b>'+esc(c.a.nome)+'</b><br><small>'+esc(c.txt)+'</small></span><span class="la" aria-hidden="true">›</span></button>'; }).join('') + '</section>').join('');
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-minha-mes]'); if (!b) return; const d = new Date(S.minhaMes+'-15T12:00:00'); d.setMonth(d.getMonth() + Number(b.dataset.minhaMes)); S.minhaMes = isoLocal(d).slice(0,7); render(); });
@@ -518,7 +529,7 @@ function celula(lista, c, a){
 }
 function tabelaEscala(lista){
   return '<div class="tbl-wrap"><table class="esc"><thead><tr><th>Data</th>'+areas().map(a=>'<th>'+esc(a.nome)+'</th>').join('')+(temGestao()?'<th>Check-in PDF</th><th>Check-in Excel</th>':'')+'</tr></thead><tbody>'
-    + lista.map(c => { const ci = cultoInfo(c.culto); return '<tr class="'+(/noite/i.test(ci.nome)?'noite':'manha')+'"><th scope="row"><span class="dt">'+dataBR(c.data)+'</span><span class="ct">'+esc(ci.nome)+(ci.hora?' · '+esc(ci.hora):'')+'</span></th>'+areas().map(a => celula(S.mesEsc, c, a)).join('')+(temGestao()?'<td><button class="cell dl" data-ck-pdf="'+c.data+'|'+esc(c.culto)+'">Baixar PDF</button></td><td><button class="cell dl" data-ck-xls="'+c.data+'|'+esc(c.culto)+'">Baixar Excel</button></td>':'')+'</tr>'; }).join('')
+    + lista.map(c => { const ci = cultoInfo(c.culto, c.data); return '<tr class="'+(ci.noite?'noite':'manha')+'"><th scope="row"><span class="dt">'+dataBR(c.data)+'</span><span class="ct">'+esc(ci.nome)+(ci.hora?' · '+esc(ci.hora):'')+'</span></th>'+areas().map(a => celula(S.mesEsc, c, a)).join('')+(temGestao()?'<td><button class="cell dl" data-ck-pdf="'+c.data+'|'+esc(c.culto)+'">Baixar PDF</button></td><td><button class="cell dl" data-ck-xls="'+c.data+'|'+esc(c.culto)+'">Baixar Excel</button></td>':'')+'</tr>'; }).join('')
     + '</tbody></table></div><p class="hint">'+(veEquipes() ? 'Toque no nome para ver quem está escalado em cada função.' : 'Para ver quem vai servir, toque em <b>Entrar</b> (só para cadastrados aprovados).')+'</p>';
 }
 // Detalhe da escala: setas para o culto anterior/próximo da mesma área (inclui cultos extras), troca de área no topo
@@ -533,13 +544,13 @@ function detVizinhos(){
   return {ant: k > 0 ? l[k-1] : null, prox: k >= 0 && k < l.length-1 ? l[k+1] : null};
 }
 function viewDetalhe(){
-  const {data, culto, area} = S.det; const a = areaInfo(area); const ci = cultoInfo(culto);
+  const {data, culto, area} = S.det; const a = areaInfo(area); const ci = cultoInfo(culto, data);
   { const r = S.detRange; if (!r || data < r.de || data > r.ate) detGarantir(data).then(() => render()); }
   const x = escalaDe(todasEscalas(), data, culto, area);
-  const pode = podeArea(a, x, data) && veEquipes(), v = detVizinhos(), rot = c => fmtCurto(c.data)+' · '+cultoInfo(c.culto).nome;
+  const pode = podeArea(a, x, data) && veEquipes(), v = detVizinhos(), rot = c => fmtCurto(c.data)+' · '+cultoInfo(c.culto, c.data).nome;
   let h = '<button class="btn ghost small" data-voltar>‹ Voltar para a escala</button>'
     + '<div class="det-nav"><button class="icon-btn" data-det-mov="ant"'+(v.ant ? ' aria-label="Culto anterior: '+esc(rot(v.ant))+'"' : ' disabled')+'>‹</button>'
-    + '<div class="det-quando"><b>'+esc(fmtDia(data))+'</b><small>Culto da '+esc(ci.nome.toLowerCase())+(ci.hora?' · '+esc(ci.hora):'')+'</small></div>'
+    + '<div class="det-quando"><b>'+esc(fmtDia(data))+'</b><small>'+esc(ci.titulo)+'</small></div>'
     + '<button class="icon-btn" data-det-mov="prox"'+(v.prox ? ' aria-label="Próximo culto: '+esc(rot(v.prox))+'"' : ' disabled')+'>›</button></div>'
     + '<div class="chips det-areas">'+areas().map(ar => '<button class="chip" data-det-area="'+esc(ar.id)+'" aria-pressed="'+(ar.id === area)+'">'+esc(ar.nome)+'</button>').join('')+'</div>'
     + '<h2 class="section-title" style="margin-top:6px">'+esc(a.nome)+'</h2>';
@@ -561,13 +572,13 @@ function viewDetalhe(){
 function detFormAlterar(fn, k){
   const {data, culto, area} = S.det, a = areaInfo(area), x = escalaDe(todasEscalas(), data, culto, area);
   const atual = x ? ((((x.funcoes||[]).find(g => g.nome === fn)) || {}).pessoas || [])[k] || '' : '';
-  abrir('<form><h2>'+(atual ? 'Alterar' : 'Preencher vaga')+'</h2><p class="meta" style="margin:0">'+esc(a.nome)+' · '+esc(fmtCurto(data))+' · '+esc(cultoInfo(culto).nome)+' · <b>'+esc(fn)+'</b></p>'
+  abrir('<form><h2>'+(atual ? 'Alterar' : 'Preencher vaga')+'</h2><p class="meta" style="margin:0">'+esc(a.nome)+' · '+esc(fmtCurto(data))+' · '+esc(cultoInfo(culto, data).nome)+' · <b>'+esc(fn)+'</b></p>'
       + listaPessoasEscala() + '<label class="f" for="detN">Pessoa</label><input class="inp" id="detN" name="pessoa" list="dlPessoas" autocomplete="off" value="'+esc(atual)+'" placeholder="Busque pelo nome ou digite">'
       + '<p class="hint">Escolha da lista de pessoas cadastradas ou digite o nome.'+(atual ? ' Deixe vazio para tirar '+esc(atual)+' e deixar a vaga aberta.' : '')+'</p>'
       + '<div class="end"><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Confirmar</button></div></form>',
     async fd => { const novo = String(fd.get('pessoa')||'').trim();
       if (novo === atual) { toast('Nada mudou.'); return false; }
-      const msg = a.nome+' · '+dataBR(data).slice(0,5)+' '+cultoInfo(culto).nome.toLowerCase()+' · '+fn+':\n'+(atual || 'vaga aberta')+' → '+(novo || 'vaga aberta')+'?';
+      const msg = a.nome+' · '+dataBR(data).slice(0,5)+' '+cultoInfo(culto, data).nome.toLowerCase()+' · '+fn+':\n'+(atual || 'vaga aberta')+' → '+(novo || 'vaga aberta')+'?';
       $('#dlg').close(); if (!await confirmar(msg)) return false; await detAlterar(fn, k, novo, atual); return false; });
 }
 async function detAlterar(fn, k, novo, atual){
@@ -577,7 +588,7 @@ async function detAlterar(fn, k, novo, atual){
   base.funcoes = base.funcoes || []; let g = base.funcoes.find(f => f.nome === fn); if (!g) base.funcoes.push(g = {nome:fn, pessoas:[]});
   g.pessoas = g.pessoas || []; if (novo) { if (k < g.pessoas.length) g.pessoas[k] = novo; else g.pessoas.push(novo); } else g.pessoas.splice(k, 1);
   base.atualizadoEm = new Date().toISOString();
-  const resumo = a.nome+' · '+dataBR(data).slice(0,5)+' '+cultoInfo(culto).nome.toLowerCase()+' · '+fn+': '+(atual || 'vaga aberta')+' → '+(novo || 'vaga aberta');
+  const resumo = a.nome+' · '+dataBR(data).slice(0,5)+' '+cultoInfo(culto, data).nome.toLowerCase()+' · '+fn+': '+(atual || 'vaga aberta')+' → '+(novo || 'vaga aberta');
   if (await salvar(ref('escalas', docId(data, culto, area)), base, {acao:x?'editou':'criou', tipo:'escala', resumo, antes:x?semId(x):null})) {
     toast('Escala atualizada.'); await Promise.all([RECARGA.escalas(), detGarantir(data, true)]); render(); }
 }
@@ -592,7 +603,8 @@ function textoConvocacao(data){
   const blocos = cultos().map(cu => { const x = escalaDe(todasEscalas(), data, cu.id, 'direcao');
     const tarefas = a.funcoes.filter(f => noCulto(f, cu.id)).map(f => { const ps = ((x && (x.funcoes||[]).find(g => g.nome === f.nome)) || {}).pessoas || [];
       const n = Math.max(f.vagas || 1, ps.length); return f.nome+':\n'+Array.from({length:n}, (_, k) => (k+1)+'. '+(ps[k] || '')).join('\n'); });
-    return (/noite/i.test(cu.nome) ? '🌙' : '☀️')+' CULTO DA '+cu.nome.toUpperCase()+(cu.hora ? ' ('+cu.hora+')' : '')+'\n'+tarefas.join('\n\n')+'\nObservação: '+((x && x.obs) || ''); });
+    const ci = cultoInfo(cu.id, data);
+    return (ci.noite ? '🌙' : '☀️')+' '+(ci.especial ? ci.nome.toUpperCase() : 'CULTO DA '+ci.nome.toUpperCase())+(ci.hora ? ' ('+ci.hora+')' : '')+'\n'+tarefas.join('\n\n')+'\nObservação: '+((x && x.obs) || ''); });
   return ['❤️ ATENÇÃO, VOLUNTÁRIOS!', 'Queridos, pedimos a todos que estarão servindo no culto que cheguem com 45 minutos de antecedência.',
     'Esse tempinho é muito importante para organizarmos tudo com tranquilidade, alinharmos os últimos detalhes e realizarmos o check-in.', '',
     'DIREÇÃO DO CULTO · '+dia, 'Nossa Conexão estará responsável na "Direção de culto" no domingo. Em qual tarefa deseja servir?', '',
@@ -741,7 +753,7 @@ async function enviarCadastro(data, b){
   } catch(err){ falhaEscrita(err); if (b) b.disabled = false; }
 }
 function viewInicio(){
-  const lista = listaCultos(hoje(), somaDias(hoje(), 120), S.prox).filter(c => !horaPassou(c.data, cultoInfo(c.culto).hora));
+  const lista = listaCultos(hoje(), somaDias(hoje(), 120), S.prox).filter(c => !horaPassou(c.data, cultoInfo(c.culto, c.data).hora));
   const datas = [...new Set(lista.map(c=>c.data))].slice(0, 2);
   const blocoDia = d => lista.filter(c=>c.data===d).map((c,i) => (i?'<hr class="div-culto">':'')+'<div class="culto-sec"><h3 class="culto-t'+(/noite/i.test(cultoInfo(c.culto).nome)?' noite':'')+'">'+esc(cultoTitulo(c))+'</h3>'+blocosCulto(S.prox, c)+'</div>').join('');
   let html = cardCadastro() + cardPush() + cardMeuProximo();
@@ -836,7 +848,7 @@ document.addEventListener('click', async e => {
     if (t.dataset.diaCsv) exportarCSV(rows, 'escala-'+d+'.csv'); else checkinDiaPDF(d, t); }
 });
 const todasEscalas = () => { const m = new Map(); [...(S.detEsc||[]), ...S.prox, ...S.mesEsc, ...(S.ckDocs||[])].forEach(x => m.set(x.id, x)); return [...m.values()]; };
-const resumoEscala = x => fmtCurto(x.data)+' · '+cultoInfo(x.culto).nome+' · '+areaInfo(x.area).nome+(conexoesDe(x).length?' ('+conexoesTxt(x)+')':'');
+const resumoEscala = x => fmtCurto(x.data)+' · '+cultoInfo(x.culto, x.data).nome+' · '+areaInfo(x.area).nome+(conexoesDe(x).length?' ('+conexoesTxt(x)+')':'');
 function opts(list, sel){ return list.map(o => '<option value="'+esc(o.id)+'"'+(o.id===sel?' selected':'')+'>'+esc(o.nome)+'</option>').join(''); }
 function abrir(html, onSubmit, onReady){
   $('#dlgBody').innerHTML = html; const d = $('#dlg'); if (!d.open) d.showModal();
@@ -966,6 +978,13 @@ document.addEventListener('click', e => { const b = e.target.closest('button'); 
   if ('modeloZap' in b.dataset) window.open('https://wa.me/?text='+encodeURIComponent(textoModelo()), '_blank', 'noopener');
   if ('preencher' in b.dataset) preencherEscala();
 });
+// Nome/horário próprios do culto (culto especial). Admin define no formulário; nos outros casos mantém o que já existe
+// na escala ou nas outras áreas do mesmo culto (para não perder ao salvar).
+function camposCulto(x, data, culto, fd){
+  const ex = fd ? {nome:String(fd.get('cultoNome')||'').trim(), hora:String(fd.get('hora')||'').trim()}
+    : (x && (x.cultoNome || x.hora)) ? {nome:x.cultoNome||'', hora:x.hora||''} : (cultoExtra(culto, data) || {nome:'', hora:''});
+  const o = {}; if (ex.nome) o.cultoNome = ex.nome; if (ex.hora) o.hora = ex.hora; return o;
+}
 function formEscala(ctx){
   const editaveis = isAdm() ? areas() : areas().filter(a => podeArea(a, todasEscalas().find(x => x.id === docId(ctx.data, ctx.culto, a.id)), ctx.data));
   const atual = () => { const f = $('#dlgBody form'); return {data:f.data.value, culto:f.culto.value, area:f.area.value}; };
@@ -974,11 +993,15 @@ function formEscala(ctx){
   const fixo = !isAdm();
   abrir('<form><h2>Escala</h2>'
     + (fixo
-      ? '<div class="notice" style="margin:0"><b>'+esc(areaInfo(ctx.area).nome)+'</b><br>'+esc(fmtDia(ctx.data))+' · Culto da '+esc(cultoInfo(ctx.culto).nome.toLowerCase())+(cultoInfo(ctx.culto).hora?' · '+esc(cultoInfo(ctx.culto).hora):'')+'</div>'
+      ? '<div class="notice" style="margin:0"><b>'+esc(areaInfo(ctx.area).nome)+'</b><br>'+esc(fmtDia(ctx.data))+' · '+esc(cultoInfo(ctx.culto, ctx.data).titulo)+'</div>'
         + '<input type="hidden" id="fData" name="data" value="'+esc(ctx.data)+'"><input type="hidden" id="fCulto" name="culto" value="'+esc(ctx.culto)+'"><input type="hidden" id="fArea" name="area" value="'+esc(ctx.area)+'">'
       : '<div class="row"><div><label class="f" for="fData">Data</label><input class="inp" id="fData" name="data" type="date" required value="'+esc(ctx.data)+'"'+(ctx.livre?'':' readonly')+'></div>'
     + '<div><label class="f" for="fCulto">Culto</label><select class="inp" id="fCulto" name="culto" required>'+opts(cultos(), ctx.culto)+'</select></div></div>'
-    + '<label class="f" for="fArea">Área</label><select class="inp" id="fArea" name="area" required>'+opts(editaveis, ctx.area)+'</select>')
+    + '<label class="f" for="fArea">Área</label><select class="inp" id="fArea" name="area" required>'+opts(editaveis, ctx.area)+'</select>'
+    + (() => { const ex = (x0 && (x0.cultoNome || x0.hora)) ? {nome:x0.cultoNome||'', hora:x0.hora||''} : (cultoExtra(ctx.culto, ctx.data) || {nome:'', hora:''});
+        return '<div class="row"><div><label class="f" for="fCN">Nome do culto (opcional)</label><input class="inp" id="fCN" name="cultoNome" maxlength="80" placeholder="Ex.: Congresso de Homens" value="'+esc(ex.nome)+'"></div>'
+          + '<div><label class="f" for="fCH">Horário (opcional)</label><input class="inp" id="fCH" name="hora" maxlength="12" placeholder="Ex.: 20h" value="'+esc(ex.hora)+'"></div></div>'
+          + '<p class="hint">Só para culto especial: aparece no lugar de “Culto da noite · 18h30” em todas as telas. Vazio = culto normal.</p>'; })())
     + '<div id="campos">'+camposArea(areaInfo(ctx.area), x0, ctx.culto)+'</div>'
     + '<div class="end">'+(x0 && isAdm()?'<button type="submit" class="btn danger" data-limpar style="margin-right:auto">Limpar</button>':'')+'<button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Salvar escala</button></div></form>',
   async (fd, sub) => {
@@ -988,7 +1011,7 @@ function formEscala(ctx){
     const cs = a.porConexao ? (isAdm() ? fd.getAll('conexoes') : conexoesDe(x)) : [];
     const data = { data:c.data, culto:c.culto, area:c.area, conexoes: cs, conexao: cs[0]||null,
       funcoes: a.funcoes.map((f,i) => ({f, i})).filter(({f}) => noCulto(f, c.culto)).map(({f, i}) => ({nome:f.nome, pessoas: [...$('#dlgBody form').querySelectorAll('[name^="f'+i+'_"]')].map(el=>el.value.trim()).filter(Boolean)})),
-      obs: String(fd.get('obs')||'').trim(), atualizadoEm:new Date().toISOString() };
+      obs: String(fd.get('obs')||'').trim(), atualizadoEm:new Date().toISOString(), ...camposCulto(x, c.data, c.culto, isAdm() ? fd : null) };
     if (a.porConexao && !cs.length) { toast('Marque pelo menos uma conexão.'); return false; }
     if (!podeArea(a, x, c.data)) { toast('Você só pode preencher a escala dos dias da sua conexão.'); return false; }
     const ok = await salvar(r, data, {acao:x?'editou':'criou', tipo:'escala', resumo:resumoEscala(data), antes:x?semId(x):null});
@@ -997,7 +1020,7 @@ function formEscala(ctx){
       for (const o of PRE.outros) { const x2 = existente({data:c.data, culto:o.culto, area:c.area}); if (!podeArea(a, x2, c.data)) continue;
         const d2 = {data:c.data, culto:o.culto, area:c.area, conexoes: x2 ? conexoesDe(x2) : cs, conexao: x2 ? (conexoesDe(x2)[0]||null) : (cs[0]||null),
           funcoes: a.funcoes.map((fn, i) => ({fn, i})).filter(({fn}) => noCulto(fn, o.culto)).map(({fn, i}) => ({nome:fn.nome, pessoas: (o.res[i] && o.res[i].length) ? o.res[i] : ((x2 && ((x2.funcoes||[]).find(g => g.nome === fn.nome)||{}).pessoas) || [])})),
-          obs: o.obs ? o.obs : (x2 ? x2.obs || '' : ''), atualizadoEm:new Date().toISOString()};
+          obs: o.obs ? o.obs : (x2 ? x2.obs || '' : ''), atualizadoEm:new Date().toISOString(), ...camposCulto(x2, c.data, o.culto)};
         if (await salvar(ref('escalas', docId(c.data, o.culto, c.area)), d2, {acao:x2?'editou':'criou', tipo:'escala', resumo:resumoEscala(d2), antes:x2?semId(x2):null})) mais++; }
     }
     PRE.outros = []; PRE.ctx = null;
@@ -1016,8 +1039,8 @@ function linhasDe(lista){
   const rows = [];
   lista.slice()
     .sort((a,b)=>(a.data+cultos().findIndex(c=>c.id===a.culto)+areas().findIndex(r=>r.id===a.area)).localeCompare(b.data+cultos().findIndex(c=>c.id===b.culto)+areas().findIndex(r=>r.id===b.area)))
-    .forEach(x => { const c = cultoInfo(x.culto);
-      (x.funcoes||[]).forEach(f => (f.pessoas||[]).forEach(p => rows.push({data:x.data, dia:new Date(x.data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long'}), culto:c.nome, hora:c.hora||'', area:areaInfo(x.area).nome, conexao:conexoesTxt(x), funcao:f.nome, pessoa:p, obs:x.obs||''})));
+    .forEach(x => { const c = cultoInfo(x.culto, x.data, lista);
+      (x.funcoes||[]).forEach(f => (f.pessoas||[]).forEach(p => rows.push({data:x.data, dia:new Date(x.data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long'}), culto:c.nome, cid:x.culto, hora:c.hora||'', titulo:c.titulo, area:areaInfo(x.area).nome, conexao:conexoesTxt(x), funcao:f.nome, pessoa:p, obs:x.obs||''})));
     });
   return rows;
 }
@@ -1036,7 +1059,7 @@ function exportarCSV(rows = linhasMes(), arquivo){
   const q = v => '"'+String(v).replace(/"/g,'""')+'"';
   const head = ['Área','Função','Nome','Check-in','Assinatura retirada (equipamento / crachá)','Assinatura devolução (equipamento / crachá)'];
   const body = []; let grupo = '';
-  rows.forEach(r => { const g = fmtDia(r.data)+' · Culto da '+r.culto.toLowerCase()+(r.hora?' · '+r.hora:'');
+  rows.forEach(r => { const g = fmtDia(r.data)+' · '+(r.titulo || 'Culto da '+r.culto.toLowerCase()+(r.hora?' · '+r.hora:''));
     if (g !== grupo) { if (grupo) body.push(''); body.push(q(g.charAt(0).toUpperCase()+g.slice(1))); body.push(head.map(q).join(';')); grupo = g; }
     body.push([r.area, r.funcao, r.pessoa, '', '', ''].map(q).join(';')); });
   baixar(arquivo || ('escala-'+S.mes+(S.filtro!=='todas'?'-'+S.filtro:'')+'.csv'), '﻿'+body.join('\r\n'));
@@ -1063,7 +1086,7 @@ const AUTOTABLE = 'vendor/jspdf-autotable-3.8.2.min.js';
 const EXCELJS = 'vendor/exceljs-4.4.0.min.js';
 const CK_HEAD = ['Área','Função','Nome','Check-in','Retirou','Devolveu'];
 function blocosCheckin(d, c){
-  const ci = cultoInfo(c), docs = todasEscalas().filter(x => x.data===d && x.culto===c);
+  const ci = cultoInfo(c, d), docs = todasEscalas().filter(x => x.data===d && x.culto===c);
   const grupos = areas().filter(a => !ehLouvor(a.nome)).map(a => {
     const x = docs.find(y => y.area===a.id); const rows = [];
     (a.funcoes||[]).forEach((f, fi) => { if (!noCulto(f, c)) return;
@@ -1075,7 +1098,7 @@ function blocosCheckin(d, c){
     return {id:a.id, area:a.nome, conexao:con, obs:(x&&x.obs)||'', rows};
   }).filter(g => g.rows.length);
   const nm = ci.nome || c; const cap = nm.charAt(0).toUpperCase()+nm.slice(1);
-  return { culto:c, rotulo:'Culto da '+nm.toLowerCase()+(ci.hora?' · '+ci.hora:''), noite:/noite/i.test(nm), grupos, temDados:grupos.length > 0, cap };
+  return { culto:c, rotulo:ci.titulo, noite:ci.noite, grupos, temDados:grupos.length > 0, cap };
 }
 const CK_COLS = ['Função','Nome','Check-in','Retirou','Devolveu'];
 // Marcações do dia (para a ficha mostrar check-in, o que cada um retirou/devolveu e as pendências).
@@ -1177,9 +1200,14 @@ async function ckCarregarMarcas(){ const d = S.ckD, c = S.ckC; const r = await s
   if (r.error) { console.warn(r.error); return; } if (d !== S.ckD || c !== S.ckC) return;
   S.ckDia = r.data || []; const m = {}; S.ckDia.filter(x => x.culto === c).forEach(x => m[x.chave] = {...x, _v:1}); S.ckMarks = m; }
 async function ckCarregarItens(){ const r = await sb.from('checkin_itens').select('*').order('ordem').order('nome'); if (!r.error) S.ckItens = r.data || []; }
+// Próximo culto que ainda não passou: domingos (manhã/noite) e também cultos extras da escala (ex.: congresso numa quarta).
+function proximoCulto(){
+  const l = listaCultos(hoje(), somaDias(hoje(), 14), S.prox || []).filter(c => !horaPassou(c.data, cultoInfo(c.culto, c.data).hora));
+  return l[0] || {data:proxCulto(), culto:(cultos()[0]||{}).id};
+}
 function ckAbrir(){
   if (ckEscalado()) S.ckD = datasCheckin()[0];
-  if (!S.ckD) S.ckD = proxCulto();
+  if (!S.ckD) { const p = proximoCulto(); S.ckD = p.data; if (!S.ckC) S.ckC = p.culto; }
   if (!S.ckC || !cultos().some(c => c.id===S.ckC)) S.ckC = (cultos()[0]||{}).id;
   const chave = S.ckD+'_'+S.ckC; if (S.ckChave === chave) return; S.ckChave = chave;
   S.ckMarks = {}; S.ckOk = false;
@@ -1214,12 +1242,7 @@ async function mkCarregarCheckin(){ const d = MK.data, c = MK.culto; if (isAdm()
 // Enquanto falta o check-in, confere a cada 10 s (o check-in é marcado por outra pessoa, em outro celular) e libera sozinho.
 setInterval(async () => { if (S.tab !== 'midia' || isAdm() || MK.fezCheckin || !MK.ok || MK.data !== hoje() || !mkMeusChecklists().length || document.visibilityState !== 'visible') return;
   await mkCarregarCheckin(); if (MK.fezCheckin) { render(); toast('Check-in confirmado: checklist liberado!'); } }, 10000);
-function mkPadrao(){
-  const hj = cultos().filter(c => !horaPassou(hoje(), c.hora));
-  if (diasCulto().includes(new Date(hoje()+'T12:00:00').getDay()) && hj.length) return {data:hoje(), culto:hj[0].id};
-  let d = somaDias(hoje(), 1); for (let i = 0; i < 14 && !diasCulto().includes(new Date(d+'T12:00:00').getDay()); i++) d = somaDias(d, 1);
-  return {data:d, culto:(cultos()[0]||{}).id};
-}
+function mkPadrao(){ return proximoCulto(); }
 async function mkCarregarItens(){ const r = await sb.from('checklist_itens').select('*').order('ordem'); if (r.error) { console.warn(r.error); MK.itens = MK.itens || []; return; } MK.itens = r.data || []; }
 async function mkCarregarMarcas(){ const d = MK.data, c = MK.culto; const r = await sb.from('checklist_marcas').select('*').eq('data', d).eq('culto', c);
   if (r.error) { console.warn(r.error); return; } if (d !== MK.data || c !== MK.culto) return; const m = {}; (r.data||[]).forEach(x => m[x.item] = x); MK.marcas = m; }
@@ -1243,7 +1266,7 @@ function viewMidia(){
   mkAbrir();
   let h = '<div class="bar"><h2 style="font-size:22px">Checklist da Mídia</h2><span style="flex:1"></span>'+(isAdm() ? '<button class="btn ghost small" data-mk-pdf>PDF</button><button class="btn ghost small" data-mk-xls>Excel</button><button class="btn ghost small" data-mk-editar>✏️ Editar itens</button>' : '')+'</div>'
     + '<div class="card"><label class="f" for="mkD" style="margin-top:0">Culto</label><input class="inp" type="date" id="mkD" value="'+esc(MK.data)+'">'
-    + '<div class="chips" style="margin-top:10px">'+cultos().map(c => '<button class="chip" aria-pressed="'+(c.id===MK.culto)+'" data-mk-culto="'+esc(c.id)+'">'+esc(c.nome)+(c.hora?' · '+esc(c.hora):'')+'</button>').join('')+'</div>'
+    + '<div class="chips" style="margin-top:10px">'+cultos().map(c => cultoInfo(c.id, MK.data)).map(c => '<button class="chip" aria-pressed="'+(c.id===MK.culto)+'" data-mk-culto="'+esc(c.id)+'">'+esc(c.nome)+(c.hora?' · '+esc(c.hora):'')+'</button>').join('')+'</div>'
     + '<div class="meta" style="margin-top:8px">'+esc(fmtDia(MK.data))+(MK.data === hoje() ? ' · <b>hoje</b>' : '')+'</div></div>';
   if (!MK.ok) return h + '<div class="empty">Carregando…</div>';
   const minhas = mkMinhas();
@@ -1334,7 +1357,7 @@ function mkLinhasExport(){
 }
 window.mkLinhasExport = mkLinhasExport; // usado pelos testes
 async function mkExportar(tipo, btn){
-  if (!isAdm()) return; const rows = mkLinhasExport(), ci = cultoInfo(MK.culto), titulo = 'Checklist da Mídia · '+tituloDia(MK.data)+' · Culto da '+ci.nome.toLowerCase();
+  if (!isAdm()) return; const rows = mkLinhasExport(), ci = cultoInfo(MK.culto, MK.data), titulo = 'Checklist da Mídia · '+tituloDia(MK.data)+' · '+ci.titulo;
   const HEAD = ['Função','Bloco','Item','Resultado','Marcado por','Hora'], arq = 'checklist-midia-'+MK.data+'-'+MK.culto, txt = btn.textContent; btn.textContent = '…'; btn.disabled = true;
   try {
     if (tipo === 'pdf') { await carregar(JSPDF); await carregar(AUTOTABLE);
@@ -1437,7 +1460,7 @@ function ckPadrao(areaId, fn){
     .sort((a, b) => ckPeso(b) - ckPeso(a));
   return rs.length ? rs[0].itens || [] : [];
 }
-window.ckPadrao = (a, f) => ckPadrao(a, f); // usado pelos testes
+window.ckPadrao = (a, f) => ckPadrao(a, f); window.cultoInfo = (id, d) => cultoInfo(id, d); // usados pelos testes
 const ckFalta = m => ((m && m.itens) || []).filter(i => (i.dev||0) < (i.ret||0)).map(i => ({nome:i.nome, qtd:(i.ret||0) - (i.dev||0)}));
 const ckLista = l => l.map(i => i.nome+' ×'+i.qtd).join(', ');
 const ckRetTxt = m => ckLista(((m && m.itens) || []).filter(i => i.ret > 0).map(i => ({nome:i.nome, qtd:i.ret})));
@@ -1479,7 +1502,7 @@ function viewCheckin(){
   let h = '<div class="bar"><h2 style="font-size:22px">Check-in</h2></div>'
     + '<div class="card">'+(fixo ? '<div class="meta" style="margin:0">Você está escalado no check-in de</div><b class="ck-dia">'+esc(fmtDia(S.ckD))+'</b>'
       : '<label class="f" for="ckD" style="margin-top:0">Data do culto</label><input class="inp" type="date" id="ckD" value="'+esc(S.ckD)+'">')
-    + '<div class="chips" style="margin-top:10px">'+cultos().map(c => '<button class="chip" aria-pressed="'+(c.id===S.ckC)+'" data-ck-culto="'+esc(c.id)+'">'+esc(c.nome)+(c.hora?' · '+esc(c.hora):'')+'</button>').join('')+'</div></div>';
+    + '<div class="chips" style="margin-top:10px">'+cultos().map(c => cultoInfo(c.id, S.ckD)).map(c => '<button class="chip" aria-pressed="'+(c.id===S.ckC)+'" data-ck-culto="'+esc(c.id)+'">'+esc(c.nome)+(c.hora?' · '+esc(c.hora):'')+'</button>').join('')+'</div></div>';
   if (!S.ckOk) return h + '<div class="empty">Carregando…</div>';
   const b = blocosCheckin(S.ckD, S.ckC), M = S.ckMarks || {}, avs = ckAvulsos();
   if (!b.temDados && !avs.length) return h + '<div class="empty">Não há escala preenchida para este culto.</div>' + '<div class="bar"><button class="btn ghost" data-ck-pessoa>+ pessoa</button></div>';
@@ -1623,7 +1646,7 @@ async function exportarPeriodo(tipo, btn){
     if (S.perTipo === 'checkin' && !temGestao()) S.perTipo = 'escala';
     const rows = S.perTipo === 'checkin' ? semLouvor(linhasDe(lista)) : linhasDe(lista);
     if (!rows.length) { toast('Não há escala preenchida nesse período.'); return; }
-    const grupos = []; rows.forEach(r => { const g = fmtDia(r.data)+' · Culto da '+r.culto.toLowerCase()+(r.hora?' · '+r.hora:''); const t = g.charAt(0).toUpperCase()+g.slice(1);
+    const grupos = []; rows.forEach(r => { const g = fmtDia(r.data)+' · '+(r.titulo || 'Culto da '+r.culto.toLowerCase()+(r.hora?' · '+r.hora:'')); const t = g.charAt(0).toUpperCase()+g.slice(1);
       if (!grupos.length || grupos[grupos.length-1].t !== t) grupos.push({t, rows:[]}); grupos[grupos.length-1].rows.push(r); });
     const ck = S.perTipo === 'checkin';
     const titulo = ((S.cfg&&S.cfg.igreja)||'Igreja')+(ck?' · Check-in de ':' · Escala de ')+dataBR(de)+' a '+dataBR(ate)+(S.filtro!=='todas'?' · '+conexaoNome(S.filtro):'');
@@ -1631,8 +1654,8 @@ async function exportarPeriodo(tipo, btn){
     const HEAD = ck ? CK_HEAD : ['Área','Conexão','Função','Nome'];
     // Check-in: junta o que foi marcado no dia (check-in, retirou e devolveu) pela data, culto, função e nome.
     const mks = {}; if (ck) { const rm = await sb.from('checkin_marcas').select('*').gte('data', de).lte('data', ate);
-      (rm.data||[]).forEach(m => { mks[m.data+'|'+cultoInfo(m.culto).nome+'|'+m.funcao+'|'+normNome(m.escalado || m.nome)] = m; }); }
-    const mkDe = r => mks[r.data+'|'+r.culto+'|'+r.funcao+'|'+normNome(r.pessoa)];
+      (rm.data||[]).forEach(m => { mks[m.data+'|'+m.culto+'|'+m.funcao+'|'+normNome(m.escalado || m.nome)] = m; }); }
+    const mkDe = r => mks[r.data+'|'+r.cid+'|'+r.funcao+'|'+normNome(r.pessoa)];
     const vals = r => ck ? [r.area, r.funcao, r.pessoa, (mkDe(r)||{}).ci ? 'Sim' : '', ckRetTxt(mkDe(r)), ckDevTxt(mkDe(r))] : [r.area, r.conexao, r.funcao, r.pessoa];
     const nc = HEAD.length; const ult = String.fromCharCode(64+nc);
     if (tipo === 'pdf') {

@@ -631,6 +631,34 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   conferir(['Mídia','Louvor','Coro','Membro'].every(n => cvOps.includes(n)), 'convite por e-mail com Mídia, Louvor, Coro e Membro');
   await p.context().close();
 
+  console.log('Culto extra (nome e horário próprios)');
+  {
+    // Congresso numa quarta-feira (daqui a 1 a 7 dias, não domingo), culto "noite" com cultoNome e hora.
+    const base = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) + 'T12:00:00Z');
+    let dq = new Date(base); dq.setUTCDate(dq.getUTCDate() + 1); while (dq.getUTCDay() === 0) dq.setUTCDate(dq.getUTCDate() + 1); const diaX = dq.toISOString().slice(0,10);
+    const extra = ['midia','staff','louvor'].map(a => ({id: diaX+'_noite_'+a, d:{data:diaX, culto:'noite', area:a, cultoNome:'Congresso de Homens', hora:'20h', obs:'Congresso de Homens "Desperta" às 20h',
+      funcoes: a === 'staff' ? [{nome:'Check-in', pessoas:['Gestora Silva']}] : a === 'midia' ? [{nome:'Projeção', pessoas:['Ana']}] : []}}));
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    p = await ctx.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
+    await p.addInitScript(([e]) => { localStorage.setItem('mockPapel', 'admin'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); }, [extra]);
+    await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(500);
+    conferir((await p.textContent('#view')).includes('Congresso de Homens · 20h'), 'Início mostra "Congresso de Homens · 20h" no lugar de "Culto da noite · 18h30"');
+    conferir(await p.$$eval('.culto-t', l => l.some(e => e.textContent.includes('Congresso') && e.classList.contains('noite'))), 'culto extra da noite continua azul');
+    await p.click('#tabs [data-tab="escala"]'); await p.waitForTimeout(300);
+    if (!(await p.textContent('#view')).includes('Congresso')) { await p.click('[data-mes="1"]').catch(() => {}); await p.waitForTimeout(400); }
+    conferir((await p.textContent('#view')).includes('Congresso de Homens · 20h'), 'Escala: linha do dia mostra o nome e o horário do culto extra');
+    await p.click('#tabs [data-tab="checkin"]'); await p.waitForTimeout(300); await p.fill('#ckD', diaX); await p.dispatchEvent('#ckD', 'change'); await p.waitForTimeout(400);
+    conferir((await p.textContent('[data-ck-culto="noite"]')).includes('Congresso de Homens · 20h') && (await p.textContent('[data-ck-culto="manha"]')).includes('Manhã'), 'Check-in: botão do culto mostra "Congresso de Homens · 20h"');
+    await p.click('#tabs [data-tab="midia"]'); await p.waitForTimeout(300); await p.fill('#mkD', diaX); await p.dispatchEvent('#mkD', 'change'); await p.waitForTimeout(400);
+    conferir((await p.textContent('[data-mk-culto="noite"]')).includes('Congresso de Homens · 20h'), 'Checklist: botão do culto mostra "Congresso de Homens · 20h"');
+    await p.click('#tabs [data-tab="escala"]'); await p.waitForTimeout(300); await p.click('[data-esc-novo]'); await p.waitForSelector('#dlg[open] #fCN');
+    await p.fill('#fData', '2030-03-06'); await p.selectOption('#fCulto', 'noite'); await p.selectOption('#fArea', 'midia'); await p.waitForTimeout(150); await p.fill('#fCN', 'Vigília'); await p.fill('#fCH', '22h'); await p.click('#dlg button.btn:not(.ghost):not(.danger)[type=submit]'); await p.waitForTimeout(500);
+    conferir(await p.evaluate(() => window.__TABELAS.escalas.some(e => e.d.data === '2030-03-06' && e.d.cultoNome === 'Vigília' && e.d.hora === '22h')), 'admin cria culto extra com nome e horário (+ Culto extra)');
+    conferir(await p.evaluate(d => cultoInfo('noite', d).titulo === 'Congresso de Homens · 20h' && cultoInfo('noite', '2030-01-06').titulo === 'Culto da noite · 18h30', diaX), 'sem os campos, continua "Culto da noite · 18h30"');
+    conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    await ctx.close();
+  }
+
   console.log('Contas duplicadas (outro e-mail / outro jeito de entrar)');
   {
     p = await abrir('novo'); await p.waitForSelector('#cadForm');
