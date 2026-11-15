@@ -116,7 +116,9 @@ table.esc thead th:first-child{position:sticky;left:0;background:var(--bg);z-ind
 table.esc tbody th{position:sticky;left:0;background:var(--bg);z-index:1;white-space:nowrap;border-left:3px solid var(--yellow);padding-left:10px}
 table.esc tr.noite th{border-left-color:var(--night)}
 table.esc .dt{display:block;font-weight:700}
-table.esc .ct{display:block;font-size:12px;color:var(--muted)}
+table.esc .ct{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+/* Coluna da data com largura fixa: culto extra com nome comprido não espreme nem empurra a linha (nome inteiro no detalhe). */
+table.esc thead th:first-child,table.esc tbody th{width:112px;min-width:112px;max-width:112px;box-sizing:border-box}
 .cell{width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-weight:600;min-height:40px}
 .cell.vazio{color:var(--muted);font-weight:400;font-style:italic;background:transparent;border-style:dashed}
 .cell.dl{color:var(--yellow);text-align:center;white-space:nowrap}

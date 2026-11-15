@@ -647,6 +647,10 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.click('#tabs [data-tab="escala"]'); await p.waitForTimeout(300);
     if (!(await p.textContent('#view')).includes('Congresso')) { await p.click('[data-mes="1"]').catch(() => {}); await p.waitForTimeout(400); }
     conferir((await p.textContent('#view')).includes('Congresso de Homens · 20h'), 'Escala: linha do dia mostra o nome e o horário do culto extra');
+    const alt = await p.$$eval('table.esc tbody tr', l => l.map(r => ({extra: r.textContent.includes('Congresso'), h: Math.round(r.getBoundingClientRect().height), w: Math.round(r.querySelector('th').getBoundingClientRect().width)})));
+    const ex = alt.find(a => a.extra), dom = alt.find(a => !a.extra);
+    conferir(ex && dom && ex.h === dom.h && ex.w === dom.w, 'culto extra: mesma altura e mesma largura da coluna da data que os domingos ('+JSON.stringify([ex, dom])+')');
+    await p.screenshot({ path: path.join(SAIDA, '52-escala-culto-extra.png') });
     await p.click('#tabs [data-tab="checkin"]'); await p.waitForTimeout(300); await p.fill('#ckD', diaX); await p.dispatchEvent('#ckD', 'change'); await p.waitForTimeout(400);
     conferir((await p.textContent('[data-ck-culto="noite"]')).includes('Congresso de Homens · 20h') && (await p.textContent('[data-ck-culto="manha"]')).includes('Manhã'), 'Check-in: botão do culto mostra "Congresso de Homens · 20h"');
     await p.click('#tabs [data-tab="midia"]'); await p.waitForTimeout(300); await p.fill('#mkD', diaX); await p.dispatchEvent('#mkD', 'change'); await p.waitForTimeout(400);

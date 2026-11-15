@@ -529,7 +529,7 @@ function celula(lista, c, a){
 }
 function tabelaEscala(lista){
   return '<div class="tbl-wrap"><table class="esc"><thead><tr><th>Data</th>'+areas().map(a=>'<th>'+esc(a.nome)+'</th>').join('')+(temGestao()?'<th>Check-in PDF</th><th>Check-in Excel</th>':'')+'</tr></thead><tbody>'
-    + lista.map(c => { const ci = cultoInfo(c.culto, c.data); return '<tr class="'+(ci.noite?'noite':'manha')+'"><th scope="row"><span class="dt">'+dataBR(c.data)+'</span><span class="ct">'+esc(ci.nome)+(ci.hora?' · '+esc(ci.hora):'')+'</span></th>'+areas().map(a => celula(S.mesEsc, c, a)).join('')+(temGestao()?'<td><button class="cell dl" data-ck-pdf="'+c.data+'|'+esc(c.culto)+'">Baixar PDF</button></td><td><button class="cell dl" data-ck-xls="'+c.data+'|'+esc(c.culto)+'">Baixar Excel</button></td>':'')+'</tr>'; }).join('')
+    + lista.map(c => { const ci = cultoInfo(c.culto, c.data); return '<tr class="'+(ci.noite?'noite':'manha')+'"><th scope="row"><span class="dt">'+dataBR(c.data)+'</span><span class="ct" title="'+esc(ci.nome+(ci.hora?' · '+ci.hora:''))+'">'+esc(ci.nome)+(ci.hora?' · '+esc(ci.hora):'')+'</span></th>'+areas().map(a => celula(S.mesEsc, c, a)).join('')+(temGestao()?'<td><button class="cell dl" data-ck-pdf="'+c.data+'|'+esc(c.culto)+'">Baixar PDF</button></td><td><button class="cell dl" data-ck-xls="'+c.data+'|'+esc(c.culto)+'">Baixar Excel</button></td>':'')+'</tr>'; }).join('')
     + '</tbody></table></div><p class="hint">'+(veEquipes() ? 'Toque no nome para ver quem está escalado em cada função.' : 'Para ver quem vai servir, toque em <b>Entrar</b> (só para cadastrados aprovados).')+'</p>';
 }
 // Detalhe da escala: setas para o culto anterior/próximo da mesma área (inclui cultos extras), troca de área no topo
