@@ -1,0 +1,51 @@
+/* Telão do sorteio sobre a arte do Congresso "DESPERTA" (1672×941). Palco travado em 16:9 (sobra preta se a tela for diferente).
+   Posições em % da arte; tamanhos de letra em cqw/cqh (relativos ao palco). */
+:root{ --ouro:#FFC23D; --laranja:#F29A1A; --ouro-borda:#D9A441; --creme:#FFF6E5; color-scheme:dark; }
+:root:not([data-theme="light"]){color-scheme:dark}
+:root[data-theme="dark"]{color-scheme:dark}
+html,body{margin:0;height:100%;background:#000;overflow:hidden}
+body{display:flex;align-items:center;justify-content:center;font-family:'Montserrat','Figtree',system-ui,sans-serif;color:var(--creme)}
+body.sem-cursor,body.sem-cursor *{cursor:none !important}
+.quadro{position:relative;width:min(100vw, calc(100vh * 1672 / 941));aspect-ratio:1672/941;container-type:size;
+  background:#000 url('../fundo-desperta.webp') center/cover no-repeat;overflow:hidden;user-select:none}
+
+/* Caixa do nome: moldura dourada fina com cantos chanfrados, por cima da da arte. */
+.moldura{position:absolute;left:6.9%;top:32.2%;width:86.3%;height:38.8%;filter:drop-shadow(0 0 0 rgba(255,194,61,0));transition:filter .6s}
+.moldura .borda,.moldura .caixa{position:absolute;clip-path:polygon(1.6cqw 0,calc(100% - 1.6cqw) 0,100% 1.6cqw,100% calc(100% - 1.6cqw),calc(100% - 1.6cqw) 100%,1.6cqw 100%,0 calc(100% - 1.6cqw),0 1.6cqw)}
+.moldura .borda{inset:0;background:linear-gradient(180deg,#f3cf7a,var(--ouro-borda) 45%,#a8772a)}
+.moldura .caixa{inset:.18cqw;background:radial-gradient(ellipse at 50% 40%,#151210 0%,#0b0a09 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 3cqw}
+.rotulo{position:absolute;top:8%;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:2.2cqw;
+  font-weight:800;font-size:2.9cqw;letter-spacing:.32em;text-indent:.32em;background:linear-gradient(180deg,#ffe29a,#e7a93a);-webkit-background-clip:text;background-clip:text;color:transparent}
+.rotulo::before,.rotulo::after{content:"";width:12cqw;height:.18cqw;background:linear-gradient(90deg,transparent,#e7b14d);-webkit-text-fill-color:initial}
+.rotulo::after{background:linear-gradient(270deg,transparent,#e7b14d)}
+.nome{font-family:'Anton','Bebas Neue',Impact,sans-serif;color:var(--creme);text-align:center;line-height:1.02;letter-spacing:.01em;text-transform:uppercase;
+  margin-top:5.5cqh;max-width:100%;white-space:nowrap;text-shadow:0 .3cqw 1.2cqw rgba(0,0,0,.6)}
+.nome.espera{font-size:6.4cqw}
+.sub{margin-top:1.4cqh;font-size:1.9cqw;font-weight:700;color:#e8c98a;letter-spacing:.06em}
+.sub:empty{display:none}
+
+/* Faixa/botão por cima do "SORTEAR" da arte. */
+.faixa{position:absolute;left:28%;top:74.4%;width:44%;height:14%;border:0;border-radius:1.2cqw;
+  background:linear-gradient(180deg,var(--ouro),var(--laranja));color:#0d0700;font-family:'Montserrat',sans-serif;font-weight:900;
+  font-size:3.4cqw;letter-spacing:.04em;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 2cqw;
+  box-shadow:0 .5cqw 1.8cqw rgba(0,0,0,.55),inset 0 .15cqw 0 rgba(255,255,255,.45);white-space:nowrap;overflow:hidden}
+.faixa:disabled{cursor:default;opacity:1}
+.faixa.pode{cursor:pointer}
+.faixa.pode:hover,.faixa.pode:focus-visible{filter:brightness(1.08);outline:none}
+.faixa.longa{font-size:2.6cqw}
+
+/* Estados */
+.quadro[data-estado="sorteando"] .moldura,.quadro[data-estado="sorteado"] .moldura,.quadro[data-estado="ganhador"] .moldura{filter:drop-shadow(0 0 1.4cqw rgba(255,194,61,.75))}
+.quadro[data-estado="sorteando"] .moldura{animation:pisca 1s ease-in-out infinite}
+@keyframes pisca{50%{filter:drop-shadow(0 0 2.4cqw rgba(255,194,61,.95))}}
+.quadro[data-estado="sorteando"] .nome{opacity:.9}
+.quadro[data-estado="sorteado"] .nome,.quadro[data-estado="ganhador"] .nome{text-shadow:0 0 1.6cqw rgba(255,214,120,.75),0 .3cqw 1.2cqw rgba(0,0,0,.6);animation:respira 1.8s ease-in-out infinite}
+@keyframes respira{50%{transform:scale(1.025)}}
+.quadro[data-estado="ganhador"] .faixa{animation:entra .6s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes entra{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+.quadro[data-estado="invalido"] .nome{font-size:4.2cqw;white-space:normal}
+canvas#confete{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.dica{position:absolute;right:1.2cqw;bottom:1cqw;font-size:1.05cqw;color:rgba(255,255,255,.55);transition:opacity 1s}
+.dica.some{opacity:0}
+.login{max-width:420px;margin:0 auto;padding:0 16px}
+@media (prefers-reduced-motion: reduce){.quadro *{animation:none !important}}
