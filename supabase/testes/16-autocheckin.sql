@@ -1,7 +1,7 @@
 -- Auto check-in por QR Code (sem login).
 select set_config('request.jwt.claim.sub','',false);
 insert into eventos(id,d) values ('ev-qr','{"titulo":"Congresso QR","autoCheckin":true}');
-update eventos set d = d || jsonb_build_object('dias', jsonb_build_array(hoje_sp())) where id = 'ev-qr';
+update eventos set d = d || jsonb_build_object('dias', jsonb_build_array(hoje_sp()), 'autoCheckinTesteAte', (now() + interval '1 hour')::text) where id = 'ev-qr';
 insert into evento_participantes(id,evento,nome) values ('00000000-0000-0000-0000-00000000aa01','ev-qr','João da Silva'),('00000000-0000-0000-0000-00000000aa02','ev-qr','Maria Souza');
 select ok('Info: aberto hoje', (autocheckin_info('ev-qr')->>'aberto')::boolean);
 select t('Visitante busca o nome','anon',$q$select * from autocheckin_buscar('ev-qr','João Silva')$q$,'ok');
