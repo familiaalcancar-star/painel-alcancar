@@ -140,7 +140,7 @@ window.supabase = { createClient: () => ({
         T.sorteios.push(r); return {data:r, error:null}; })()
     : n === 'sorteio_marcar' ? (() => { const s = (T.sorteios||[]).find(x => x.id === args.p_id); if (!s) return {data:null, error:{message:'Sorteio não encontrado.'}}; s.status = args.p_status; s.atualizado_em = new Date().toISOString(); return {data:s, error:null}; })()
     : n === 'autocheckin_info' ? (() => { const ev = T.eventos.find(e => e.id === args.p_evento); if (!ev) return {data:null, error:null}; const h = new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'});
-        const aberto = !!ev.d.autoCheckin && (ev.d.dias || []).includes(h); return {data:{titulo:ev.d.titulo, img:ev.d.img||null, hoje: aberto ? h : null, aberto}, error:null}; })()
+        const aberto = !!ev.d.autoCheckin && (ev.d.dias || []).includes(h); return {data:{titulo:ev.d.titulo, img:ev.d.img||null, hoje: aberto ? h : null, aberto, abre:'19:30', fecha:'22:00'}, error:null}; })()
     : n === 'autocheckin_buscar' ? (() => { const h = new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'}), nn = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().split(/\s+/).filter(w => w.length >= 2);
         const q = nn(args.p_nome); if (q.length < 2) return {data:[], error:null};
         return {data:(T.evento_participantes||[]).filter(p => p.evento === args.p_evento && q.every(w => nn(p.nome).includes(w))).sort((a, b) => a.nome.localeCompare(b.nome)).slice(0, 3)

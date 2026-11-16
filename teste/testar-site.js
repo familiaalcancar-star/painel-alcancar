@@ -890,7 +890,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     const ctxF = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctxF.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
     const f = await ctxF.newPage(); await f.addInitScript(ev => localStorage.setItem('mockEventosExtra', JSON.stringify([ev])), {id:'ev-teste-desperta', d:{...EV.d, autoCheckin:true, dias:['2030-01-01']}});
     await f.goto('http://localhost:8123/checkin/?e=ev-teste-desperta'); await f.waitForTimeout(800);
-    conferir((await f.textContent('#app')).includes('O check-in pelo QR Code abre nos dias do Congresso (18 a 21/11)'), 'fora dos dias: só o aviso de quando abre');
+    conferir((await f.textContent('#app')).includes('O check-in pelo QR Code fica aberto de 18 a 21/11, das 19h30 às 22h.'), 'fechado: avisa dias e horário (abre/fecha do banco)');
     await ctxF.close();
     // App: selo "QR" na lista de participantes
     p = await abrirEv('gestao', {mockEvParticipantes: partsQ, mockEvPresencas: [{participante:'q1', dia:hojeEv, em:new Date().toISOString(), por_nome:'QR Code (auto check-in)'}, {participante:'q3', dia:hojeEv, em:new Date().toISOString(), por_nome:'Lima'}]});
