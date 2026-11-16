@@ -101,6 +101,8 @@ const semAcento = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').tri
 const podeLouvor = () => { const p = pessoaDe(S.uid); return ehEquipe(p) && LOUVOR_CON.includes(semAcento(conexaoNome(p.conexao))); };
 const temGestao = () => isAdm() || !!(pessoaDe(S.uid)||{}).gestao;
 const temMidia = () => isAdm() || !!(pessoaDe(S.uid)||{}).midia;
+// Extra Desperta: só a lista de presença (aba Check-in), sem o check-in dos voluntários.
+const temDesperta = () => isAdm() || !!(pessoaDe(S.uid)||{}).desperta;
 // Quem está escalado no Staff, função Check-in, em algum culto de hoje até daqui a 6 dias, também faz o check-in (só desse dia).
 // Ligação pelo nome escrito na escala: NOME E SOBRENOME (2 palavras ou mais), todas dentro do nome completo do cadastro.
 // Só para quem é admin, líder, auxiliar ou organização (quem é só consulta não ganha). Mesma regra do banco (nome_bate).
@@ -117,7 +119,8 @@ const ckLivre = () => temGestao() || ehOrganizacao();
 // Escalado no Staff como "Check-in" ou "Gestão de culto" na semana: data fixa no dia escalado.
 const ckEscalado = () => !ckLivre() && datasCheckin().length > 0;
 // A aba Check-in aparece SOMENTE para: admin, extra Gestão, papel Organização e os escalados acima.
-const veCheckin = () => ckLivre() || ckEscalado();
+const ckEquipe = () => ckLivre() || ckEscalado();
+const veCheckin = () => ckEquipe() || temDesperta();
 const temMinistro = () => !!(pessoaDe(S.uid)||{}).ministro;
 const temEscala = () => !!(pessoaDe(S.uid)||{}).escala;
 // Quem está escalado no Check-in da data também edita os nomes de todas as áreas daquele dia (área por conexão: só se a escala já existe).
@@ -1522,9 +1525,11 @@ function cardListasPresenca(){
 }
 async function prCarregar(){ const id = PR.lista; const r = await sb.from('presencas').select('*').eq('lista', id); if (id !== PR.lista) return;
   const m = {}; if (r.error) console.warn(r.error); else (r.data||[]).forEach(p => m[p.id] = p); PR.linhas = m; PR.ok = true; if (S.tab === 'checkin') render(); }
+// Cada presença guarda a hora e quem marcou ({em, por}); as antigas podem ser só "true".
+const prQuem = m => m && m.em ? 'Marcado às '+horaSP(m.em)+(m.por ? ' por '+m.por : '') : '';
 const prPessoas = () => Object.values(PR.linhas).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
 function viewPresenca(){
-  const g = listasPresenca().find(x => x.id === PR.lista), volta = '<button class="btn ghost small" data-pres-voltar>‹ Voltar ao check-in</button>';
+  const g = listasPresenca().find(x => x.id === PR.lista), volta = '<button class="btn ghost small" data-pres-voltar>‹ Voltar'+(ckEquipe() ? ' ao check-in' : '')+'</button>';
   if (!g) return volta + '<div class="empty">Carregando…</div>';
   if (!PR.ok) return volta + '<h2 style="font-size:22px;margin-top:12px">'+esc(g.nome)+'</h2><div class="empty">Carregando…</div>';
   const ps = prPessoas(), tot = d => ps.filter(p => p.dias && p.dias[d]).length, add = '<div class="bar pres-add"><button class="btn" data-pres-add>+ Adicionar pessoa</button></div>';
@@ -1535,7 +1540,9 @@ function viewPresenca(){
   if (ps.length > 8) h += '<input class="inp" id="prBusca" type="search" placeholder="🔍 Buscar nome…" autocomplete="off" value="'+esc(PR.busca)+'" style="margin:0 0 10px">';
   h += '<div class="card tbl-wrap pres-wrap"><table class="pres"><thead><tr><th>Nome</th>'+g.dias.map(d => '<th>'+esc(dataBR(d).slice(0,5))+'<small>'+esc(diaSem(d))+'</small><small class="pres-tot">'+tot(d)+'</small></th>').join('')+'</tr></thead><tbody>'
     + ps.map(p => '<tr data-pres-linha="'+esc(normNome(p.nome))+'"'+(PR.busca && !normNome(p.nome).includes(normNome(PR.busca)) ? ' hidden' : '')+'><th><button type="button" class="pres-nome" data-pres-edit="'+esc(p.id)+'">'+esc(p.nome)+'</button></th>'
-      + g.dias.map(d => '<td><label class="ckbox pres-cx'+(d === hoje() ? ' hoje' : '')+'"><input type="checkbox" data-pres="'+esc(p.id)+'|'+d+'"'+(p.dias && p.dias[d] ? ' checked' : '')+' aria-label="'+esc(p.nome+' · '+dataBR(d).slice(0,5))+'"><span></span></label></td>').join('')+'</tr>').join('')
+      + g.dias.map(d => { const m = p.dias && p.dias[d], trava = !!m && !isAdm();
+          return '<td><label class="ckbox pres-cx'+(d === hoje() ? ' hoje' : '')+(trava ? ' trava' : '')+'"'+(prQuem(m) ? ' title="'+esc(prQuem(m))+'"' : '')+'><input type="checkbox" data-pres="'+esc(p.id)+'|'+d+'"'+(m ? ' checked' : '')+(trava ? ' disabled' : '')+' aria-label="'+esc(p.nome+' · '+dataBR(d).slice(0,5))+'"><span></span></label>'
+            + (m && m.em ? '<small class="pres-h">'+esc(horaSP(m.em))+'</small>' : '') + '</td>'; }).join('')+'</tr>').join('')
     + '</tbody></table></div>' + add;
   return h;
 }
@@ -1555,7 +1562,7 @@ function prFormAdd(){
     const nome = String(fd.get('nome')||'').trim().replace(/\s+/g, ' '); if (!nome) return false;
     if (Object.values(PR.linhas).some(p => normNome(p.nome) === normNome(nome))) { toast(nome+' já está na lista.'); return false; }
     const p = {id:'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, dias: hojeNo && fd.get('hoje') ? {[hoje()]: true} : {}};
-    if (await prGravar(p)) { toast(nome+' adicionado(a).'); const i = $('#prN'); if (i) { i.value = ''; i.focus(); } }
+    if (await prGravar(p)) { toast(nome+' adicionado(a).'); prCarregar(); const i = $('#prN'); if (i) { i.value = ''; i.focus(); } }
     return false;
   }, body => body.querySelector('#prN').focus());
 }
@@ -1579,15 +1586,16 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('change', e => { const t = e.target; if (!t.dataset || !t.dataset.pres) return;
   const [id, d] = t.dataset.pres.split('|'), p = PR.linhas[id]; if (!p) return;
+  if (!t.checked && !isAdm()) { t.checked = true; toast('Presença já marcada não pode ser desmarcada. Fale com um administrador.'); return; }
   const dias = {...(p.dias||{})}; if (t.checked) dias[d] = true; else delete dias[d];
-  prGravar({...p, dias}).then(ok => { if (ok) { const th = document.querySelectorAll('table.pres thead th')[[...t.closest('tr').children].indexOf(t.closest('td'))]; if (th) { const s = th.querySelector('.pres-tot'); if (s) s.textContent = prPessoas().filter(x => x.dias && x.dias[d]).length; } } });
+  prGravar({...p, dias}).then(ok => { if (ok) prCarregar(); }); // recarrega para mostrar a hora gravada pelo banco
 });
 document.addEventListener('input', e => { if (e.target.id !== 'prBusca') return; PR.busca = e.target.value; const q = normNome(PR.busca);
   document.querySelectorAll('[data-pres-linha]').forEach(tr => tr.hidden = !!q && !tr.dataset.presLinha.includes(q)); });
 async function prExportar(tipo, btn){
   const g = listasPresenca().find(x => x.id === PR.lista); if (!g || !podeExportar()) return; const ps = prPessoas();
   const HEAD = ['Nome', ...g.dias.map(d => dataBR(d).slice(0,5)+' ('+diaSem(d)+')'), 'Total'];
-  const rows = ps.map(p => [p.nome, ...g.dias.map(d => p.dias && p.dias[d] ? 'X' : ''), String(g.dias.filter(d => p.dias && p.dias[d]).length)]);
+  const rows = ps.map(p => [p.nome, ...g.dias.map(d => { const m = p.dias && p.dias[d]; return m ? (m.em ? horaSP(m.em) : 'X') : ''; }), String(g.dias.filter(d => p.dias && p.dias[d]).length)]);
   const tots = ['Total ('+ps.length+' pessoas)', ...g.dias.map(d => String(ps.filter(p => p.dias && p.dias[d]).length)), ''];
   const titulo = ((S.cfg&&S.cfg.igreja)||'Família Alcançar')+' · Lista de presença · '+g.nome+' · '+periodoTxt(g.dias), arq = 'presenca-'+g.id, txt = btn.textContent; btn.textContent = '…'; btn.disabled = true;
   try {
@@ -1608,6 +1616,8 @@ async function prExportar(tipo, btn){
 function viewCheckin(){
   if (!veCheckin()) return '<div class="empty">Só administradores, a Gestão, a Organização e quem está escalado no Check-in ou na Gestão de culto acessam esta aba.</div>';
   if (PR.lista) return viewPresenca();
+  if (!ckEquipe()) { const c = cardListasPresenca(); return '<div class="bar"><h2 style="font-size:22px">Lista de presença</h2></div>'
+    + (c || (PR.esc === null ? '<div class="empty">Carregando…</div>' : '<div class="empty">Nenhum evento com lista de presença no momento.</div>')); }
   ckAbrir(); const fixo = ckEscalado();
   let h = '<div class="bar"><h2 style="font-size:22px">Check-in</h2></div>'
     + '<div class="card">'+(fixo ? '<div class="meta" style="margin:0">Você está escalado no check-in de</div><b class="ck-dia">'+esc(fmtDia(S.ckD))+'</b>'
@@ -2252,7 +2262,7 @@ function viewAjustes(){
       const dupId = statusDe(id) === 'pendente' ? contaDupDe(id, wpp) : null;
       return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+(dupId ? '<div class="dup">⚠️ Já tem cadastro em outra conta: <b>'+esc(nomeComp(dupId))+'</b>'+(emailDe(dupId) ? ' ('+esc(emailDe(dupId))+')' : '')+' · '+ROT_STATUS[statusDe(dupId)]+'<br><button type="button" class="btn small" data-transferir="'+esc(dupId)+'|'+esc(id)+'">Passar o cadastro para esta conta</button></div>' : '')+(emailDe(id) && nomeComp(id)!==emailDe(id)?'<br><span class="meta">✉️ '+esc(emailDe(id))+'</span>':'')+(wpp?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(wpp).replace(/\D/g,'').length<=11?'55':'')+String(wpp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(wpp)+'</a>':'')+'</td><td>'+celulaStatus(id)+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
         + '<td><select class="inp" data-p-papel="'+esc(id)+'">'+opts(Object.entries(PAPEIS).map(([k,v])=>({id:k,nome:v})), base.papel)+'</select></td>'
-        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-midia="'+esc(id)+'"'+((atual&&atual.midia) || base.papel==='midia' ?' checked':'')+'> Mídia</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; }).join('')
+        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-midia="'+esc(id)+'"'+((atual&&atual.midia) || base.papel==='midia' ?' checked':'')+'> Mídia</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-desp="'+esc(id)+'"'+(atual&&atual.desperta?' checked':'')+'> Desperta</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; }).join('')
     + '</tbody></table><div class="end"><button class="btn" data-salvar-pessoas>Salvar pessoas</button></div></div>';
   html += '<p class="hint">Administradores podem tudo (hoje: '+(nAdm+1)+' contando você; o ideal é até 5). Líder, Auxiliar e Organização preenchem a Direção do culto e o Super Kids nos dias em que a conexão deles está escalada; se a conexão for Flechas, Forasteiros ou Heróis, também o Louvor. <b>Extras:</b> Gestão vê a aba Check-in e imprime o check-in (PDF e Excel); Ministro pode editar a escala de Louvor; Avisos/Eventos pode publicar avisos e eventos (e editar ou excluir os que publicou); Escala pode preencher os nomes da Direção do culto e do Super Kids de qualquer conexão. Banco bloqueia alterações, cadastros, envio de mensagens, importações e exportações, mesmo que outros extras estejam marcados.</p>';
   return html;
@@ -2374,7 +2384,7 @@ document.addEventListener('click', async e => {
   const pessoas = {};
   document.querySelectorAll('[data-p-papel]').forEach(sel => { const id = sel.dataset.pPapel; const con = document.querySelector('[data-p-con="'+id+'"]').value;
     const ant = S.pessoas[id] || {}; const ped = (S.cadastros||{})[id] || {};
-    pessoas[id] = {id, status:document.querySelector('[data-p-status="'+id+'"]').value, banco:!!document.querySelector('[data-p-banco="'+id+'"]').checked, email: ant.email || ped.email || S.emails[id] || null, papel: sel.value, conexao: con || null, nome: ant.nome || ped.nome || (S.names[id]||{}).nome || '', apelido: ant.apelido || ped.apelido || '', whatsapp: ant.whatsapp || ped.whatsapp || '', gestao: !!(document.querySelector('[data-p-gestao="'+id+'"]')||{}).checked, ministro: !!(document.querySelector('[data-p-min="'+id+'"]')||{}).checked, avisos: !!(document.querySelector('[data-p-av="'+id+'"]')||{}).checked, escala: !!(document.querySelector('[data-p-esc="'+id+'"]')||{}).checked, midia: !!(document.querySelector('[data-p-midia="'+id+'"]')||{}).checked}; });
+    pessoas[id] = {id, status:document.querySelector('[data-p-status="'+id+'"]').value, banco:!!document.querySelector('[data-p-banco="'+id+'"]').checked, email: ant.email || ped.email || S.emails[id] || null, papel: sel.value, conexao: con || null, nome: ant.nome || ped.nome || (S.names[id]||{}).nome || '', apelido: ant.apelido || ped.apelido || '', whatsapp: ant.whatsapp || ped.whatsapp || '', gestao: !!(document.querySelector('[data-p-gestao="'+id+'"]')||{}).checked, ministro: !!(document.querySelector('[data-p-min="'+id+'"]')||{}).checked, avisos: !!(document.querySelector('[data-p-av="'+id+'"]')||{}).checked, escala: !!(document.querySelector('[data-p-esc="'+id+'"]')||{}).checked, midia: !!(document.querySelector('[data-p-midia="'+id+'"]')||{}).checked, desperta: !!(document.querySelector('[data-p-desp="'+id+'"]')||{}).checked}; });
   const falta = Object.entries(pessoas).filter(([id,p]) => p.status==='aprovado' && !p.banco && ehEquipe(p) && !p.conexao);
   if (falta.length) { toast('Escolha a conexão de '+falta.map(([id])=>nome(id)).join(', ')+'.'); return; }
   const nAdm = Object.values(pessoas).filter(p=>p.papel==='admin' && p.status==='aprovado' && !p.banco).length;
