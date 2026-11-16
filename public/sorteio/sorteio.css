@@ -1,0 +1,81 @@
+/* Sorteio do Congresso "Desperta": noite escura, nascer do sol laranja e dourado com brilho. */
+:root{
+  --noite:#05060c; --noite2:#0b1430; --sol:#ff7a1a; --sol2:#ff9d3c; --ouro:#ffc14d; --ouro2:#ffe08a;
+  --tinta:#ffffff; --suave:#b9bfd3; --linha:#232a44; --verde:#3DAA35; --vermelho:#ff5a4a;
+  color-scheme:dark;
+}
+:root:not([data-theme="light"]){color-scheme:dark}
+:root[data-theme="dark"]{color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--noite);color:var(--tinta);font-family:'Figtree',system-ui,sans-serif}
+body{background:radial-gradient(ellipse 120% 70% at 50% 115%, rgba(255,122,26,.55) 0%, rgba(255,122,26,.18) 32%, rgba(11,20,48,.0) 60%), linear-gradient(180deg, var(--noite) 0%, var(--noite2) 70%, #1a1430 100%) fixed;min-height:100vh}
+h1,h2,h3,.titulo{font-family:'Bricolage Grotesque',system-ui,sans-serif;letter-spacing:-.01em}
+button,input,select{font:inherit}
+.logo{height:34px;width:auto;opacity:.9}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:14px;padding:12px 18px;font-weight:700;font-size:16px;cursor:pointer;color:#1b0f00;background:linear-gradient(180deg,var(--ouro2),var(--ouro));text-decoration:none}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.ghost{background:rgba(255,255,255,.06);color:var(--tinta);border:1px solid var(--linha)}
+.btn.verde{background:var(--verde);color:#fff}
+.btn.vermelho{background:rgba(255,90,74,.15);color:#ffd2cc;border:1px solid rgba(255,90,74,.5)}
+.inp{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--linha);background:rgba(255,255,255,.05);color:var(--tinta);font-size:16px}
+label.f{display:block;font-size:13px;color:var(--suave);margin:12px 0 6px}
+.card{background:rgba(10,14,32,.78);border:1px solid var(--linha);border-radius:18px;padding:16px;margin:0 0 14px;backdrop-filter:blur(6px)}
+.meta{color:var(--suave);font-size:14px}
+.aviso{padding:12px 14px;border-radius:12px;background:rgba(255,193,77,.12);border:1px solid rgba(255,193,77,.45);color:var(--ouro2);margin:0 0 12px}
+.erro{background:rgba(255,90,74,.12);border-color:rgba(255,90,74,.5);color:#ffd2cc}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ---------- Controle (celular) ---------- */
+.ctl{max-width:560px;margin:0 auto;padding:16px 16px 40px}
+.ctl header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.ctl header h1{font-size:20px;margin:0;flex:1}
+.ctl header h1 span{display:block;font-size:12px;color:var(--ouro);letter-spacing:.18em;font-family:'Figtree',sans-serif;font-weight:700}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.conc{font-size:15px;margin-top:12px;color:var(--suave)}.conc b{font-size:28px;color:var(--ouro);font-family:'Bricolage Grotesque',sans-serif;margin-right:4px}
+.sortear{width:100%;font-size:28px;padding:22px;border-radius:20px;margin-top:14px;font-family:'Bricolage Grotesque',sans-serif;letter-spacing:.06em;
+  background:linear-gradient(180deg,#ffb15a,var(--sol));color:#1b0800;box-shadow:0 10px 40px rgba(255,122,26,.45),inset 0 1px 0 rgba(255,255,255,.5)}
+.atual{text-align:center}
+.atual .rot{font-size:12px;letter-spacing:.2em;color:var(--ouro);font-weight:700}
+.atual .nome{font-family:'Bricolage Grotesque',sans-serif;font-size:32px;margin:6px 0 4px;line-height:1.1;overflow-wrap:anywhere}
+.atual .premio{color:var(--ouro2)}
+.acoes{display:grid;gap:10px;margin-top:14px}
+.acoes .btn{width:100%;padding:16px;font-size:17px}
+table.hist{width:100%;border-collapse:collapse;font-size:14px}
+table.hist th,table.hist td{padding:8px 6px;border-bottom:1px solid var(--linha);text-align:left;vertical-align:top}
+table.hist th{color:var(--suave);font-weight:600;font-size:12px}
+.st{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;font-weight:700;white-space:nowrap}
+.st-sorteado{background:rgba(255,193,77,.18);color:var(--ouro2)}.st-ganhador{background:rgba(61,170,53,.2);color:#9be394}
+.st-retirado{background:rgba(30,136,229,.2);color:#9fd0ff}.st-ausente{background:rgba(255,90,74,.15);color:#ffb3aa}.st-liberado{background:rgba(255,255,255,.08);color:var(--suave)}
+.confirma{margin-top:10px}
+.links{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+
+/* ---------- Tela (telão) ---------- */
+body.tela{overflow:hidden;height:100vh}
+.palco{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:4vh 4vw}
+.palco .topo{position:absolute;top:3vh;left:0;right:0;display:flex;justify-content:center;align-items:center;gap:14px;opacity:.9}
+.palco .topo .logo{height:5vh}
+.palco .evento{font-size:2.2vh;color:var(--suave);letter-spacing:.3em;text-transform:uppercase}
+.espera .marca{font-family:'Bricolage Grotesque',sans-serif;font-size:8vw;line-height:.95;margin:0;letter-spacing:.02em;
+  background:linear-gradient(180deg,#fff 0%,var(--ouro2) 45%,var(--sol) 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 30px rgba(255,150,40,.35))}
+.espera .marca small{display:block;font-size:.38em;letter-spacing:.35em;-webkit-text-fill-color:var(--ouro)}
+.espera .conc{font-size:4vh;margin-top:4vh;color:var(--tinta)}.espera .conc b{font-size:9vh;display:block;color:var(--ouro);text-shadow:0 0 40px rgba(255,193,77,.55)}
+.rolo{font-family:'Bricolage Grotesque',sans-serif;font-size:9vw;line-height:1.05;min-height:1.2em;max-width:92vw;overflow-wrap:anywhere;color:#fff;text-shadow:0 0 30px rgba(255,255,255,.25)}
+.rolo.rodando{opacity:.85;filter:blur(.4px)}
+.rolo.parou{background:linear-gradient(180deg,#fff 0%,var(--ouro2) 50%,var(--sol) 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 40px rgba(255,170,60,.7));animation:pulso 1.6s ease-in-out infinite}
+@keyframes pulso{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+.sorteado .rot{font-size:3vh;letter-spacing:.4em;color:var(--ouro);font-weight:800;margin-bottom:2vh}
+.sorteado .premio{font-size:4vh;color:var(--ouro2);margin-top:3vh;min-height:1.2em}
+.sorteado .selo{display:inline-block;margin-top:3vh;font-family:'Bricolage Grotesque',sans-serif;font-size:6vh;padding:1vh 4vh;border-radius:99px;
+  background:linear-gradient(180deg,#fff2c4,var(--ouro));color:#2a1500;box-shadow:0 0 60px rgba(255,193,77,.6);animation:entra .6s cubic-bezier(.2,1.6,.4,1) both}
+.sorteado .selo.ausente{background:rgba(255,90,74,.2);color:#ffd2cc;box-shadow:none}
+@keyframes entra{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
+.brilho{position:fixed;inset:-20%;pointer-events:none;background:radial-gradient(circle at 50% 50%, rgba(255,200,90,.35), transparent 45%);opacity:0;transition:opacity .8s}
+.brilho.on{opacity:1;animation:gira 6s linear infinite}
+@keyframes gira{to{transform:rotate(360deg)}}
+canvas#confete{position:fixed;inset:0;pointer-events:none;width:100vw;height:100vh}
+.cantos{position:fixed;right:1.5vw;bottom:1.5vh;display:flex;gap:8px;opacity:.25;transition:opacity .3s}
+.cantos:hover,.cantos:focus-within{opacity:.9}
+.cantos button{background:rgba(255,255,255,.08);border:1px solid var(--linha);color:var(--tinta);border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer}
+.login{max-width:420px;margin:12vh auto;padding:0 16px}
+@media (prefers-reduced-motion: reduce){.rolo.parou,.brilho.on{animation:none}}

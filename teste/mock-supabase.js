@@ -35,10 +35,11 @@ try { const mm = JSON.parse(localStorage.getItem('mockMarcas') || 'null'); if (m
 window.__TABELAS = T;
 const derivados = (t, r) => { if (t==='escalas' || t==='eventos') r.data = r.d && r.d.data; if (t==='escalas') { r.culto = r.d.culto; r.area = r.d.area; } return r; };
 Object.keys(T).forEach(t => T[t].forEach(r => derivados(t, r)));
-const chaves = {checkin_itens:['nome'], checkin_marcas:['data','culto','chave'], checklist_marcas:['data','culto','item'], convites:['email'], presencas:['lista','id']};
+const chaves = {checkin_itens:['nome'], checkin_marcas:['data','culto','chave'], checklist_marcas:['data','culto','item'], convites:['email'], presencas:['lista','id'], evento_presencas:['participante','dia']};
 const mesma = (t, a, b) => (chaves[t]||['id']).every(k => a[k] === b[k]);
 let sessao = null; const ouvintes = [];
 try { JSON.parse(localStorage.getItem('mockPessoasExtra') || '[]').forEach(q => T.pessoas.push(q)); } catch(e){}
+try { JSON.parse(localStorage.getItem('mockEventosExtra') || '[]').forEach(ev => { T.eventos = T.eventos.filter(e => e.id !== ev.id); T.eventos.push({id:ev.id, d:ev.d, autor:null}); }); } catch(e){}
 try { const p = localStorage.getItem('mockPapel'); if (p && U[p]) sessao = {user:{id:U[p], email:p+'@x', app_metadata:{provider: localStorage.getItem('mockProv') || 'email'}}}; } catch(e){}
 const emitir = ev => ouvintes.forEach(cb => setTimeout(() => cb(ev, sessao), 0));
 window.__mockRecuperar = () => { sessao = {user:{id:U.novo, email:'nova.pessoa@gmail.com', user_metadata:{}}}; emitir('PASSWORD_RECOVERY'); };
@@ -68,6 +69,11 @@ class Q {
         if (i >= 0 && this.op === 'insert') return {data:null, error:{code:'23505', message:'duplicate key'}};
         if (this.t === 'historico') { const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}; Object.assign(n, {id:tab.length+1, por:sessao && sessao.user.id, em:agora, por_nome: eu.apelido || String(eu.nome||'').split(' ')[0]}); }
         if (['avisos','eventos','escalas'].includes(this.t) && i < 0) { n.autor = sessao && sessao.user.id; n.criado_em = agora; }
+        if (this.t === 'evento_participantes' && !n.id) { const nn = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+          if (tab.some(r => r.evento === n.evento && nn(r.nome) === nn(n.nome))) return {data:null, error:{code:'23505', message:'duplicate key value violates unique constraint'}};
+          n.id = 'pp-'+Math.random().toString(36).slice(2,10); }
+        if (this.t === 'evento_presencas') { const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}; n.por = sessao && sessao.user.id; n.por_nome = eu.apelido || String(eu.nome||'').split(' ')[0]; n.em = agora;
+          if (eu.papel !== 'admin' && n.dia !== new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'})) return {data:null, error:{message:'new row violates row-level security policy'}}; }
         if (this.t === 'presencas') { // igual ao gatilho presencas_guarda: carimba hora e quem marcou; só admin desmarca
           const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}, quem = eu.apelido || String(eu.nome||'').split(' ')[0], old = i >= 0 ? tab[i] : null, velhos = (old && old.dias) || {};
           if (eu.papel !== 'admin' && Object.keys(velhos).some(k => !(n.dias||{})[k])) return {data:null, error:{message:'Presença já marcada não pode ser desmarcada (só um administrador).'}};
@@ -89,6 +95,7 @@ class Q {
       return {data: this.ret ? novos : null, error:null};
     }
     if (this.op === 'update') { const l = tab.filter(casa); l.forEach(r => { Object.assign(r, JSON.parse(JSON.stringify(this.v))); derivados(this.t, r); }); return {data: this.ret ? l.map(r => ({id:r.id})) : null, error:null}; }
+    if (this.op === 'delete' && this.t === 'evento_presencas' && (T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}).papel !== 'admin') return {data: [], error:null};
     if (this.op === 'delete') { const l = tab.filter(casa); T[this.t] = tab.filter(r => !casa(r)); return {data: this.ret ? l.map(r => ({id:r.id})) : null, error:null}; }
     let l = tab.filter(casa).map(r => JSON.parse(JSON.stringify(r)));
     if (this.ord) { const [k, asc] = this.ord; l.sort((a,b) => String(a[k]??'').localeCompare(String(b[k]??'')) * (asc?1:-1)); }
@@ -98,6 +105,10 @@ class Q {
   }
   then(ok, err){ return new Promise(r => setTimeout(r, 15)).then(() => this.exec()).then(ok, err); }
 }
+function sorteioEleg(ev, dia){ const ss = T.sorteios || [];
+  return (T.evento_participantes||[]).filter(p => p.evento === ev && (T.evento_presencas||[]).some(r => r.participante === p.id && r.dia === dia)
+    && !ss.some(s => s.participante === p.id && (['sorteado','ganhador','retirado'].includes(s.status) || (s.status === 'ausente' && s.dia === dia))))
+    .map(p => ({id:p.id, nome:p.nome})).sort((a, b) => a.nome.localeCompare(b.nome)); }
 window.supabase = { createClient: () => ({
   from: t => new Q(t),
   rpc: async (n, args) => (window.__rpc = window.__rpc || []).push([n, args]) && n === 'trocar_escalado' ? (() => {
@@ -110,12 +121,23 @@ window.supabase = { createClient: () => ({
         return {data: o ? [{email: String(o.email).replace(/^(.{2})[^@]*(@.*)$/, '$1•••$2'), provedor:'email'}] : [], error:null}; })()
     : n === 'transferir_pessoa' ? (() => { const o = T.pessoas.find(q => q.id === args.p_de); if (!o) return {data:null, error:{message:'conta antiga sem cadastro'}};
         T.pessoas = T.pessoas.filter(q => q.id !== args.p_para); T.pessoas.push({...o, id:args.p_para, status:'aprovado'}); o.status = 'removido'; T.cadastros = T.cadastros.filter(c => c.id !== args.p_para); return {data:null, error:null}; })()
+    : n === 'pode_sortear' ? {data: ['admin'].includes((T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}).papel) || !!(T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}).gestao, error:null}
+    : n === 'sorteio_elegiveis' ? {data: sorteioEleg(args.p_evento, args.p_dia), error:null}
+    : n === 'sortear' ? (() => { T.sorteios = T.sorteios || [];
+        if (T.sorteios.some(s => s.evento === args.p_evento && s.status === 'sorteado')) return {data:null, error:{message:'Confirme (ganhador / retirou / ausente) o sorteado atual antes de sortear de novo.'}};
+        const l = sorteioEleg(args.p_evento, args.p_dia); if (!l.length) return {data:null, error:{message:'Ninguém disponível para sortear neste dia.'}};
+        const e = l[Math.floor(Math.random() * l.length)], r = {id:'s-'+Math.random().toString(36).slice(2,10), evento:args.p_evento, dia:args.p_dia, participante:e.id, nome:e.nome, premio:args.p_premio||'', status:'sorteado',
+          rodada: T.sorteios.filter(s => s.evento === args.p_evento).reduce((m, s) => Math.max(m, s.rodada), 0) + 1, elegiveis:l.length, em:new Date().toISOString(), atualizado_em:new Date().toISOString()};
+        T.sorteios.push(r); return {data:r, error:null}; })()
+    : n === 'sorteio_marcar' ? (() => { const s = (T.sorteios||[]).find(x => x.id === args.p_id); if (!s) return {data:null, error:{message:'Sorteio não encontrado.'}}; s.status = args.p_status; s.atualizado_em = new Date().toISOString(); return {data:s, error:null}; })()
+    : n === 'sorteio_reincluir_todos' ? (() => { let k = 0; (T.sorteios||[]).forEach(s => { if (s.evento === args.p_evento && s.status !== 'liberado') { s.status = 'liberado'; k++; } }); return {data:k, error:null}; })()
     : n === 'checklist_confirmar' ? (() => { const m = T.checklist_marcas.find(q => q.data === args.p_data && q.culto === args.p_culto && q.item === args.p_item); if (!m) return {data:null, error:{message:'Item ainda não marcado.'}};
         const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}; if (m.por !== sessao.user.id && !m.confirmado_por) Object.assign(m, {confirmado_por:sessao.user.id, confirmado_nome: eu.apelido || String(eu.nome||'').split(' ')[0], confirmado_em:new Date().toISOString()}); return {data:null, error:null}; })()
     : n === 'fez_checkin' && T.escalas.some(e => e.d.data === args.p_data && e.d.culto === args.p_culto && e.d.cultoNome) ? (() => {
         // Culto especial (Congresso): vale a presença da entrada (lista de presença), como no banco.
         const eu = T.pessoas.find(p => sessao && p.id === sessao.user.id) || {}, nn = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
-        return {data: (T.presencas||[]).some(r => r.dias && r.dias[args.p_data] && [nn(eu.apelido), nn(eu.nome)].filter(Boolean).includes(nn(r.nome))), error:null}; })()
+        const ok = (T.evento_presencas||[]).some(r => r.dia === args.p_data && (T.evento_participantes||[]).some(pp => pp.id === r.participante && [nn(eu.apelido), nn(eu.nome)].filter(Boolean).includes(nn(pp.nome))));
+        return {data: ok, error:null}; })()
     : n === 'fez_checkin' ? {data: !!(T.checkin_marcas||[]).some(c => c.data === args.p_data && c.culto === args.p_culto && c.ci) || localStorage.getItem('mockFezCheckin') === '1', error:null} : n === 'escalas_publicas' ? {data: T.escalas.filter(r => r.data >= args.p_de && r.data <= args.p_ate).sort((a,b) => a.data.localeCompare(b.data)).map(r => { const d = JSON.parse(JSON.stringify(r.d)); const qtd = (d.funcoes||[]).reduce((s,f) => s + (f.pessoas||[]).filter(x => String(x).trim()).length, 0); delete d.funcoes; return {id:r.id, d:{...d, qtd}}; }), error:null} : n === 'pessoas_nomes' ? {data: sessao ? T.pessoas.map(p => ({id:p.id, nome:p.nome, apelido:p.apelido})) : [], error:null} : {data:null, error:null},
   channel: () => ({ on(){ return this; }, subscribe(){ return this; } }), removeChannel(){},
   storage: { from: () => ({ upload: async () => ({data:{}, error:null}), getPublicUrl: () => ({data:{publicUrl:'imagens/rede-igPrev.webp'}}) }) },

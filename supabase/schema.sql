@@ -1850,3 +1850,218 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function public.fez_checkin(text, text) from public, anon;
 grant execute on function public.fez_checkin(text, text) to authenticated;
+
+-- ---------- Check-in de PARTICIPANTES de eventos (16/11/2026; aplicado pelo Claude do chat: migrações
+-- "checkin_participantes_evento" e "checkin_participantes_dia") ----------
+-- Ex.: Congresso de Homens 18 a 21/11. Lista de nomes por evento + presença por dia.
+
+update eventos set d = d || '{"checkinParticipantes": true, "dias": ["2026-11-18","2026-11-19","2026-11-20","2026-11-21"]}'::jsonb
+ where id = 'ev-2026-11-18-desperta';
+
+create table if not exists public.evento_participantes (
+  id uuid primary key default gen_random_uuid(),
+  evento text not null references public.eventos(id) on delete cascade,
+  nome text not null check (length(trim(nome)) between 2 and 120),
+  criado_por uuid default auth.uid(),
+  criado_em timestamptz not null default now()
+);
+create unique index if not exists evento_participantes_nome_uniq on public.evento_participantes (evento, norm_nome(nome));
+
+create table if not exists public.evento_presencas (
+  participante uuid not null references public.evento_participantes(id) on delete cascade,
+  dia text not null,
+  por uuid default auth.uid(),
+  em timestamptz not null default now(),
+  primary key (participante, dia)
+);
+
+-- Quem pode usar: admin, extra Gestão, Organização, ou escalado no Check-in/Gestão de culto em algum dia do evento.
+create or replace function public.pode_checkin_evento(p_evento text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select is_admin() or tem_gestao() or eh_organizacao()
+      or exists (select 1 from eventos e, jsonb_array_elements_text(coalesce(e.d->'dias', jsonb_build_array(e.data))) dia
+                  where e.id = p_evento and checkin_escalado(dia))
+$$;
+revoke execute on function public.pode_checkin_evento(text) from public, anon;
+grant execute on function public.pode_checkin_evento(text) to authenticated;
+
+alter table public.evento_participantes enable row level security;
+alter table public.evento_presencas enable row level security;
+grant select, insert, update, delete on public.evento_participantes, public.evento_presencas to authenticated;
+revoke all on public.evento_participantes, public.evento_presencas from anon;
+
+drop policy if exists evp_tudo on public.evento_participantes;
+create policy evp_tudo on public.evento_participantes for all to authenticated
+  using (pode_checkin_evento(evento)) with check (pode_checkin_evento(evento));
+
+drop policy if exists evpres_ler on public.evento_presencas;
+create policy evpres_ler on public.evento_presencas for select to authenticated
+  using (pode_checkin_evento((select evento from evento_participantes p where p.id = participante)));
+-- Marcar: só no próprio dia (admin, qualquer dia).
+drop policy if exists evpres_marcar on public.evento_presencas;
+create policy evpres_marcar on public.evento_presencas for insert to authenticated
+  with check (is_admin() or (pode_checkin_evento((select evento from evento_participantes p where p.id = participante)) and dia = hoje_sp()));
+drop policy if exists evpres_desmarcar on public.evento_presencas;
+create policy evpres_desmarcar on public.evento_presencas for delete to authenticated
+  using (is_admin() or (pode_checkin_evento((select evento from evento_participantes p where p.id = participante)) and dia = hoje_sp()));
+
+-- Gatilho: grava quem marcou/criou.
+create or replace function public.evento_quem() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_table_name = 'evento_presencas' then new.por := auth.uid(); new.em := now();
+  else new.criado_por := coalesce(auth.uid(), new.criado_por); new.nome := trim(regexp_replace(new.nome, '\s+', ' ', 'g')); end if;
+  return new;
+end $$;
+drop trigger if exists evento_quem on public.evento_presencas;
+create trigger evento_quem before insert on public.evento_presencas for each row execute function public.evento_quem();
+drop trigger if exists evento_quem on public.evento_participantes;
+create trigger evento_quem before insert or update on public.evento_participantes for each row execute function public.evento_quem();
+revoke execute on function public.evento_quem() from public, anon, authenticated;
+
+do $$ begin
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and tablename='evento_presencas') then
+    alter publication supabase_realtime add table public.evento_presencas; end if;
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and tablename='evento_participantes') then
+    alter publication supabase_realtime add table public.evento_participantes; end if;
+end $$;
+
+-- ---------- SORTEIO dos participantes com check-in no dia (16/11/2026; aplicado pelo Claude do chat: migração "sorteio_evento") ----------
+-- Ex.: Congresso "Desperta".
+create table if not exists public.sorteios (
+  id uuid primary key default gen_random_uuid(),
+  evento text not null references public.eventos(id) on delete cascade,
+  dia text not null,
+  participante uuid not null references public.evento_participantes(id) on delete cascade,
+  nome text not null,
+  premio text not null default '',
+  status text not null default 'sorteado' check (status in ('sorteado','ganhador','retirado','ausente','liberado')),
+  rodada int not null,
+  elegiveis int not null,
+  por uuid default auth.uid(),
+  em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+create index if not exists sorteios_evento_idx on public.sorteios (evento, em desc);
+alter table public.sorteios enable row level security;
+grant select on public.sorteios to authenticated;
+revoke all on public.sorteios from anon;
+
+-- Quem conduz o sorteio: admin, Gestão ou Organização.
+create or replace function public.pode_sortear() returns boolean
+language sql stable security definer set search_path = public as $$
+  select is_admin() or tem_gestao() or eh_organizacao()
+$$;
+revoke execute on function public.pode_sortear() from public, anon;
+grant execute on function public.pode_sortear() to authenticated;
+
+drop policy if exists sorteios_ler on public.sorteios;
+create policy sorteios_ler on public.sorteios for select to authenticated
+  using (pode_sortear() or pode_checkin_evento(evento));
+
+-- Lista de quem pode ser sorteado no dia: fez check-in no dia e ainda não ganhou/retirou prêmio
+-- (em nenhum dia do evento), nem está com sorteio pendente, nem foi marcado ausente neste mesmo dia.
+create or replace function public.sorteio_elegiveis(p_evento text, p_dia text)
+returns table(id uuid, nome text) language sql stable security definer set search_path = public as $$
+  select p.id, p.nome
+    from evento_participantes p
+    join evento_presencas pr on pr.participante = p.id and pr.dia = p_dia
+   where p.evento = p_evento
+     and (pode_sortear() or pode_checkin_evento(p_evento))
+     and not exists (select 1 from sorteios s where s.participante = p.id
+                      and (s.status in ('sorteado','ganhador','retirado') or (s.status = 'ausente' and s.dia = p_dia)))
+   order by p.nome
+$$;
+revoke execute on function public.sorteio_elegiveis(text,text) from public, anon;
+grant execute on function public.sorteio_elegiveis(text,text) to authenticated;
+
+-- Sorteia 1 nome. Aleatoriedade: gen_random_uuid() (gerador criptográfico do Postgres), sem peso nem regra.
+create or replace function public.sortear(p_evento text, p_dia text, p_premio text default '')
+returns public.sorteios language plpgsql volatile security definer set search_path = public as $$
+declare v_id uuid; v_nome text; v_total int; v_rodada int; r sorteios;
+begin
+  if not pode_sortear() then raise exception 'Sem permissão para sortear.'; end if;
+  perform pg_advisory_xact_lock(hashtext('sorteio:'||p_evento));
+  if exists (select 1 from sorteios where evento = p_evento and status = 'sorteado') then
+    raise exception 'Confirme (ganhador / retirou / ausente) o sorteado atual antes de sortear de novo.';
+  end if;
+  select count(*) into v_total from sorteio_elegiveis(p_evento, p_dia);
+  if v_total = 0 then raise exception 'Ninguém disponível para sortear neste dia.'; end if;
+  select e.id, e.nome into v_id, v_nome from sorteio_elegiveis(p_evento, p_dia) e order by gen_random_uuid() limit 1;
+  select coalesce(max(rodada), 0) + 1 into v_rodada from sorteios where evento = p_evento;
+  insert into sorteios (evento, dia, participante, nome, premio, rodada, elegiveis, por)
+  values (p_evento, p_dia, v_id, v_nome, coalesce(trim(p_premio), ''), v_rodada, v_total, auth.uid())
+  returning * into r;
+  return r;
+end $$;
+revoke execute on function public.sortear(text,text,text) from public, anon;
+grant execute on function public.sortear(text,text,text) to authenticated;
+
+-- Marca o resultado: 'ganhador', 'retirado' (bloqueiam nos próximos dias), 'ausente' (volta a valer em outro dia).
+create or replace function public.sorteio_marcar(p_id uuid, p_status text)
+returns public.sorteios language plpgsql security definer set search_path = public as $$
+declare r sorteios;
+begin
+  if not pode_sortear() then raise exception 'Sem permissão.'; end if;
+  if p_status not in ('ganhador','retirado','ausente') then raise exception 'Status inválido.'; end if;
+  update sorteios set status = p_status, atualizado_em = now() where id = p_id returning * into r;
+  if r.id is null then raise exception 'Sorteio não encontrado.'; end if;
+  return r;
+end $$;
+revoke execute on function public.sorteio_marcar(uuid,text) from public, anon;
+grant execute on function public.sorteio_marcar(uuid,text) to authenticated;
+
+-- Botão "Incluir todos de volta": libera todos os sorteados (mantém o histórico com status 'liberado').
+create or replace function public.sorteio_reincluir_todos(p_evento text)
+returns int language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if not pode_sortear() then raise exception 'Sem permissão.'; end if;
+  update sorteios set status = 'liberado', atualizado_em = now()
+   where evento = p_evento and status in ('sorteado','ganhador','retirado','ausente');
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke execute on function public.sorteio_reincluir_todos(text) from public, anon;
+grant execute on function public.sorteio_reincluir_todos(text) to authenticated;
+
+do $$ begin
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and tablename='sorteios') then
+    alter publication supabase_realtime add table public.sorteios; end if;
+end $$;
+
+-- ---------- Participantes: uma lista só (16/11/2026) ----------
+-- A tela do site (aba Check-in › Participantes) passa a usar evento_participantes / evento_presencas,
+-- as mesmas tabelas do sorteio. A tabela "presencas" (lista feita antes, vazia) fica sem uso.
+-- Regras pedidas: extra Desperta também usa a lista; presença marcada só o administrador desmarca;
+-- cada presença guarda a hora e quem marcou; checklist da Mídia no culto especial libera com a presença.
+
+create or replace function public.pode_checkin_evento(p_evento text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select is_admin() or tem_gestao() or eh_organizacao() or tem_desperta()
+      or exists (select 1 from eventos e, jsonb_array_elements_text(coalesce(e.d->'dias', jsonb_build_array(e.data))) dia
+                  where e.id = p_evento and checkin_escalado(dia))
+$$;
+
+alter policy evpres_desmarcar on public.evento_presencas using (is_admin());
+
+alter table public.evento_presencas add column if not exists por_nome text;
+create or replace function public.evento_quem() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_table_name = 'evento_presencas' then new.por := auth.uid(); new.por_nome := notif_nome(auth.uid()); new.em := now();
+  else new.criado_por := coalesce(auth.uid(), new.criado_por); new.nome := trim(regexp_replace(new.nome, '\s+', ' ', 'g')); end if;
+  return new;
+end $$;
+
+create or replace function public.fez_checkin(p_data text, p_culto text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select case
+    when exists (select 1 from escalas e where e.data = p_data and e.culto = p_culto and coalesce(e.d->>'cultoNome', '') <> '')
+    then exists (
+      select 1 from evento_presencas pr join evento_participantes ep on ep.id = pr.participante join pessoas p on p.id = auth.uid()
+       where pr.dia = p_data and midia_nome_bate(ep.nome, p.apelido, p.nome))
+    else exists (
+      select 1 from checkin_marcas cm join pessoas p on p.id = auth.uid()
+       where cm.data = p_data and cm.culto = p_culto and cm.ci
+         and midia_nome_bate(coalesce(nullif(cm.nome,''), cm.escalado), p.apelido, p.nome))
+  end
+$$;

@@ -27,7 +27,7 @@ const TIPOS = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css',
 const srv = http.createServer((req, res) => {
   const u = decodeURIComponent(req.url.split('?')[0].split('#')[0]);
   if (u.endsWith('/vendor/supabase-2.117.3.js')) { res.writeHead(200, {'content-type':'text/javascript'}); return res.end(MOCK); }
-  const f = path.join(PUB, u === '/' ? 'index.html' : u);
+  let f = path.join(PUB, u === '/' ? 'index.html' : u); if (u !== '/' && u.endsWith('/')) f = path.join(f, 'index.html');
   if (!f.startsWith(PUB) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, {'content-type': TIPOS[path.extname(f)] || 'application/octet-stream'}); fs.createReadStream(f).pipe(res);
 });
@@ -663,84 +663,118 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await ctx.close();
   }
 
-  console.log('Lista de presença (evento de vários dias)');
+  // Evento com check-in de participantes (como o Congresso "Desperta"): hoje + 3 dias.
+  const hojeEv = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const diasEv = [0,1,2,3].map(n => { const d = new Date(hojeEv+'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); });
+  const EV = {id:'ev-teste-desperta', d:{titulo:'Congresso de Homens “Desperta”', data:diasEv[0], hora:'20:00', local:'Família Alcançar', checkinParticipantes:true, dias:diasEv}};
+  const abrirEv = async (papel, extra = {}) => { const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo', acceptDownloads: true }); await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    const pg = await ctx.newPage(); pg.erros = []; pg.on('pageerror', e => pg.erros.push(e.message));
+    await pg.addInitScript(([pp, ev, ex]) => { localStorage.setItem('mockPapel', pp); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEventosExtra', JSON.stringify([ev]));
+      Object.entries(ex).forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v))); }, [papel, EV, extra]);
+    return pg; };
+  const dd = d => d.slice(8,10)+'/'+d.slice(5,7);
+
+  console.log('Participantes (check-in de evento de vários dias)');
   {
-    const base = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) + 'T12:00:00Z');
-    const dias = [0,1,2,3].map(n => { const d = new Date(base); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); });
-    const extra = dias.map(d => ({id: d+'_noite_staff', d:{data:d, culto:'noite', area:'staff', cultoNome:'Congresso', hora:'20h', funcoes:[]}}));
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo', acceptDownloads: true }); await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
-    p = await ctx.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
-    await p.addInitScript(([e]) => { localStorage.setItem('mockPapel', 'gestao'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); }, [extra]);
-    await p.goto('http://localhost:8123/#checkin'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(700);
-    const dd = d => d.slice(8,10)+'/'+d.slice(5,7);
-    conferir((await p.textContent('.pres-card')).includes('Congresso · '+dd(dias[0])+' a '+dd(dias[3])), 'Check-in mostra a lista de presença do Congresso (4 dias)');
+    p = await abrirEv('gestao'); await p.goto('http://localhost:8123/#checkin'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(700);
+    conferir((await p.textContent('.pres-card')).includes('Participantes') && (await p.textContent('.pres-card')).includes(dd(diasEv[0])+' a '+dd(diasEv[3])), 'Check-in mostra "Participantes" do evento (4 dias)');
+    conferir(!!(await p.$('.pres-card a[href^="sorteio/controle/"]')), 'Gestão vê o botão "🎲 Sorteio"');
     await p.click('[data-pres-abrir]'); await p.waitForTimeout(400);
     conferir((await p.$$('[data-pres-add]')).length === 1 && (await p.textContent('#view')).includes('Ninguém na lista'), 'lista vazia com "+ Adicionar pessoa"');
     await p.click('[data-pres-add]'); await p.waitForSelector('#dlg[open] #prN');
-    await p.fill('#prN', 'João da Silva'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(300);
-    await p.fill('#prN', 'Pedro Santos'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(300);
-    await p.fill('#prN', 'joão da silva'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(300);
-    const pr = await p.evaluate(() => window.__TABELAS.presencas);
-    conferir(pr.length === 2 && pr.every(x => Object.keys(x.dias).length === 1 && !!x.dias[Object.keys(x.dias)[0]].em), 'adiciona várias pessoas seguidas (já com presença de hoje); nome repetido é recusado');
+    for (const n of ['João da Silva', 'Pedro Santos', 'Maria Souza', 'joão da silva']) { await p.fill('#prN', n); await p.click('#dlg [type=submit]'); await p.waitForTimeout(350); }
+    const pp = await p.evaluate(() => ({part: window.__TABELAS.evento_participantes.length, pres: window.__TABELAS.evento_presencas.length, por: window.__TABELAS.evento_presencas[0].por_nome}));
+    conferir(pp.part === 3 && pp.pres === 3 && pp.por === 'Gestora', 'adiciona várias pessoas seguidas (check-in de hoje com quem marcou); nome repetido é recusado');
     await p.click('#dlg [data-cancel]'); await p.waitForTimeout(300);
-    conferir((await p.$$('[data-pres-add]')).length === 2 && (await p.$$('table.pres tbody tr')).length === 2 && (await p.$$eval('table.pres thead th', l => l.length)) === 5, '"+ Adicionar pessoa" em cima e embaixo; grade com Nome + 4 dias');
-    await p.click('table.pres tbody tr >> nth=1 >> label:has(input[data-pres$="|'+dias[1]+'"])'); await p.waitForTimeout(400);
-    conferir(await p.evaluate(d => !!window.__TABELAS.presencas.find(x => x.nome === 'Pedro Santos').dias[d].em, dias[1]) && (await p.textContent('table.pres thead th >> nth=2')).includes('1'), 'marcar presença em outro dia salva e atualiza o total do dia');
-    await p.screenshot({ path: path.join(SAIDA, '53-lista-presenca.png'), fullPage: true });
+    conferir((await p.$$('[data-pres-add]')).length === 2 && (await p.$$('table.pres tbody tr')).length === 3 && (await p.$$eval('table.pres thead th', l => l.length)) === 5, '"+ Adicionar pessoa" em cima e embaixo; grade com Nome + 4 dias');
+    conferir(await p.$eval('table.pres tbody tr >> nth=0', tr => { const l = [...tr.querySelectorAll('input[data-pres]')]; return l[0].checked && l[0].disabled && l.slice(1).every(i => i.disabled && !i.checked); })
+      && /\d{2}:\d{2}/.test(await p.textContent('table.pres tbody tr >> nth=0 >> .pres-h')), 'check-in feito fica travado com a hora; outros dias só no dia');
+    await p.screenshot({ path: path.join(SAIDA, '53-participantes.png'), fullPage: true });
     const dl = p.waitForEvent('download'); await p.click('[data-pres-pdf]'); const arq = await dl;
-    conferir(arq.suggestedFilename().startsWith('presenca-congresso-'), 'lista de presença em PDF');
-    conferir(await p.$eval('table.pres tbody tr >> nth=0', tr => { const i = tr.querySelector('input[data-pres]'); return i.checked && i.disabled; }) && /\d{2}:\d{2}/.test(await p.textContent('table.pres tbody tr >> nth=0 >> .pres-h')), 'presença marcada fica travada (não desmarca) e mostra a hora');
-    await p.click('[data-pres-edit] >> nth=1'); await p.waitForSelector('#dlg[open] [data-pres-rm]'); await p.click('[data-pres-rm]'); await p.waitForSelector('[data-r="1"]'); await p.click('[data-r="1"]'); await p.waitForTimeout(400);
-    conferir(await p.evaluate(() => window.__TABELAS.presencas.length === 1 && window.__TABELAS.presencas[0].nome === 'João da Silva'), 'remover pessoa da lista (com confirmação)');
+    conferir(arq.suggestedFilename().startsWith('presenca-ev-teste-desperta'), 'participantes em PDF');
+    await p.click('[data-pres-edit] >> nth=1'); await p.waitForSelector('#dlg[open] [data-pres-rm]'); await p.click('[data-pres-rm]'); await p.waitForSelector('[data-r="1"]'); await p.click('[data-r="1"]'); await p.waitForTimeout(500);
+    conferir(await p.evaluate(() => window.__TABELAS.evento_participantes.length === 2), 'remover pessoa da lista (com confirmação)');
     conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
-    await ctx.close();
+    await p.context().close();
   }
 
-  console.log('Extra Desperta (lista de presença)');
+  console.log('Extra Desperta (participantes)');
   {
-    const base = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) + 'T12:00:00Z');
-    const dias = [0,1,2].map(n => { const d = new Date(base); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); });
-    const extra = dias.map(d => ({id: d+'_noite_staff', d:{data:d, culto:'noite', area:'staff', cultoNome:'Congresso', hora:'20h', funcoes:[]}}));
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
-    p = await ctx.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
-    await p.addInitScript(([e]) => { localStorage.setItem('mockPapel', 'novo'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEscalaExtra', JSON.stringify(e));
-      localStorage.setItem('mockPessoasExtra', JSON.stringify([{id:'00000000-0000-0000-0000-000000000099', email:'novo@x', nome:'Lima Desperta', apelido:'Lima', whatsapp:'11912340000', papel:'leitura', status:'aprovado', desperta:true}])); }, [extra]);
+    p = await abrirEv('novo', {mockPessoasExtra:[{id:'00000000-0000-0000-0000-000000000099', email:'novo@x', nome:'Lima Desperta', apelido:'Lima', whatsapp:'11912340000', papel:'leitura', status:'aprovado', desperta:true}]});
     await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(500);
     conferir(JSON.stringify(await abas(p)).includes('Check-in'), 'extra Desperta vê a aba Check-in');
-    await p.click('#tabs [data-tab="checkin"]'); await p.waitForTimeout(600);
-    conferir(!!(await p.$('.pres-card')) && !(await p.$('#ckD')) && !(await p.$('.ck2')), 'Desperta vê só a lista de presença (não o check-in dos voluntários)');
+    await p.click('#tabs [data-tab="checkin"]'); await p.waitForTimeout(500);
+    conferir(!!(await p.$('.pres-card')) && !(await p.$('#ckD')) && !(await p.$('.ck2')) && !(await p.$('.pres-card a[href^="sorteio/"]')), 'Desperta vê só os Participantes (sem check-in dos voluntários e sem sorteio)');
     await p.click('[data-pres-abrir]'); await p.waitForTimeout(400);
     await p.click('[data-pres-add]'); await p.waitForSelector('#dlg[open] #prN'); await p.fill('#prN', 'Visitante Um'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(400); await p.click('#dlg [data-cancel]'); await p.waitForTimeout(300);
-    conferir(await p.evaluate(() => { const r = window.__TABELAS.presencas.find(x => x.nome === 'Visitante Um'); return r && Object.values(r.dias)[0].por === 'Lima'; }), 'Desperta adiciona nome (presença de hoje com hora e quem marcou)');
-    await p.click('table.pres tbody tr >> nth=0 >> label:has(input[data-pres$="|'+dias[1]+'"])'); await p.waitForTimeout(500);
-    const pres = await p.evaluate(() => window.__TABELAS.presencas.find(x => x.nome === 'Visitante Um').dias);
-    conferir(Object.keys(pres).length === 2 && await p.$eval('table.pres tbody tr >> nth=0', tr => [...tr.querySelectorAll('input[data-pres]')].filter(i => i.checked).every(i => i.disabled)), 'Desperta marca outro dia; o que foi marcado não desmarca');
+    conferir(await p.evaluate(() => window.__TABELAS.evento_presencas.some(r => r.por_nome === 'Lima')), 'Desperta adiciona nome e faz o check-in (com quem marcou)');
+    await p.$eval('input[data-pres]:checked', e => { e.disabled = false; e.click(); }); await p.waitForTimeout(400);
+    conferir(await p.evaluate(() => window.__TABELAS.evento_presencas.length === 1), 'Desperta não desmarca check-in feito');
     await p.click('[data-pres-edit]'); await p.waitForSelector('#dlg[open] #prE'); await p.fill('#prE', 'Visitante Um Silva'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(400);
-    conferir(await p.evaluate(() => window.__TABELAS.presencas.some(x => x.nome === 'Visitante Um Silva')), 'Desperta altera o nome');
-    await p.screenshot({ path: path.join(SAIDA, '54-desperta.png'), fullPage: true });
+    conferir(await p.evaluate(() => window.__TABELAS.evento_participantes.some(x => x.nome === 'Visitante Um Silva')), 'Desperta altera o nome');
     conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
-    await ctx.close();
+    await p.context().close();
     p = await abrir('admin', '#ajustes');
     await p.check('[data-p-desp="00000000-0000-0000-0000-0000000000b1"]'); await p.click('[data-salvar-pessoas]'); await p.waitForTimeout(400);
     conferir(await p.evaluate(() => window.__TABELAS.pessoas.find(x => x.id === '00000000-0000-0000-0000-0000000000b1').desperta === true), 'admin marca o extra Desperta em Pessoas e permissões');
     await p.context().close();
   }
 
-  console.log('Checklist no Congresso: libera com a presença da entrada');
+  console.log('Checklist no Congresso: libera com o check-in de participantes');
   {
-    const hojeX = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-    const extra = [{id: hojeX+'_noite_midia', d:{data:hojeX, culto:'noite', area:'midia', cultoNome:'Congresso', hora:'23h59', funcoes:[{nome:'Projeção', pessoas:['Ana']}]}}];
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
-    p = await ctx.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
-    await p.addInitScript(([e]) => { localStorage.setItem('mockPapel', 'midia'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); localStorage.removeItem('mockFezCheckin'); }, [extra]);
+    const esc0 = [{id: hojeEv+'_noite_midia', d:{data:hojeEv, culto:'noite', area:'midia', cultoNome:'Congresso', hora:'23h59', funcoes:[{nome:'Projeção', pessoas:['Ana']}]}}];
+    p = await abrirEv('midia', {mockEscalaExtra: esc0}); await p.addInitScript(() => localStorage.removeItem('mockFezCheckin'));
     await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(400);
-    await p.click('#tabs [data-tab="midia"]'); await p.waitForTimeout(300); await p.fill('#mkD', hojeX); await p.dispatchEvent('#mkD', 'change'); await p.waitForTimeout(200); await p.click('[data-mk-culto="noite"]'); await p.waitForTimeout(500);
-    conferir((await p.textContent('#view')).includes('faça seu check-in na entrada (lista de presença)') && await p.$$eval('.mk-fn input[data-mk]', l => l.length > 0 && l.every(e => e.disabled)), 'Congresso: checklist travado até a presença da entrada');
-    await p.evaluate(d => { window.__TABELAS.presencas = [{lista:'congresso-'+d, id:'x1', nome:'Ana', dias:{[d]:{em:new Date().toISOString(), por:'Lima'}}}]; }, hojeX);
+    await p.click('#tabs [data-tab="midia"]'); await p.waitForTimeout(300); await p.fill('#mkD', hojeEv); await p.dispatchEvent('#mkD', 'change'); await p.waitForTimeout(200); await p.click('[data-mk-culto="noite"]'); await p.waitForTimeout(500);
+    conferir((await p.textContent('#view')).includes('faça seu check-in na entrada') && await p.$$eval('.mk-fn input[data-mk]', l => l.length > 0 && l.every(e => e.disabled)), 'Congresso: checklist travado até o check-in da entrada');
+    await p.evaluate(d => { window.__TABELAS.evento_participantes = [{id:'pp-ana', evento:'ev-teste-desperta', nome:'Ana'}]; window.__TABELAS.evento_presencas = [{participante:'pp-ana', dia:d, em:new Date().toISOString(), por_nome:'Lima'}]; }, hojeEv);
     await p.waitForTimeout(11000);
-    conferir(!(await p.textContent('#view')).includes('faça seu check-in') && !(await p.$eval('.mk-fn input[data-mk]', e => e.disabled)), 'Congresso: com a presença da entrada, o checklist libera sozinho');
+    conferir(!(await p.textContent('#view')).includes('faça seu check-in') && !(await p.$eval('.mk-fn input[data-mk]', e => e.disabled)), 'Congresso: com o check-in da entrada, o checklist libera sozinho');
     conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
-    await ctx.close();
+    await p.context().close();
+  }
+
+  console.log('Sorteio (controle e telão)');
+  {
+    const parts = ['Ana Clara', 'Bruno Lima', 'Carlos Dias', 'Daniel Rocha', 'Eduardo Melo'].map((n, k) => ({id:'pp'+k, evento:'ev-teste-desperta', nome:n}));
+    const pres = parts.map(pp => ({participante:pp.id, dia:hojeEv, em:new Date().toISOString(), por_nome:'Lima'}));
+    p = await abrirEv('admin'); await p.addInitScript(([a, b]) => { if (!window.__semente) { window.__semente = 1; } localStorage.setItem('mockSorteioSemente', '1'); window.__SEM = [a, b]; }, [parts, pres]);
+    await p.addInitScript(() => { const tick = setInterval(() => { if (window.__TABELAS && window.__SEM) { if (!window.__TABELAS.evento_participantes || !window.__TABELAS.evento_participantes.length) { window.__TABELAS.evento_participantes = window.__SEM[0]; window.__TABELAS.evento_presencas = window.__SEM[1]; } clearInterval(tick); } }, 5); });
+    await p.goto('http://localhost:8123/sorteio/controle/?evento=ev-teste-desperta'); await p.waitForSelector('#bSortear'); await p.waitForTimeout(400);
+    conferir((await p.textContent('#nConc')) === '5' && (await p.inputValue('#sDia')) === hojeEv, 'controle: abre no dia de hoje com "5 pessoas concorrendo"');
+    await p.fill('#sPremio', 'Bíblia'); await p.click('#bSortear'); await p.waitForSelector('[data-marcar="ganhador"]');
+    const s1 = await p.evaluate(() => window.__TABELAS.sorteios[0]);
+    conferir(s1 && s1.status === 'sorteado' && s1.premio === 'Bíblia' && (await p.textContent('.atual .nome')) === s1.nome && (await p.evaluate(() => (window.__rpc||[]).some(r => r[0] === 'sortear'))), 'SORTEAR usa a rpc do banco e mostra o nome e os 3 botões');
+    await p.screenshot({ path: path.join(SAIDA, '55-sorteio-controle.png'), fullPage: true });
+    await p.click('[data-marcar="ausente"]'); await p.waitForTimeout(600);
+    const ss = await p.evaluate(() => window.__TABELAS.sorteios.map(s => s.status+':'+s.premio));
+    conferir(ss.length === 2 && ss[0] === 'ausente:Bíblia' && ss[1] === 'sorteado:Bíblia', '"Ausente" marca e já sorteia outro com o mesmo prêmio');
+    await p.click('[data-marcar="ganhador"]'); await p.waitForTimeout(500);
+    conferir((await p.textContent('#nConc')) === '3' && (await p.$$('table.hist tbody tr')).length === 2, 'ganhador e ausente saem do dia; histórico com as 2 rodadas');
+    const ctxT = p.context(); const tela = await ctxT.newPage(); tela.erros = []; tela.on('pageerror', e => tela.erros.push(e.message));
+    // A tela usa a mesma sessão; os dados do teste são postos de novo (cada página tem o seu banco simulado).
+    await tela.goto('http://localhost:8123/sorteio/tela/?evento=ev-teste-desperta'); await tela.waitForTimeout(600);
+    await tela.evaluate(([a, b]) => { window.__TABELAS.evento_participantes = a; window.__TABELAS.evento_presencas = b; window.__TABELAS.sorteios = []; }, [parts, pres]); await tela.waitForTimeout(16000);
+    conferir((await tela.textContent('.marca')).includes('DESPERTA') && (await tela.textContent('#nConc')) === '5', 'telão em espera: "SORTEIO · DESPERTA" e o nº de concorrentes');
+    await tela.screenshot({ path: path.join(SAIDA, '56-sorteio-tela-espera.png') });
+    await tela.evaluate(d => { window.__TABELAS.sorteios.push({id:'s-tela', evento:'ev-teste-desperta', dia:d, participante:'pp2', nome:'Carlos Dias', premio:'Bíblia', status:'sorteado', rodada:1, elegiveis:5, em:new Date().toISOString(), atualizado_em:new Date().toISOString()}); }, hojeEv);
+    await tela.waitForTimeout(6000);
+    conferir((await tela.textContent('.rot')).includes('SORTEANDO'), 'telão: novo sorteado → animação rolando os nomes');
+    await tela.waitForTimeout(7500);
+    conferir((await tela.textContent('#rolo')) === 'Carlos Dias' && (await tela.textContent('#premio')).includes('Bíblia') && !!(await tela.$('.rolo.parou')), 'telão: para no nome sorteado pelo banco, com o prêmio');
+    await tela.evaluate(() => { const s = window.__TABELAS.sorteios.find(x => x.id === 's-tela'); s.status = 'ganhador'; });
+    await tela.waitForTimeout(4800);
+    conferir((await tela.textContent('#selo')).includes('Ganhador!'), 'telão: mostra "Ganhador!" quando o controle confirma');
+    await tela.screenshot({ path: path.join(SAIDA, '57-sorteio-tela-ganhador.png') });
+    conferir(!tela.erros.length && !p.erros.length, 'sem erros' + ([...tela.erros, ...p.erros].length ? ': ' + [...tela.erros, ...p.erros].join(' | ') : ''));
+    await p.goto('http://localhost:8123/sorteio/controle/?evento=ev-teste-desperta'); await p.waitForSelector('[data-reincluir="1"]');
+    await p.evaluate(([a, b]) => { window.__TABELAS.evento_participantes = a; window.__TABELAS.evento_presencas = b; window.__TABELAS.sorteios = [{id:'x', evento:'ev-teste-desperta', dia:b[0].dia, participante:'pp0', nome:'Ana Clara', premio:'', status:'ganhador', rodada:1, elegiveis:5, em:new Date().toISOString()}]; }, [parts, pres]);
+    await p.click('[data-reincluir="1"]'); await p.click('[data-reincluir="2"]'); await p.click('[data-reincluir="3"]'); await p.waitForTimeout(500);
+    conferir(await p.evaluate(() => window.__TABELAS.sorteios[0].status === 'liberado'), '"Incluir todos de volta" com confirmação dupla');
+    await ctxT.close();
+    p = await abrirEv('midia'); await p.goto('http://localhost:8123/sorteio/controle/'); await p.waitForTimeout(800);
+    conferir((await p.textContent('#app')).includes('Só administradores, a Gestão e a Organização'), 'controle: sem permissão, não sorteia');
+    await p.context().close();
   }
 
   console.log('Contas duplicadas (outro e-mail / outro jeito de entrar)');
