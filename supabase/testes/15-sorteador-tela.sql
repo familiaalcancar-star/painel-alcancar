@@ -31,3 +31,17 @@ create temp table tk2 as select sorteio_link_tela('ev-cong-2099') as t;
 select set_config('request.jwt.claim.sub','',false);
 select ok('Telão pelo link recebe o prêmio atual', (select sorteio_tela(t)->>'premio' = 'Bíblia de Estudo' from tk2));
 select t('Visitante NÃO lê o estado','anon','select * from sorteio_estado','bloq');
+-- Remover um registro / limpar tudo.
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000a',false);
+select (sortear('ev-cong-2099','2099-02-01','')).nome is not null;
+select set_config('request.jwt.claim.sub','',false);
+select t('Sem permissão NÃO remove','d0',$q$select sorteio_remover((select id from sorteios where status='sorteado' limit 1))$q$,'bloq');
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000a',false);
+create temp table antes as select count(*) n from sorteio_elegiveis('ev-cong-2099','2099-02-01');
+select sorteio_remover((select id from sorteios where status='sorteado' limit 1));
+select ok('Remover: a pessoa volta a concorrer', (select count(*) from sorteio_elegiveis('ev-cong-2099','2099-02-01')) = (select n + 1 from antes));
+select ok('Remover registra no histórico', exists (select 1 from historico where resumo like 'Sorteio: removido do registro%'));
+select sorteio_limpar_tudo('ev-cong-2099') >= 0;
+select ok('Limpar tudo: nenhum registro e rodadas recomeçam', not exists (select 1 from sorteios where evento='ev-cong-2099') and (sortear('ev-cong-2099','2099-02-01','')).rodada = 1);
+select set_config('request.jwt.claim.sub','',false);
+select t('Sem permissão NÃO limpa','d0',$q$select sorteio_limpar_tudo('ev-cong-2099')$q$,'bloq');

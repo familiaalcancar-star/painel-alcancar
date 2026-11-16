@@ -100,6 +100,8 @@ function aplicar(s){
   if (!T.atual || s.id !== T.atual.id) return;
   T.atual = s; resultado(s);
 }
+// O sorteio na tela foi removido do registro (ou tudo foi limpo): o último agora é outro já visto, ou não há nenhum.
+const sumiu = u => !!T.atual && !T.animando && (!u || (u.id !== T.atual.id && T.visto.has(u.id)));
 const recente = s => Date.now() - new Date(s.atualizado_em || s.em).getTime() < 10 * 60000;
 function primeiro(u){ // ao abrir: não anima o que já tinha acontecido
   if (u) T.visto.add(u.id);
@@ -117,13 +119,16 @@ async function pollLink(){
   if (novo && !T.animando) { T.premio = j.premio || ''; return primeiro(T.ultLink); }
   novoPremio(j.premio);
   const u = T.ultLink;
-  if (u && (!T.atual || u.id !== T.atual.id || u.status !== T.atual.status)) aplicar(u);
+  if (sumiu(u)) espera();
+  else if (u && (!T.atual || u.id !== T.atual.id || u.status !== T.atual.status)) aplicar(u);
   if (!T.atual && !T.animando && Q.dataset.estado === 'espera') SUB.textContent = subEspera();
 }
 // Modo logado
 async function conferir(){
   const r = await SB.from('sorteios').select('*').eq('evento', T.ev.id).order('em', { ascending: false }).limit(1);
-  const s = (r.data || [])[0]; if (s && (!T.atual || s.id !== T.atual.id || s.status !== T.atual.status)) aplicar(s);
+  if (r.error) return; const s = (r.data || [])[0];
+  if (sumiu(s)) espera();
+  else if (s && (!T.atual || s.id !== T.atual.id || s.status !== T.atual.status)) aplicar(s);
   const pr = await SB.rpc('sorteio_premio', { p_evento: T.ev.id }); if (!pr.error) novoPremio(pr.data);
   if (!T.atual && !T.animando) contar();
 }
@@ -184,7 +189,9 @@ async function iniciarLogado(){
     T.sorteia = await podeSortear();
     const pr = await SB.rpc('sorteio_premio', { p_evento: T.ev.id }); if (!pr.error) T.premio = pr.data || '';
     await contar(); primeiro((r.data || [])[0]); manterAcesa();
-    SB.channel('sorteio-tela').on('postgres_changes', { event: '*', schema: 'public', table: 'sorteios' }, p => { const s = p.new; if (s && s.evento === T.ev.id) aplicar(s); }).subscribe();
+    SB.channel('sorteio-tela').on('postgres_changes', { event: '*', schema: 'public', table: 'sorteios' }, p => {
+      if (p.eventType === 'DELETE') { if (T.atual && p.old && p.old.id === T.atual.id && !T.animando) espera(); else conferir(); return; }
+      const s = p.new; if (s && s.evento === T.ev.id) aplicar(s); }).subscribe();
     setInterval(conferir, 4000);
     setInterval(() => { if (!T.atual && !T.animando) contar(); }, 15000);
   });

@@ -1,5 +1,5 @@
 // Controle do sorteio (celular do operador). Quem sorteia é o banco: rpc sortear(evento, dia, prêmio).
-const C = { evs: [], ev: null, dia: null, n: null, hist: [], pend: null, premio: '', premioSalvo: null, conf: 0, ocupado: false, erro: '', link: null, linkAberto: false, trocar: 0 };
+const C = { evs: [], ev: null, dia: null, n: null, hist: [], pend: null, premio: '', premioSalvo: null, conf: 0, rm: null, limpar: 0, ocupado: false, erro: '', link: null, linkAberto: false, trocar: 0 };
 // Link da tela do telão (sem login): o código vem do banco (sorteio_link_tela); trocar invalida o anterior.
 const urlTela = t => new URL('../tela/?k=' + encodeURIComponent(t), location.href).href;
 function qrSvg(texto){ try { const q = qrcode(0, 'M'); q.addData(texto); q.make(); return q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } catch(e){ return ''; } }
@@ -48,14 +48,23 @@ function desenhar(){
   h += '<div class="links"><button class="btn ghost" data-link-tela>📺 Link da tela</button><a class="btn ghost" href="../tela/?evento='+encodeURIComponent(C.ev.id)+'&dia='+C.dia+'" target="_blank" rel="noopener">Abrir tela do telão</a>'
     + '<a class="btn ghost" href="../../#checkin">‹ Painel</a></div>' + cardLink();
   h += '<h2 style="font-size:18px;margin:22px 0 8px">Histórico do evento</h2>';
-  h += C.hist.length ? '<div class="card" style="padding:6px 10px;overflow-x:auto"><table class="hist"><thead><tr><th>#</th><th>Dia</th><th>Nome</th><th>Prêmio</th><th>Status</th></tr></thead><tbody>'
-      + C.hist.map(s => '<tr><td>'+s.rodada+'</td><td>'+dataBR(s.dia)+'<br><small class="meta">'+horaSP(s.em)+'</small></td><td>'+esc(s.nome)+'</td><td>'+esc(s.premio || '—')+'</td><td><span class="st st-'+s.status+'">'+esc(ROT_STATUS[s.status] || s.status)+'</span></td></tr>').join('')
+  h += C.hist.length ? '<div class="card" style="padding:6px 10px;overflow-x:auto"><table class="hist"><thead><tr><th>#</th><th>Dia</th><th>Nome</th><th>Prêmio</th><th>Status</th><th></th></tr></thead><tbody>'
+      + C.hist.map(s => '<tr><td>'+s.rodada+'</td><td>'+dataBR(s.dia)+'<br><small class="meta">'+horaSP(s.em)+'</small></td><td>'+esc(s.nome)+'</td><td>'+esc(s.premio || '—')+'</td><td><span class="st st-'+s.status+'">'+esc(ROT_STATUS[s.status] || s.status)+'</span></td>'
+        + '<td><button class="btn ghost mini-rm" data-rm="'+esc(s.id)+'"'+(C.ocupado ? ' disabled' : '')+' aria-label="Remover '+esc(s.nome)+'">🗑️ Remover</button></td></tr>'
+        + (C.rm === s.id ? '<tr class="rm-conf"><td colspan="6"><p class="aviso erro" style="margin:4px 0 8px">Remover <b>'+esc(s.nome)+'</b> do registro? Ele volta a concorrer.</p><div class="row"><button class="btn ghost" data-rm-nao>Cancelar</button><button class="btn vermelho" data-rm-ok="'+esc(s.id)+'">Sim, remover</button></div></td></tr>' : '')).join('')
       + '</tbody></table></div>' : '<p class="meta">Nenhum sorteio ainda.</p>';
   h += '<div class="card" style="margin-top:18px"><h3 style="margin:0 0 6px;font-size:16px">Incluir todos de volta</h3>'
-    + '<p class="meta" style="margin:0">Libera todos os já sorteados (ganhadores, quem retirou e ausentes) para concorrer de novo. O histórico continua.</p>'
+    + '<p class="meta" style="margin:0">Libera todos os já sorteados (ganhadores, quem retirou e ausentes) para concorrer de novo. <b>O histórico continua</b> (aparecem como “Liberado”).</p>'
     + (C.conf === 0 ? '<button class="btn ghost confirma" data-reincluir="1">Incluir todos de volta</button>'
       : C.conf === 1 ? '<p class="aviso confirma">Tem certeza? Quem já ganhou poderá ser sorteado de novo.</p><div class="row"><button class="btn ghost" data-reincluir="0">Cancelar</button><button class="btn vermelho" data-reincluir="2">Sim, continuar</button></div>'
       : '<p class="aviso erro confirma">Última confirmação: liberar <b>todos</b> agora?</p><div class="row"><button class="btn ghost" data-reincluir="0">Cancelar</button><button class="btn vermelho" data-reincluir="3">Confirmar: incluir todos</button></div>')
+    + '</div>';
+  h += '<div class="card limpar-card"><h3 style="margin:0 0 6px;font-size:16px">Limpar tudo</h3>'
+    + '<p class="meta" style="margin:0"><b>Apaga o histórico</b> de sorteios deste evento: todos voltam a concorrer e as rodadas recomeçam do 1. Não dá para desfazer.</p>'
+    + (C.limpar === 0 ? '<button class="btn vermelho confirma" data-limpar="1">Limpar tudo</button>'
+      : '<p class="aviso erro confirma">Apagar TODO o registro de sorteios? Todos voltam a concorrer e as rodadas recomeçam.</p>'
+        + '<label class="f" for="limparTxt">Para confirmar, digite <b>LIMPAR</b></label><input class="inp" id="limparTxt" autocomplete="off" autocapitalize="characters">'
+        + '<div class="row" style="margin-top:10px"><button class="btn ghost" data-limpar="0">Cancelar</button><button class="btn vermelho" data-limpar="2">Apagar tudo</button></div>')
     + '</div>';
   app.innerHTML = h;
 }
@@ -83,7 +92,7 @@ async function sortear(premio){
 }
 document.addEventListener('input', e => { if (e.target.id === 'sPremio') { C.premio = e.target.value; const i = $('#premioInfo'); if (i) i.textContent = premioInfo(); salvarPremio(); } });
 document.addEventListener('change', async e => {
-  if (e.target.id === 'sEv') { C.ev = C.evs.find(x => x.id === e.target.value); C.dia = diaPadrao(C.ev); C.conf = 0; C.erro = ''; C.link = null; C.linkAberto = false; history.replaceState(null, '', '?evento='+encodeURIComponent(C.ev.id)); C.premio = ''; await lerPremio(); await atualizar(); }
+  if (e.target.id === 'sEv') { C.ev = C.evs.find(x => x.id === e.target.value); C.dia = diaPadrao(C.ev); C.conf = 0; C.limpar = 0; C.rm = null; C.erro = ''; C.link = null; C.linkAberto = false; history.replaceState(null, '', '?evento='+encodeURIComponent(C.ev.id)); C.premio = ''; await lerPremio(); await atualizar(); }
   if (e.target.id === 'sDia') { C.dia = e.target.value; C.erro = ''; await atualizar(); }
 });
 document.addEventListener('click', async e => {
@@ -103,6 +112,15 @@ document.addEventListener('click', async e => {
     if (st === 'ausente') { await atualizar(); if (C.n > 0) return sortear(premio); }
     else { C.premio = ''; salvarPremio(true); await atualizar(); }
   }
+  if (b.dataset.rm) { C.rm = b.dataset.rm; desenhar(); return; }
+  if ('rmNao' in b.dataset) { C.rm = null; desenhar(); return; }
+  if (b.dataset.rmOk) { C.ocupado = true; desenhar(); const r = await SB.rpc('sorteio_remover', { p_id: b.dataset.rmOk }); C.ocupado = false; C.rm = null;
+    C.erro = r.error ? msgErro(r.error) : ''; await atualizar(); return; }
+  if (b.dataset.limpar) { const v = Number(b.dataset.limpar);
+    if (v < 2) { C.limpar = v; desenhar(); if (v === 1) { const i = $('#limparTxt'); if (i) i.focus(); } return; }
+    const i = $('#limparTxt'); if (!i || i.value.trim().toUpperCase() !== 'LIMPAR') { C.erro = ''; if (i) { i.focus(); i.classList.add('inp-erro'); } const p = document.querySelector('.limpar-card .aviso'); if (p) p.textContent = 'Digite LIMPAR (em letras maiúsculas) para confirmar.'; return; }
+    C.ocupado = true; desenhar(); const r = await SB.rpc('sorteio_limpar_tudo', { p_evento: C.ev.id }); C.ocupado = false; C.limpar = 0;
+    C.erro = r.error ? msgErro(r.error) : ''; await atualizar(); return; }
   if (b.dataset.reincluir) { const v = Number(b.dataset.reincluir);
     if (v < 3) { C.conf = v; desenhar(); return; }
     C.ocupado = true; desenhar(); const r = await SB.rpc('sorteio_reincluir_todos', { p_evento: C.ev.id }); C.ocupado = false; C.conf = 0;

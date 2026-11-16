@@ -753,6 +753,23 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     conferir(ss.length === 2 && ss[0] === 'ausente:Bíblia' && ss[1] === 'sorteado:Bíblia', '"Ausente" marca e já sorteia outro com o mesmo prêmio');
     await p.click('[data-marcar="ganhador"]'); await p.waitForTimeout(500);
     conferir((await p.textContent('#nConc')) === '3' && (await p.$$('table.hist tbody tr')).length === 2, 'ganhador e ausente saem do dia; histórico com as 2 rodadas');
+    // Remover um registro (a pessoa volta a concorrer)
+    await p.click('[data-rm] >> nth=0'); await p.waitForSelector('[data-rm-ok]');
+    conferir((await p.textContent('.rm-conf')).includes('Ele volta a concorrer'), 'Remover pede confirmação na página');
+    await p.click('[data-rm-nao]'); await p.waitForTimeout(200);
+    conferir(await p.evaluate(() => window.__TABELAS.sorteios.length === 2), 'Cancelar não remove');
+    await p.click('[data-rm] >> nth=0'); await p.click('[data-rm-ok]'); await p.waitForTimeout(500);
+    conferir(await p.evaluate(() => window.__TABELAS.sorteios.length === 1) && (await p.textContent('#nConc')) === '4' && (await p.$$('table.hist tbody tr')).length === 1, 'Remover: some do registro na hora e a pessoa volta a concorrer');
+    // Limpar tudo (digitar LIMPAR)
+    conferir((await p.textContent('.limpar-card')).includes('Apaga o histórico') && (await p.textContent('#app')).includes('O histórico continua'), 'a tela explica a diferença entre "Incluir todos de volta" e "Limpar tudo"');
+    await p.click('[data-limpar="1"]'); await p.fill('#limparTxt', 'limpa'); await p.click('[data-limpar="2"]'); await p.waitForTimeout(300);
+    conferir(await p.evaluate(() => window.__TABELAS.sorteios.length === 1), 'Limpar tudo sem digitar LIMPAR não apaga');
+    await p.fill('#limparTxt', 'LIMPAR'); await p.click('[data-limpar="2"]'); await p.waitForTimeout(500);
+    conferir(await p.evaluate(() => window.__TABELAS.sorteios.length === 0) && (await p.textContent('#app')).includes('Nenhum sorteio ainda') && (await p.textContent('#nConc')) === '5', 'Limpar tudo apaga o registro e todos voltam a concorrer');
+    await p.screenshot({ path: path.join(SAIDA, '62-sorteio-limpar.png'), fullPage: true });
+    await p.fill('#sPremio', 'Bíblia'); await p.waitForTimeout(700); await p.click('#bSortear'); await p.waitForSelector('[data-marcar="ganhador"]');
+    conferir(await p.evaluate(() => window.__TABELAS.sorteios.length === 1 && window.__TABELAS.sorteios[0].rodada === 1), 'depois de limpar, as rodadas recomeçam do 1');
+    await p.click('[data-marcar="ganhador"]'); await p.waitForTimeout(500);
     const ctxT = p.context(); const tela = await ctxT.newPage(); tela.erros = []; tela.on('pageerror', e => tela.erros.push(e.message));
     // A tela usa a mesma sessão; os dados do teste são postos de novo (cada página tem o seu banco simulado).
     await tela.goto('http://localhost:8123/sorteio/tela/?evento=ev-teste-desperta'); await tela.waitForTimeout(600);
@@ -808,6 +825,8 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await tl.screenshot({ path: path.join(SAIDA, '61-tela-sorteado-1280.png') });
     await tl.evaluate(() => { window.__TABELAS.sorteios[0].status = 'retirado'; }); await tl.waitForTimeout(2500);
     conferir((await tl.textContent('#faixa')).includes('GANHADOR!'), 'telão pelo link: "🎉 GANHADOR!" quando retirou');
+    await tl.evaluate(() => { window.__TABELAS.sorteios = []; }); await tl.waitForTimeout(2200);
+    conferir((await tl.getAttribute('#quadro', 'data-estado')) === 'espera' && (await tl.textContent('#nome')) === 'Prepare-se!', 'telão pelo link: sorteio removido/limpo → volta à espera');
     await tl.screenshot({ path: path.join(SAIDA, '59-sorteio-tela-link.png') });
     await tl.goto('http://localhost:8123/sorteio/tela/?k=codigo-errado'); await tl.waitForTimeout(1500);
     conferir((await tl.textContent('#nome')).includes('Link inválido ou trocado'), 'link errado/trocado: "Link inválido ou trocado"');
