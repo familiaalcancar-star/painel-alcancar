@@ -4,7 +4,7 @@
 //        sem ?k      → login do painel (tempo real + conferência a cada 4 s); quem pode sortear usa a faixa como botão
 //                      (clique, barra de espaço, Enter ou passador de slides / setas).
 const T = { ev: null, dia: null, atual: null, visto: new Set(), animando: false, n: null, timer: null,
-  link: param('k'), nomesLink: [], ultLink: null, sorteia: false, ocupado: false };
+  link: param('k'), nomesLink: [], ultLink: null, sorteia: false, ocupado: false, premio: '' };
 const Q = $('#quadro'), NOME = $('#nome'), SUB = $('#sub'), FAIXA = $('#faixa');
 
 // ---------- Desenho ----------
@@ -39,10 +39,17 @@ function caberFaixa(){
 function textoCaixa(txt, sub){ NOME.style.fontSize = ''; NOME.style.whiteSpace = ''; NOME.classList.add('espera'); NOME.textContent = txt; SUB.textContent = sub || ''; }
 const concTxt = () => T.n == null ? '' : T.n + (T.n === 1 ? ' pessoa concorrendo' : ' pessoas concorrendo');
 
+// Espera: a faixa mostra o prêmio definido no controle (ou "Aguardando sorteio"); para quem sorteia, a faixa é o botão
+// SORTEAR e o prêmio aparece embaixo do nº de concorrentes.
+const subEspera = () => concTxt() + (T.sorteia && T.premio ? (concTxt() ? ' · ' : '') + '🎁 ' + T.premio : '');
 function espera(){
   T.atual = null; clearTimeout(T.timer); estado('espera');
-  textoCaixa('Prepare-se!', concTxt());
-  faixa(T.sorteia ? 'SORTEAR' : 'AGUARDANDO SORTEIO…', true);
+  textoCaixa('Prepare-se!', subEspera());
+  faixa(T.sorteia ? 'SORTEAR' : (T.premio ? '🎁 ' + T.premio : 'AGUARDANDO SORTEIO…'), true);
+}
+function novoPremio(p){
+  p = p || ''; if (p === T.premio) return; T.premio = p;
+  if (Q.dataset.estado === 'espera' && !T.animando) espera();
 }
 function sorteado(s){
   estado('sorteado'); caber(s.nome); SUB.textContent = '';
@@ -63,9 +70,9 @@ function linkInvalido(){ T.atual = null; estado('invalido'); textoCaixa('Link in
 
 // ---------- Dados ----------
 async function contar(){
-  if (T.link) { if (Q.dataset.estado === 'espera') SUB.textContent = concTxt(); return T.nomesLink.map(nome => ({ nome })); }
+  if (T.link) { if (Q.dataset.estado === 'espera') SUB.textContent = subEspera(); return T.nomesLink.map(nome => ({ nome })); }
   const r = await SB.rpc('sorteio_elegiveis', { p_evento: T.ev.id, p_dia: T.dia });
-  if (!r.error) { T.n = (r.data || []).length; if (Q.dataset.estado === 'espera') SUB.textContent = concTxt(); }
+  if (!r.error) { T.n = (r.data || []).length; if (Q.dataset.estado === 'espera') SUB.textContent = subEspera(); }
   return r.error ? [] : (r.data || []);
 }
 async function animar(s){
@@ -107,21 +114,23 @@ async function pollLink(){
   if (!j.ok) { T.ev = null; linkInvalido(); return; }
   const novo = !T.ev || T.ev.id !== j.evento;
   T.ev = { id: j.evento, titulo: j.titulo }; T.dia = j.dia; T.n = j.concorrendo; T.nomesLink = Array.isArray(j.nomes) ? j.nomes : []; T.ultLink = j.ultimo || null;
-  if (novo && !T.animando) return primeiro(T.ultLink);
+  if (novo && !T.animando) { T.premio = j.premio || ''; return primeiro(T.ultLink); }
+  novoPremio(j.premio);
   const u = T.ultLink;
   if (u && (!T.atual || u.id !== T.atual.id || u.status !== T.atual.status)) aplicar(u);
-  if (!T.atual && !T.animando && Q.dataset.estado === 'espera') SUB.textContent = concTxt();
+  if (!T.atual && !T.animando && Q.dataset.estado === 'espera') SUB.textContent = subEspera();
 }
 // Modo logado
 async function conferir(){
   const r = await SB.from('sorteios').select('*').eq('evento', T.ev.id).order('em', { ascending: false }).limit(1);
   const s = (r.data || [])[0]; if (s && (!T.atual || s.id !== T.atual.id || s.status !== T.atual.status)) aplicar(s);
+  const pr = await SB.rpc('sorteio_premio', { p_evento: T.ev.id }); if (!pr.error) novoPremio(pr.data);
   if (!T.atual && !T.animando) contar();
 }
 async function sortearAqui(){
   if (!T.sorteia || T.ocupado || T.animando || FAIXA.disabled) return;
   T.ocupado = true; faixa('SORTEANDO…', false);
-  const r = await SB.rpc('sortear', { p_evento: T.ev.id, p_dia: T.dia, p_premio: '' }); T.ocupado = false;
+  const r = await SB.rpc('sortear', { p_evento: T.ev.id, p_dia: T.dia, p_premio: T.premio || '' }); T.ocupado = false;
   if (r.error) { faixa(/Confirme/.test(r.error.message || '') ? 'CONFIRME O SORTEADO NO CONTROLE' : /Ninguém/.test(r.error.message || '') ? 'NINGUÉM PARA SORTEAR' : 'TENTE DE NOVO', false);
     setTimeout(() => { if (!T.animando && (!T.atual || T.atual.status !== 'sorteado')) faixa('SORTEAR', true); }, 3000); return; }
   if (r.data && !T.visto.has(r.data.id)) animar(r.data);
@@ -173,6 +182,7 @@ async function iniciarLogado(){
     const r = await SB.from('sorteios').select('*').eq('evento', T.ev.id).order('em', { ascending: false }).limit(1);
     if (r.error) { estado('invalido'); textoCaixa('Sem acesso ao sorteio', 'Entre com a conta da Gestão, da Organização ou de quem sorteia.'); faixa('SORTEIO', false); return; }
     T.sorteia = await podeSortear();
+    const pr = await SB.rpc('sorteio_premio', { p_evento: T.ev.id }); if (!pr.error) T.premio = pr.data || '';
     await contar(); primeiro((r.data || [])[0]); manterAcesa();
     SB.channel('sorteio-tela').on('postgres_changes', { event: '*', schema: 'public', table: 'sorteios' }, p => { const s = p.new; if (s && s.evento === T.ev.id) aplicar(s); }).subscribe();
     setInterval(conferir, 4000);

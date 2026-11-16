@@ -1,5 +1,5 @@
 // Controle do sorteio (celular do operador). Quem sorteia é o banco: rpc sortear(evento, dia, prêmio).
-const C = { evs: [], ev: null, dia: null, n: null, hist: [], pend: null, premio: '', conf: 0, ocupado: false, erro: '', link: null, linkAberto: false, trocar: 0 };
+const C = { evs: [], ev: null, dia: null, n: null, hist: [], pend: null, premio: '', premioSalvo: null, conf: 0, ocupado: false, erro: '', link: null, linkAberto: false, trocar: 0 };
 // Link da tela do telão (sem login): o código vem do banco (sorteio_link_tela); trocar invalida o anterior.
 const urlTela = t => new URL('../tela/?k=' + encodeURIComponent(t), location.href).href;
 function qrSvg(texto){ try { const q = qrcode(0, 'M'); q.addData(texto); q.make(); return q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } catch(e){ return ''; } }
@@ -39,6 +39,7 @@ function desenhar(){
       + '<button class="btn vermelho" data-marcar="ausente"'+(C.ocupado ? ' disabled' : '')+'>🚫 Ausente (sortear outro)</button></div></div>';
   } else {
     h += '<div class="card"><label class="f" for="sPremio" style="margin-top:0">Prêmio (opcional)</label><input class="inp" id="sPremio" maxlength="120" placeholder="Ex.: Bíblia de estudo" value="'+esc(C.premio)+'">'
+      + '<p class="meta" id="premioInfo" style="margin:6px 0 0">'+premioInfo()+'</p>'
       + '<button class="btn sortear" id="bSortear"'+(C.ocupado || C.n === 0 ? ' disabled' : '')+'>'+(C.ocupado ? 'SORTEANDO…' : 'SORTEAR')+'</button>'
       + (C.n === 0 ? '<p class="meta" style="margin:10px 0 0">Ninguém disponível neste dia: confira o check-in dos participantes.</p>' : '') + '</div>';
     const ult = C.hist.find(s => s.status !== 'liberado');
@@ -58,6 +59,15 @@ function desenhar(){
     + '</div>';
   app.innerHTML = h;
 }
+// Prêmio: fica guardado no banco e aparece na faixa do telão (vale também para o SORTEAR do telão).
+const premioInfo = () => C.premio.trim() ? (C.premioSalvo === C.premio.trim() ? '📺 Aparece na faixa do telão.' : 'Salvando…') : 'Sem prêmio: o telão mostra só “Aguardando sorteio”.';
+let tPremio;
+function salvarPremio(agora){
+  clearTimeout(tPremio);
+  tPremio = setTimeout(async () => { const v = C.premio.trim(); const r = await SB.rpc('sorteio_definir_premio', { p_evento: C.ev.id, p_premio: v });
+    if (!r.error) C.premioSalvo = v; const i = $('#premioInfo'); if (i) i.textContent = r.error ? 'Não consegui salvar o prêmio agora.' : premioInfo(); }, agora ? 0 : 600);
+}
+async function lerPremio(){ const r = await SB.rpc('sorteio_premio', { p_evento: C.ev.id }); if (!r.error && typeof r.data === 'string') { C.premio = r.data; C.premioSalvo = r.data; } }
 async function atualizar(){
   if (!C.ev) return;
   const [e, h] = await Promise.all([SB.rpc('sorteio_elegiveis', { p_evento: C.ev.id, p_dia: C.dia }), SB.from('sorteios').select('*').eq('evento', C.ev.id).order('em', { ascending: false }).limit(300)]);
@@ -66,14 +76,14 @@ async function atualizar(){
   desenhar(); if (foco) { const i = $('#sPremio'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
 }
 async function sortear(premio){
-  C.ocupado = true; C.erro = ''; desenhar();
+  C.ocupado = true; C.erro = ''; desenhar(); if ((premio || '') !== (C.premioSalvo || '')) salvarPremio(true);
   const r = await SB.rpc('sortear', { p_evento: C.ev.id, p_dia: C.dia, p_premio: premio || '' });
   C.ocupado = false; if (r.error) C.erro = msgErro(r.error);
   await atualizar();
 }
-document.addEventListener('input', e => { if (e.target.id === 'sPremio') C.premio = e.target.value; });
+document.addEventListener('input', e => { if (e.target.id === 'sPremio') { C.premio = e.target.value; const i = $('#premioInfo'); if (i) i.textContent = premioInfo(); salvarPremio(); } });
 document.addEventListener('change', async e => {
-  if (e.target.id === 'sEv') { C.ev = C.evs.find(x => x.id === e.target.value); C.dia = diaPadrao(C.ev); C.conf = 0; C.erro = ''; C.link = null; C.linkAberto = false; history.replaceState(null, '', '?evento='+encodeURIComponent(C.ev.id)); await atualizar(); }
+  if (e.target.id === 'sEv') { C.ev = C.evs.find(x => x.id === e.target.value); C.dia = diaPadrao(C.ev); C.conf = 0; C.erro = ''; C.link = null; C.linkAberto = false; history.replaceState(null, '', '?evento='+encodeURIComponent(C.ev.id)); C.premio = ''; await lerPremio(); await atualizar(); }
   if (e.target.id === 'sDia') { C.dia = e.target.value; C.erro = ''; await atualizar(); }
 });
 document.addEventListener('click', async e => {
@@ -91,7 +101,7 @@ document.addEventListener('click', async e => {
     const r = await SB.rpc('sorteio_marcar', { p_id: C.pend.id, p_status: st }); C.ocupado = false;
     if (r.error) { C.erro = msgErro(r.error); await atualizar(); return; }
     if (st === 'ausente') { await atualizar(); if (C.n > 0) return sortear(premio); }
-    else { if (st !== 'ausente') C.premio = ''; await atualizar(); }
+    else { C.premio = ''; salvarPremio(true); await atualizar(); }
   }
   if (b.dataset.reincluir) { const v = Number(b.dataset.reincluir);
     if (v < 3) { C.conf = v; desenhar(); return; }
@@ -105,7 +115,7 @@ exigirLogin($('#app'), async () => {
   if (!C.evs.length) { $('#app').innerHTML = cabecalho() + '<div class="card"><p>Nenhum evento com check-in de participantes.</p><a class="btn ghost" href="../../">‹ Voltar ao painel</a></div>'; return; }
   C.ev = C.evs.find(x => x.id === param('evento')) || C.evs.find(x => x.dias.includes(hojeSP())) || C.evs.find(x => x.dias[x.dias.length-1] >= hojeSP()) || C.evs[C.evs.length - 1];
   C.dia = (param('dia') && C.ev.dias.includes(param('dia'))) ? param('dia') : diaPadrao(C.ev);
-  await atualizar();
+  await lerPremio(); await atualizar();
   SB.channel('sorteio-controle').on('postgres_changes', { event: '*', schema: 'public', table: 'sorteios' }, () => atualizar())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'evento_presencas' }, () => atualizar()).subscribe();
   setInterval(() => { if (!C.ocupado && document.visibilityState === 'visible') atualizar(); }, 15000);
