@@ -1275,7 +1275,7 @@ function viewMidia(){
   if (!MK.ok) return h + '<div class="empty">Carregando…</div>';
   const minhas = mkMinhas();
   if (minhas.length) { h += '<div class="mk-eu">Sua função neste culto: <b>'+minhas.map(esc).join(' e ')+'</b>'+(MK.data !== hoje() ? '<br><small>Você poderá marcar no dia do culto.</small>' : '')+'</div>';
-    if (!isAdm() && MK.data === hoje() && !MK.fezCheckin) h += '<div class="notice mk-sem-checkin">🔒 Faça seu check-in com a equipe de Check-in para liberar o checklist.</div>'; }
+    if (!isAdm() && MK.data === hoje() && !MK.fezCheckin) h += '<div class="notice mk-sem-checkin">🔒 '+(cultoInfo(MK.culto, MK.data).especial ? 'Hoje é <b>'+esc(cultoInfo(MK.culto, MK.data).nome)+'</b>: faça seu check-in na entrada (lista de presença) para liberar o checklist.' : 'Faça seu check-in com a equipe de Check-in para liberar o checklist.')+'</div>'; }
   else if (isAdm()) h += '<div class="notice">Administrador: você vê todos os checklists e pode marcar ou desmarcar qualquer item.</div>';
   else return h + '<div class="notice">Você não está escalado(a) neste culto.</div>';
   if (!MK.esc && isAdm()) h += '<div class="notice">A escala da Mídia deste culto ainda não foi montada.</div>';
