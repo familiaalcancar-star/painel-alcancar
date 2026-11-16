@@ -1,5 +1,21 @@
 // Controle do sorteio (celular do operador). Quem sorteia é o banco: rpc sortear(evento, dia, prêmio).
-const C = { evs: [], ev: null, dia: null, n: null, hist: [], pend: null, premio: '', conf: 0, ocupado: false, erro: '' };
+const C = { evs: [], ev: null, dia: null, n: null, hist: [], pend: null, premio: '', conf: 0, ocupado: false, erro: '', link: null, linkAberto: false, trocar: 0 };
+// Link da tela do telão (sem login): o código vem do banco (sorteio_link_tela); trocar invalida o anterior.
+const urlTela = t => new URL('../tela/?k=' + encodeURIComponent(t), location.href).href;
+function qrSvg(texto){ try { const q = qrcode(0, 'M'); q.addData(texto); q.make(); return q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } catch(e){ return ''; } }
+function cardLink(){
+  if (!C.linkAberto) return '';
+  if (!C.link) return '<div class="card"><p class="meta">Gerando o link…</p></div>';
+  const u = urlTela(C.link);
+  return '<div class="card link-tela"><h3 style="margin:0 0 6px;font-size:16px">📺 Link da tela do telão</h3>'
+    + '<p class="meta" style="margin:0 0 10px">Abra no computador do telão. <b>Não precisa de login</b> e só mostra o sorteio.</p>'
+    + '<input class="inp" id="linkTela" readonly value="'+esc(u)+'">'
+    + '<div class="row" style="margin-top:10px"><button class="btn" data-copiar>Copiar link</button><a class="btn ghost" href="'+esc(u)+'" target="_blank" rel="noopener">Abrir</a></div>'
+    + '<div class="qr">'+qrSvg(u)+'</div><p class="meta" style="text-align:center;margin:6px 0 0">Aponte a câmera do celular/computador para abrir.</p>'
+    + (C.trocar === 0 ? '<button class="btn ghost" data-trocar="1" style="margin-top:12px;width:100%">Trocar link</button>'
+      : '<p class="aviso erro" style="margin-top:12px">Trocar invalida o link atual: a tela aberta com ele para de funcionar. Confirmar?</p><div class="row"><button class="btn ghost" data-trocar="0">Cancelar</button><button class="btn vermelho" data-trocar="2">Sim, trocar link</button></div>')
+    + '</div>';
+}
 
 function cabecalho(){
   return '<header><img class="logo" src="../../logo.webp" alt="Família Alcançar"><h1><span>SORTEIO</span>'+esc(C.ev ? C.ev.titulo : 'Sorteio')+'</h1></header>';
@@ -28,8 +44,8 @@ function desenhar(){
     const ult = C.hist.find(s => s.status !== 'liberado');
     if (ult) h += '<p class="meta">Último: <b>'+esc(ult.nome)+'</b> · <span class="st st-'+ult.status+'">'+esc(ROT_STATUS[ult.status])+'</span></p>';
   }
-  h += '<div class="links"><a class="btn ghost" href="../tela/?evento='+encodeURIComponent(C.ev.id)+'&dia='+C.dia+'" target="_blank" rel="noopener">📺 Abrir tela do telão</a>'
-    + '<a class="btn ghost" href="../../#checkin">‹ Painel</a></div>';
+  h += '<div class="links"><button class="btn ghost" data-link-tela>📺 Link da tela</button><a class="btn ghost" href="../tela/?evento='+encodeURIComponent(C.ev.id)+'&dia='+C.dia+'" target="_blank" rel="noopener">Abrir tela do telão</a>'
+    + '<a class="btn ghost" href="../../#checkin">‹ Painel</a></div>' + cardLink();
   h += '<h2 style="font-size:18px;margin:22px 0 8px">Histórico do evento</h2>';
   h += C.hist.length ? '<div class="card" style="padding:6px 10px;overflow-x:auto"><table class="hist"><thead><tr><th>#</th><th>Dia</th><th>Nome</th><th>Prêmio</th><th>Status</th></tr></thead><tbody>'
       + C.hist.map(s => '<tr><td>'+s.rodada+'</td><td>'+dataBR(s.dia)+'<br><small class="meta">'+horaSP(s.em)+'</small></td><td>'+esc(s.nome)+'</td><td>'+esc(s.premio || '—')+'</td><td><span class="st st-'+s.status+'">'+esc(ROT_STATUS[s.status] || s.status)+'</span></td></tr>').join('')
@@ -57,12 +73,19 @@ async function sortear(premio){
 }
 document.addEventListener('input', e => { if (e.target.id === 'sPremio') C.premio = e.target.value; });
 document.addEventListener('change', async e => {
-  if (e.target.id === 'sEv') { C.ev = C.evs.find(x => x.id === e.target.value); C.dia = diaPadrao(C.ev); C.conf = 0; C.erro = ''; history.replaceState(null, '', '?evento='+encodeURIComponent(C.ev.id)); await atualizar(); }
+  if (e.target.id === 'sEv') { C.ev = C.evs.find(x => x.id === e.target.value); C.dia = diaPadrao(C.ev); C.conf = 0; C.erro = ''; C.link = null; C.linkAberto = false; history.replaceState(null, '', '?evento='+encodeURIComponent(C.ev.id)); await atualizar(); }
   if (e.target.id === 'sDia') { C.dia = e.target.value; C.erro = ''; await atualizar(); }
 });
 document.addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b || C.ocupado) return;
   if (b.id === 'bSortear') sortear(C.premio.trim());
+  if ('linkTela' in b.dataset) { C.linkAberto = !C.linkAberto; C.trocar = 0; desenhar();
+    if (C.linkAberto && !C.link) { const r = await SB.rpc('sorteio_link_tela', { p_evento: C.ev.id, p_trocar: false }); if (r.error) { C.erro = msgErro(r.error); C.linkAberto = false; } else C.link = r.data; desenhar(); } }
+  if ('copiar' in b.dataset) { const u = urlTela(C.link); try { await navigator.clipboard.writeText(u); b.textContent = 'Copiado ✓'; } catch(e){ const i = $('#linkTela'); i.select(); document.execCommand && document.execCommand('copy'); b.textContent = 'Copiado ✓'; } setTimeout(() => { b.textContent = 'Copiar link'; }, 2000); }
+  if (b.dataset.trocar) { const v = Number(b.dataset.trocar);
+    if (v < 2) { C.trocar = v; desenhar(); return; }
+    const r = await SB.rpc('sorteio_link_tela', { p_evento: C.ev.id, p_trocar: true }); C.trocar = 0;
+    if (r.error) C.erro = msgErro(r.error); else { C.link = r.data; C.erro = ''; } desenhar(); }
   if (b.dataset.marcar && C.pend) {
     const st = b.dataset.marcar, premio = C.pend.premio; C.ocupado = true; C.erro = ''; desenhar();
     const r = await SB.rpc('sorteio_marcar', { p_id: C.pend.id, p_status: st }); C.ocupado = false;

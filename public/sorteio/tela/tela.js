@@ -1,6 +1,7 @@
-// Tela do telão: só mostra. Escuta a tabela "sorteios" (tempo real + conferência a cada 4 s).
-// A rolagem de nomes é só efeito visual: o nome final é sempre o que o banco sorteou.
-const T = { ev: null, dia: null, atual: null, visto: new Set(), animando: false, n: null, timerEspera: null };
+// Tela do telão: só mostra. A rolagem de nomes é só efeito visual: o nome final é sempre o que o banco sorteou.
+// Dois modos: com ?k=<código> funciona SEM login (consulta sorteio_tela a cada 1,5 s);
+// sem ?k, usa o login do painel (tempo real + conferência a cada 4 s).
+const T = { ev: null, dia: null, atual: null, visto: new Set(), animando: false, n: null, timerEspera: null, link: param('k'), nomesLink: [], ultLink: null };
 const marca = ev => { const m = String(ev.titulo || '').match(/[“"]([^”"]+)[”"]/); return (m ? m[1] : (ev.titulo || 'Evento')).toUpperCase(); };
 const topo = () => '<div class="topo"><img class="logo" src="../../logo.webp" alt="Família Alcançar"><span class="evento">'+esc(T.ev ? T.ev.titulo : '')+'</span></div>';
 
@@ -21,6 +22,7 @@ function selo(s){
   else el.innerHTML = '';
 }
 async function contar(){
+  if (T.link) { const b = $('#nConc'); if (b) b.textContent = T.n; return T.nomesLink.map(nome => ({ nome })); }
   const r = await SB.rpc('sorteio_elegiveis', { p_evento: T.ev.id, p_dia: T.dia });
   if (!r.error) { T.n = (r.data || []).length; const b = $('#nConc'); if (b) b.textContent = T.n; }
   return r.error ? [] : (r.data || []);
@@ -41,6 +43,7 @@ async function animar(s){
   $('#premio').innerHTML = s.premio ? '🎁 '+esc(s.premio) : '';
   brilho(true); confete(6000); T.animando = false;
   // Se o controle já marcou o resultado durante a animação, mostra agora.
+  if (T.link) { if (T.ultLink && T.ultLink.id === s.id) aplicar(T.ultLink); return; }
   const r = await SB.from('sorteios').select('*').eq('id', s.id).limit(1); const atual = (r.data || [])[0]; if (atual) aplicar(atual);
 }
 function aplicar(s){
@@ -81,7 +84,38 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 $('#bTela').onclick = () => { manterAcesa(); if (document.fullscreenElement) document.exitFullscreen(); else (document.documentElement.requestFullscreen || function(){}).call(document.documentElement); };
 document.addEventListener('dblclick', () => $('#bTela').click());
 
-exigirLogin($('#app'), async () => {
+// ---------- Modo link (sem login) ----------
+function linkInvalido(){
+  $('#app').innerHTML = '<div class="palco espera"><div class="topo"><img class="logo" src="../../logo.webp" alt="Família Alcançar"></div><h1 class="marca">SORTEIO</h1>'
+    + '<p class="conc" style="font-size:3.4vh">Link inválido ou trocado.<br><span class="meta" style="font-size:2.4vh">Peça o link novo a quem está conduzindo o sorteio.</span></p></div>';
+}
+async function lerLink(){
+  const r = await SB.rpc('sorteio_tela', { p_token: T.link });
+  if (r.error) return null; return r.data || { ok: false };
+}
+async function pollLink(){
+  const j = await lerLink(); if (!j) return; // falha de rede: tenta de novo no próximo ciclo
+  if (!j.ok) { T.ev = null; T.atual = null; linkInvalido(); return; }
+  const novoEv = !T.ev || T.ev.id !== j.evento;
+  T.ev = { id: j.evento, titulo: j.titulo }; T.dia = j.dia; T.n = j.concorrendo; T.nomesLink = Array.isArray(j.nomes) ? j.nomes : []; T.ultLink = j.ultimo || null;
+  if (novoEv && !T.animando) { // primeira leitura: não anima o que já tinha acontecido
+    const u = T.ultLink; if (u) T.visto.add(u.id);
+    if (u && ['sorteado', 'ganhador', 'retirado'].includes(u.status) && Date.now() - new Date(u.em).getTime() < 10 * 60000) { T.atual = u; palcoSorteado(u, false); brilho(true); selo(u); }
+    else espera();
+    return;
+  }
+  const u = T.ultLink;
+  if (u && (!T.atual || u.id !== T.atual.id || u.status !== T.atual.status)) aplicar(u);
+  if (!T.atual && !T.animando) { const b = $('#nConc'); if (b) b.textContent = T.n; else espera(); }
+}
+async function iniciarLink(){
+  manterAcesa();
+  await pollLink();
+  setInterval(() => { if (document.visibilityState === 'visible') pollLink(); }, 1500);
+}
+
+if (T.link) iniciarLink();
+else exigirLogin($('#app'), async () => {
   let evs = []; try { evs = await eventosSorteio(); } catch(e){}
   T.ev = evs.find(x => x.id === param('evento')) || evs.find(x => x.dias.includes(hojeSP())) || evs.find(x => x.dias[x.dias.length-1] >= hojeSP()) || evs[evs.length - 1];
   if (!T.ev) { $('#app').innerHTML = '<div class="palco"><h1 class="marca">SORTEIO</h1><p class="meta">Nenhum evento com sorteio.</p></div>'; return; }

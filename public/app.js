@@ -103,6 +103,8 @@ const temGestao = () => isAdm() || !!(pessoaDe(S.uid)||{}).gestao;
 const temMidia = () => isAdm() || !!(pessoaDe(S.uid)||{}).midia;
 // Extra Desperta: só a lista de presença (aba Check-in), sem o check-in dos voluntários.
 const temDesperta = () => isAdm() || !!(pessoaDe(S.uid)||{}).desperta;
+// Extra Sorteador: conduz o sorteio (abre o controle pela aba Check-in).
+const temSorteador = () => isAdm() || !!(pessoaDe(S.uid)||{}).sorteador;
 // Quem está escalado no Staff, função Check-in, em algum culto de hoje até daqui a 6 dias, também faz o check-in (só desse dia).
 // Ligação pelo nome escrito na escala: NOME E SOBRENOME (2 palavras ou mais), todas dentro do nome completo do cadastro.
 // Só para quem é admin, líder, auxiliar ou organização (quem é só consulta não ganha). Mesma regra do banco (nome_bate).
@@ -120,7 +122,8 @@ const ckLivre = () => temGestao() || ehOrganizacao();
 const ckEscalado = () => !ckLivre() && datasCheckin().length > 0;
 // A aba Check-in aparece SOMENTE para: admin, extra Gestão, papel Organização e os escalados acima.
 const ckEquipe = () => ckLivre() || ckEscalado();
-const veCheckin = () => ckEquipe() || temDesperta();
+const veParticipantes = () => ckEquipe() || temDesperta();
+const veCheckin = () => veParticipantes() || temSorteador();
 const temMinistro = () => !!(pessoaDe(S.uid)||{}).ministro;
 const temEscala = () => !!(pessoaDe(S.uid)||{}).escala;
 // Quem está escalado no Check-in da data também edita os nomes de todas as áreas daquele dia (área por conexão: só se a escala já existe).
@@ -474,7 +477,7 @@ function render(){
   if (!S.pronto) return;
   if (document.querySelector('#dlg[open]')) return;
   const abertos = [...document.querySelectorAll('details.area[open]')].map(d => d.dataset.k);
-  $('#subtitle').textContent = papelTexto() + (!isAdm() && pessoaDe(S.uid) ? [pessoaDe(S.uid).gestao?' · Gestão':'', pessoaDe(S.uid).ministro?' · Ministro':'', pessoaDe(S.uid).avisos?' · Avisos/Eventos':'', pessoaDe(S.uid).escala?' · Escala':'', pessoaDe(S.uid).midia?' · Mídia':''].join('') : '');
+  $('#subtitle').textContent = papelTexto() + (!isAdm() && pessoaDe(S.uid) ? [pessoaDe(S.uid).gestao?' · Gestão':'', pessoaDe(S.uid).ministro?' · Ministro':'', pessoaDe(S.uid).avisos?' · Avisos/Eventos':'', pessoaDe(S.uid).escala?' · Escala':'', pessoaDe(S.uid).midia?' · Mídia':'', pessoaDe(S.uid).desperta?' · Desperta':''].join('') : '') + (pessoaDe(S.uid) && pessoaDe(S.uid).sorteador ? ' · Sorteador' : '');
   renderWho();
   const v = $('#view');
   if (!S.cfgLoaded) { v.innerHTML='<div class="empty">Carregando o painel…</div>'; return; }
@@ -1507,7 +1510,7 @@ function ckLinha(k, nomeEsc, fn, m, areaId){
 const PR = { lista:null, linhas:{}, ok:false, busca:'' };
 const diaSem = d => new Date(d+'T12:00:00').toLocaleDateString('pt-BR', {weekday:'short'}).replace('.', '');
 const periodoTxt = ds => ds.length === 1 ? dataBR(ds[0]).slice(0,5) : dataBR(ds[0]).slice(0,5)+' a '+dataBR(ds[ds.length-1]).slice(0,5);
-const podeSortear = () => isAdm() || temGestao() || ehOrganizacao();
+const podeSortear = () => isAdm() || temGestao() || ehOrganizacao() || temSorteador();
 function listasPresenca(){
   return (S.eventos || []).filter(e => e && e.checkinParticipantes)
     .map(e => ({id:e.id, nome:e.titulo || 'Evento', dias:(Array.isArray(e.dias) && e.dias.length ? e.dias : [e.data]).filter(Boolean).slice().sort()}))
@@ -1516,7 +1519,7 @@ function listasPresenca(){
 function cardListasPresenca(){
   const ls = listasPresenca(); if (!ls.length) return '';
   return '<div class="card pres-card"><h3>👥 Participantes</h3><p class="meta" style="margin:4px 0 8px">Check-in de quem veio em cada dia do evento.</p>'
-    + ls.map(g => '<button class="btn ghost pres-abre" data-pres-abrir="'+esc(g.id)+'">'+esc(g.nome)+' · '+esc(periodoTxt(g.dias))+' ›</button>'
+    + ls.map(g => (veParticipantes() ? '<button class="btn ghost pres-abre" data-pres-abrir="'+esc(g.id)+'">'+esc(g.nome)+' · '+esc(periodoTxt(g.dias))+' ›</button>' : '<p style="margin:8px 0 0"><b>'+esc(g.nome)+'</b> · '+esc(periodoTxt(g.dias))+'</p>')
       + (podeSortear() ? '<a class="btn pres-sorteio" href="sorteio/controle/?evento='+encodeURIComponent(g.id)+'">🎲 Sorteio</a>' : '')).join('')+'</div>';
 }
 async function prCarregar(){
@@ -2272,7 +2275,7 @@ function viewAjustes(){
       const dupId = statusDe(id) === 'pendente' ? contaDupDe(id, wpp) : null;
       return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+(dupId ? '<div class="dup">⚠️ Já tem cadastro em outra conta: <b>'+esc(nomeComp(dupId))+'</b>'+(emailDe(dupId) ? ' ('+esc(emailDe(dupId))+')' : '')+' · '+ROT_STATUS[statusDe(dupId)]+'<br><button type="button" class="btn small" data-transferir="'+esc(dupId)+'|'+esc(id)+'">Passar o cadastro para esta conta</button></div>' : '')+(emailDe(id) && nomeComp(id)!==emailDe(id)?'<br><span class="meta">✉️ '+esc(emailDe(id))+'</span>':'')+(wpp?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(wpp).replace(/\D/g,'').length<=11?'55':'')+String(wpp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(wpp)+'</a>':'')+'</td><td>'+celulaStatus(id)+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
         + '<td><select class="inp" data-p-papel="'+esc(id)+'">'+opts(Object.entries(PAPEIS).map(([k,v])=>({id:k,nome:v})), base.papel)+'</select></td>'
-        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-midia="'+esc(id)+'"'+((atual&&atual.midia) || base.papel==='midia' ?' checked':'')+'> Mídia</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-desp="'+esc(id)+'"'+(atual&&atual.desperta?' checked':'')+'> Desperta</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; }).join('')
+        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-midia="'+esc(id)+'"'+((atual&&atual.midia) || base.papel==='midia' ?' checked':'')+'> Mídia</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-desp="'+esc(id)+'"'+(atual&&atual.desperta?' checked':'')+'> Desperta</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-sort="'+esc(id)+'"'+(atual&&atual.sorteador?' checked':'')+'> Sorteador</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; }).join('')
     + '</tbody></table><div class="end"><button class="btn" data-salvar-pessoas>Salvar pessoas</button></div></div>';
   html += '<p class="hint">Administradores podem tudo (hoje: '+(nAdm+1)+' contando você; o ideal é até 5). Líder, Auxiliar e Organização preenchem a Direção do culto e o Super Kids nos dias em que a conexão deles está escalada; se a conexão for Flechas, Forasteiros ou Heróis, também o Louvor. <b>Extras:</b> Gestão vê a aba Check-in e imprime o check-in (PDF e Excel); Ministro pode editar a escala de Louvor; Avisos/Eventos pode publicar avisos e eventos (e editar ou excluir os que publicou); Escala pode preencher os nomes da Direção do culto e do Super Kids de qualquer conexão. Banco bloqueia alterações, cadastros, envio de mensagens, importações e exportações, mesmo que outros extras estejam marcados.</p>';
   return html;
@@ -2280,7 +2283,7 @@ function viewAjustes(){
 // ---------- Convidar por e-mail ----------
 // O convite deixa a pessoa pré-aprovada: ao fazer o cadastro entrando com ESSE e-mail, ela já fica Aprovada
 // com a função, a conexão e os extras escolhidos (o banco confere o e-mail do login).
-const EXTRAS = [['gestao','Gestão'],['ministro','Ministro'],['avisos','Avisos/Eventos'],['escala','Escala'],['midia','Mídia'],['banco','Banco']];
+const EXTRAS = [['gestao','Gestão'],['ministro','Ministro'],['avisos','Avisos/Eventos'],['escala','Escala'],['midia','Mídia'],['sorteador','Sorteador'],['banco','Banco']];
 const descConvite = c => PAPEIS[c.papel] + (c.conexao && c.papel !== 'admin' ? ' · ' + conexaoNome(c.conexao) : '') + EXTRAS.filter(([k]) => c[k]).map(([, n]) => ' · ' + n).join('');
 function msgConviteEmail(c){
   const pn = String(c.nome||'').trim().split(' ')[0];
@@ -2394,7 +2397,7 @@ document.addEventListener('click', async e => {
   const pessoas = {};
   document.querySelectorAll('[data-p-papel]').forEach(sel => { const id = sel.dataset.pPapel; const con = document.querySelector('[data-p-con="'+id+'"]').value;
     const ant = S.pessoas[id] || {}; const ped = (S.cadastros||{})[id] || {};
-    pessoas[id] = {id, status:document.querySelector('[data-p-status="'+id+'"]').value, banco:!!document.querySelector('[data-p-banco="'+id+'"]').checked, email: ant.email || ped.email || S.emails[id] || null, papel: sel.value, conexao: con || null, nome: ant.nome || ped.nome || (S.names[id]||{}).nome || '', apelido: ant.apelido || ped.apelido || '', whatsapp: ant.whatsapp || ped.whatsapp || '', gestao: !!(document.querySelector('[data-p-gestao="'+id+'"]')||{}).checked, ministro: !!(document.querySelector('[data-p-min="'+id+'"]')||{}).checked, avisos: !!(document.querySelector('[data-p-av="'+id+'"]')||{}).checked, escala: !!(document.querySelector('[data-p-esc="'+id+'"]')||{}).checked, midia: !!(document.querySelector('[data-p-midia="'+id+'"]')||{}).checked, desperta: !!(document.querySelector('[data-p-desp="'+id+'"]')||{}).checked}; });
+    pessoas[id] = {id, status:document.querySelector('[data-p-status="'+id+'"]').value, banco:!!document.querySelector('[data-p-banco="'+id+'"]').checked, email: ant.email || ped.email || S.emails[id] || null, papel: sel.value, conexao: con || null, nome: ant.nome || ped.nome || (S.names[id]||{}).nome || '', apelido: ant.apelido || ped.apelido || '', whatsapp: ant.whatsapp || ped.whatsapp || '', gestao: !!(document.querySelector('[data-p-gestao="'+id+'"]')||{}).checked, ministro: !!(document.querySelector('[data-p-min="'+id+'"]')||{}).checked, avisos: !!(document.querySelector('[data-p-av="'+id+'"]')||{}).checked, escala: !!(document.querySelector('[data-p-esc="'+id+'"]')||{}).checked, midia: !!(document.querySelector('[data-p-midia="'+id+'"]')||{}).checked, desperta: !!(document.querySelector('[data-p-desp="'+id+'"]')||{}).checked, sorteador: !!(document.querySelector('[data-p-sort="'+id+'"]')||{}).checked}; });
   const falta = Object.entries(pessoas).filter(([id,p]) => p.status==='aprovado' && !p.banco && ehEquipe(p) && !p.conexao);
   if (falta.length) { toast('Escolha a conexão de '+falta.map(([id])=>nome(id)).join(', ')+'.'); return; }
   const nAdm = Object.values(pessoas).filter(p=>p.papel==='admin' && p.status==='aprovado' && !p.banco).length;

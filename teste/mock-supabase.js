@@ -39,6 +39,7 @@ const chaves = {checkin_itens:['nome'], checkin_marcas:['data','culto','chave'],
 const mesma = (t, a, b) => (chaves[t]||['id']).every(k => a[k] === b[k]);
 let sessao = null; const ouvintes = [];
 try { JSON.parse(localStorage.getItem('mockPessoasExtra') || '[]').forEach(q => T.pessoas.push(q)); } catch(e){}
+try { [['mockEvParticipantes','evento_participantes'],['mockEvPresencas','evento_presencas'],['mockSorteios','sorteios'],['mockSorteioTelas','sorteio_telas']].forEach(([k, t]) => { const v = localStorage.getItem(k); if (v) T[t] = JSON.parse(v); }); } catch(e){}
 try { JSON.parse(localStorage.getItem('mockEventosExtra') || '[]').forEach(ev => { T.eventos = T.eventos.filter(e => e.id !== ev.id); T.eventos.push({id:ev.id, d:ev.d, autor:null}); }); } catch(e){}
 try { const p = localStorage.getItem('mockPapel'); if (p && U[p]) sessao = {user:{id:U[p], email:p+'@x', app_metadata:{provider: localStorage.getItem('mockProv') || 'email'}}}; } catch(e){}
 const emitir = ev => ouvintes.forEach(cb => setTimeout(() => cb(ev, sessao), 0));
@@ -121,7 +122,13 @@ window.supabase = { createClient: () => ({
         return {data: o ? [{email: String(o.email).replace(/^(.{2})[^@]*(@.*)$/, '$1•••$2'), provedor:'email'}] : [], error:null}; })()
     : n === 'transferir_pessoa' ? (() => { const o = T.pessoas.find(q => q.id === args.p_de); if (!o) return {data:null, error:{message:'conta antiga sem cadastro'}};
         T.pessoas = T.pessoas.filter(q => q.id !== args.p_para); T.pessoas.push({...o, id:args.p_para, status:'aprovado'}); o.status = 'removido'; T.cadastros = T.cadastros.filter(c => c.id !== args.p_para); return {data:null, error:null}; })()
-    : n === 'pode_sortear' ? {data: ['admin'].includes((T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}).papel) || !!(T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}).gestao, error:null}
+    : n === 'pode_sortear' ? (() => { const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}; return {data: eu.papel === 'admin' || !!eu.gestao || !!eu.sorteador, error:null}; })()
+    : n === 'sorteio_link_tela' ? (() => { T.sorteio_telas = T.sorteio_telas || []; if (args.p_trocar) T.sorteio_telas = T.sorteio_telas.filter(x => x.evento !== args.p_evento);
+        let x = T.sorteio_telas.find(x => x.evento === args.p_evento); if (!x) T.sorteio_telas.push(x = {evento:args.p_evento, token:'tk'+Math.random().toString(36).slice(2,12)}); return {data:x.token, error:null}; })()
+    : n === 'sorteio_tela' ? (() => { const x = (T.sorteio_telas||[]).find(x => x.token === args.p_token); if (!x) return {data:{ok:false}, error:null};
+        const ev = T.eventos.find(e => e.id === x.evento) || {d:{}}, dia = new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'}), nomes = sorteioEleg(x.evento, dia).map(e => e.nome);
+        const ult = (T.sorteios||[]).filter(s => s.evento === x.evento).sort((a, b) => String(b.em).localeCompare(String(a.em)))[0];
+        return {data:{ok:true, evento:x.evento, titulo:ev.d.titulo||'', dia, concorrendo:nomes.length, nomes, ultimo: ult ? {id:ult.id, nome:ult.nome, premio:ult.premio, status:ult.status, rodada:ult.rodada, em:ult.em} : null}, error:null}; })()
     : n === 'sorteio_elegiveis' ? {data: sorteioEleg(args.p_evento, args.p_dia), error:null}
     : n === 'sortear' ? (() => { T.sorteios = T.sorteios || [];
         if (T.sorteios.some(s => s.evento === args.p_evento && s.status === 'sorteado')) return {data:null, error:{message:'Confirme (ganhador / retirou / ausente) o sorteado atual antes de sortear de novo.'}};
