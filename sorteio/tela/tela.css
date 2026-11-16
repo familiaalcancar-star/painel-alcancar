@@ -3,11 +3,20 @@
 :root{ --ouro:#FFC23D; --laranja:#F29A1A; --ouro-borda:#D9A441; --creme:#FFF6E5; color-scheme:dark; }
 :root:not([data-theme="light"]){color-scheme:dark}
 :root[data-theme="dark"]{color-scheme:dark}
-html,body{margin:0;height:100%;background:#000;overflow:hidden}
+/* A arte preenche a tela inteira (cover), sem faixas pretas, em qualquer monitor/projetor. */
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
+/* Fora do palco (telas 4:3, ultrawide…): a mesma arte, desfocada e mais escura, para não repetir título e logo. */
+body{position:relative;isolation:isolate}
+body::before{content:"";position:fixed;inset:-60px;z-index:-1;background:url('../fundo-desperta.webp') center/cover no-repeat;filter:blur(32px) brightness(.45) saturate(1.15)}
 body{display:flex;align-items:center;justify-content:center;font-family:'Montserrat','Figtree',system-ui,sans-serif;color:var(--creme)}
 body.sem-cursor,body.sem-cursor *{cursor:none !important}
-.quadro{position:relative;width:min(100vw, calc(100vh * 1672 / 941));aspect-ratio:1672/941;container-type:size;
-  background:#000 url('../fundo-desperta.webp') center/cover no-repeat;overflow:hidden;user-select:none}
+/* Palco = a arte em 16:9 com a caixa e a faixa alinhadas por cima. O tamanho vem do tela.js: cobre a tela inteira
+   (como cover), mas sem cortar o título, a caixa, a faixa e a logo; se sobrar borda, ela é a mesma arte do fundo,
+   com a emenda suavizada. */
+.quadro{position:relative;flex:none;width:100vw;height:calc(100vw * 941 / 1672);container-type:size;isolation:isolate;user-select:none}
+.quadro::before{content:"";position:absolute;inset:0;z-index:-1;background:url('../fundo-desperta.webp') center/100% 100% no-repeat;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent),linear-gradient(180deg,transparent,#000 3%,#000 97%,transparent);
+  -webkit-mask-composite:source-in;mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent),linear-gradient(180deg,transparent,#000 4%,#000 96%,transparent);mask-composite:intersect}
 
 /* Caixa do nome: moldura dourada fina com cantos chanfrados, por cima da da arte. */
 .moldura{position:absolute;left:6.9%;top:32.2%;width:86.3%;height:38.8%;filter:drop-shadow(0 0 0 rgba(255,194,61,0));transition:filter .6s}
@@ -45,7 +54,11 @@ body.sem-cursor,body.sem-cursor *{cursor:none !important}
 @keyframes entra{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
 .quadro[data-estado="invalido"] .nome{font-size:4.2cqw;white-space:normal}
 canvas#confete{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.dica{position:absolute;right:1.2cqw;bottom:1cqw;font-size:1.05cqw;color:rgba(255,255,255,.55);transition:opacity 1s}
-.dica.some{opacity:0}
+/* Botão discreto de tela cheia (some em tela cheia e quando o mouse fica parado). */
+.btn-cheia{position:fixed;right:16px;bottom:14px;z-index:5;background:rgba(0,0,0,.45);color:rgba(255,255,255,.8);border:1px solid rgba(255,255,255,.22);
+  border-radius:10px;padding:8px 12px;font:600 13px 'Figtree',system-ui,sans-serif;cursor:pointer;backdrop-filter:blur(4px);transition:opacity .4s}
+.btn-cheia:hover,.btn-cheia:focus-visible{color:#fff;border-color:rgba(255,194,61,.7);outline:none}
+.btn-cheia[hidden]{display:none}
+body.sem-cursor .btn-cheia{opacity:0;pointer-events:none}
 .login{max-width:420px;margin:0 auto;padding:0 16px}
 @media (prefers-reduced-motion: reduce){.quadro *{animation:none !important}}

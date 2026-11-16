@@ -6,6 +6,15 @@
 const T = { ev: null, dia: null, atual: null, visto: new Set(), animando: false, n: null, timer: null,
   link: param('k'), nomesLink: [], ultLink: null, sorteia: false, ocupado: false, premio: '' };
 const Q = $('#quadro'), NOME = $('#nome'), SUB = $('#sub'), FAIXA = $('#faixa');
+// Tamanho do palco (arte 1672×941): cobre a tela inteira, mas nunca corta o título, a caixa, a faixa e a logo
+// (pelo menos 88% da largura e 96% da altura da arte ficam visíveis). O que sobrar é a mesma arte do fundo.
+const PROP = 1672 / 941;
+function ajustarPalco(){
+  const w = innerWidth, h = innerHeight;
+  const L = Math.min(Math.max(w, h * PROP), w / .88, h / .96 * PROP);
+  Q.style.width = L + 'px'; Q.style.height = (L / PROP) + 'px';
+}
+ajustarPalco();
 
 // ---------- Desenho ----------
 function estado(e){ Q.dataset.estado = e; }
@@ -168,8 +177,11 @@ function telaCheia(){ manterAcesa(); if (document.fullscreenElement) document.ex
 document.addEventListener('dblclick', telaCheia);
 let tCursor; const mexeu = () => { document.body.classList.remove('sem-cursor'); clearTimeout(tCursor); tCursor = setTimeout(() => document.body.classList.add('sem-cursor'), 3000); };
 ['mousemove', 'mousedown', 'touchstart'].forEach(ev => document.addEventListener(ev, mexeu, { passive: true })); mexeu();
-setTimeout(() => $('#dica').classList.add('some'), 6000);
-addEventListener('resize', () => { caberFaixa(); if (T.atual && !T.animando && Q.dataset.estado !== 'espera' && Q.dataset.estado !== 'invalido') caber(T.atual.nome); });
+// Botão "Tela cheia": some quando já está em tela cheia.
+const bCheia = $('#bCheia'); bCheia.onclick = e => { e.stopPropagation(); telaCheia(); };
+const atualizarBotao = () => { bCheia.hidden = !!document.fullscreenElement || !document.fullscreenEnabled; };
+document.addEventListener('fullscreenchange', () => { atualizarBotao(); manterAcesa(); }); atualizarBotao();
+addEventListener('resize', () => { ajustarPalco(); caberFaixa(); if (T.atual && !T.animando && Q.dataset.estado !== 'espera' && Q.dataset.estado !== 'invalido') caber(T.atual.nome); });
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { caberFaixa(); if (T.atual && !T.animando && Q.dataset.estado !== 'espera') caber(T.atual.nome); });
 
 // ---------- Início ----------
