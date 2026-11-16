@@ -45,7 +45,7 @@ function desenhar(){
     const ult = C.hist.find(s => s.status !== 'liberado');
     if (ult) h += '<p class="meta">Último: <b>'+esc(ult.nome)+'</b> · <span class="st st-'+ult.status+'">'+esc(ROT_STATUS[ult.status])+'</span></p>';
   }
-  h += '<div class="links"><button class="btn ghost" data-link-tela>📺 Link da tela</button><a class="btn ghost" href="../tela/?evento='+encodeURIComponent(C.ev.id)+'&dia='+C.dia+'" target="_blank" rel="noopener">Abrir tela do telão</a>'
+  h += '<div class="links"><button class="btn ghost" data-link-tela>📺 Link da tela</button><button type="button" class="btn ghost" data-abrir-telao>Abrir tela do telão</button>'
     + '<a class="btn ghost" href="../../#checkin">‹ Painel</a></div>' + cardLink();
   h += '<h2 style="font-size:18px;margin:22px 0 8px">Histórico do evento</h2>';
   h += C.hist.length ? '<div class="card" style="padding:6px 10px;overflow-x:auto"><table class="hist"><thead><tr><th>#</th><th>Dia</th><th>Nome</th><th>Prêmio</th><th>Status</th><th></th></tr></thead><tbody>'
@@ -77,6 +77,16 @@ function salvarPremio(agora){
     if (!r.error) C.premioSalvo = v; const i = $('#premioInfo'); if (i) i.textContent = r.error ? 'Não consegui salvar o prêmio agora.' : premioInfo(); }, agora ? 0 : 600);
 }
 async function lerPremio(){ const r = await SB.rpc('sorteio_premio', { p_evento: C.ev.id }); if (!r.error && typeof r.data === 'string') { C.premio = r.data; C.premioSalvo = r.data; } }
+// Telão numa JANELA separada (para arrastar até o projetor). Se já estiver aberta, só traz para frente.
+let janelaTelao = null;
+function abrirTelao(){
+  if (janelaTelao && !janelaTelao.closed) { janelaTelao.focus(); return; }
+  const url = new URL('../tela/?evento=' + encodeURIComponent(C.ev.id) + '&dia=' + C.dia, location.href).href;
+  janelaTelao = window.open(url, 'telaoSorteio', 'popup=yes,width=1280,height=720,left=100,top=100');
+  if (!janelaTelao) { C.erro = 'Permita pop-ups para este site e clique de novo.'; desenhar(); return; }
+  if (C.erro === 'Permita pop-ups para este site e clique de novo.') { C.erro = ''; desenhar(); }
+  janelaTelao.focus();
+}
 async function atualizar(){
   if (!C.ev) return;
   const [e, h] = await Promise.all([SB.rpc('sorteio_elegiveis', { p_evento: C.ev.id, p_dia: C.dia }), SB.from('sorteios').select('*').eq('evento', C.ev.id).order('em', { ascending: false }).limit(300)]);
@@ -98,6 +108,7 @@ document.addEventListener('change', async e => {
 document.addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b || C.ocupado) return;
   if (b.id === 'bSortear') sortear(C.premio.trim());
+  if ('abrirTelao' in b.dataset) abrirTelao();
   if ('linkTela' in b.dataset) { C.linkAberto = !C.linkAberto; C.trocar = 0; desenhar();
     if (C.linkAberto && !C.link) { const r = await SB.rpc('sorteio_link_tela', { p_evento: C.ev.id, p_trocar: false }); if (r.error) { C.erro = msgErro(r.error); C.linkAberto = false; } else C.link = r.data; desenhar(); } }
   if ('copiar' in b.dataset) { const u = urlTela(C.link); try { await navigator.clipboard.writeText(u); b.textContent = 'Copiado ✓'; } catch(e){ const i = $('#linkTela'); i.select(); document.execCommand && document.execCommand('copy'); b.textContent = 'Copiado ✓'; } setTimeout(() => { b.textContent = 'Copiar link'; }, 2000); }
