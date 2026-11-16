@@ -35,7 +35,7 @@ try { const mm = JSON.parse(localStorage.getItem('mockMarcas') || 'null'); if (m
 window.__TABELAS = T;
 const derivados = (t, r) => { if (t==='escalas' || t==='eventos') r.data = r.d && r.d.data; if (t==='escalas') { r.culto = r.d.culto; r.area = r.d.area; } return r; };
 Object.keys(T).forEach(t => T[t].forEach(r => derivados(t, r)));
-const chaves = {checkin_itens:['nome'], checkin_marcas:['data','culto','chave'], checklist_marcas:['data','culto','item'], convites:['email']};
+const chaves = {checkin_itens:['nome'], checkin_marcas:['data','culto','chave'], checklist_marcas:['data','culto','item'], convites:['email'], presencas:['lista','id']};
 const mesma = (t, a, b) => (chaves[t]||['id']).every(k => a[k] === b[k]);
 let sessao = null; const ouvintes = [];
 try { JSON.parse(localStorage.getItem('mockPessoasExtra') || '[]').forEach(q => T.pessoas.push(q)); } catch(e){}

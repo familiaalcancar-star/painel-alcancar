@@ -208,6 +208,7 @@ const RECARGA = {
   escalas: () => Promise.all([carregarProx(), carregarMes(), S.ckD ? ckCarregarDocs() : null, MK.data ? mkCarregarEscala() : null]),
   avisos: () => carregarAvisos(), eventos: () => carregarEventos(), checkin_itens: () => ckCarregarItens(), checkin_marcas: () => Promise.all([S.ckD ? ckCarregarMarcas() : null, MK.data && !MK.fezCheckin ? mkCarregarCheckin() : null]),
   checklist_marcas: () => MK.data ? mkCarregarMarcas() : null, checklist_itens: () => MK.itens ? mkCarregarItens() : null,
+  presencas: () => PR.lista ? prCarregar() : null,
   chat: () => carregarChat().then(chatAtualizado) };
 const pendRecarga = {};
 function agendarRecarga(tabela){
@@ -1496,13 +1497,123 @@ function ckLinha(k, nomeEsc, fn, m, areaId){
     + '<button type="button" class="btn ghost small" data-ck-add="'+esc(k)+'">+ item</button></div>'
     + (falta.length ? '<div class="ck2-falta">Falta: '+esc(ckLista(falta))+'</div>' : '') + '</div>';
 }
+/* ---------- LISTA DE PRESENÇA (evento de vários dias, ex.: Congresso de 18 a 21/11) ---------- */
+// Os dias vêm da escala: cultos com o mesmo nome (d.cultoNome) em dias seguidos formam uma lista.
+// Uma linha por pessoa em "presencas" (dias marcados em "dias"); quem acessa o Check-in marca.
+const PR = { esc:null, carregando:false, lista:null, linhas:{}, ok:false, busca:'' };
+const diaSem = d => new Date(d+'T12:00:00').toLocaleDateString('pt-BR', {weekday:'short'}).replace('.', '');
+const periodoTxt = ds => ds.length === 1 ? dataBR(ds[0]).slice(0,5) : dataBR(ds[0]).slice(0,5)+' a '+dataBR(ds[ds.length-1]).slice(0,5);
+async function prCarregarEscalas(){ if (PR.carregando) return; PR.carregando = true;
+  try { PR.esc = linhas(await sb.from('escalas').select('id,d').gte('data', somaDias(hoje(), -45)).lte('data', somaDias(hoje(), 120)).order('data').limit(1500)); } catch(e){ PR.esc = []; }
+  PR.carregando = false; if (S.tab === 'checkin') render(); }
+function listasPresenca(){
+  const porNome = {}; (PR.esc || []).concat(todasEscalas()).filter(x => x && x.cultoNome && x.data)
+    .forEach(x => { const k = normNome(x.cultoNome); (porNome[k] ||= {nome:String(x.cultoNome).trim(), dias:new Set()}).dias.add(x.data); });
+  const out = []; Object.values(porNome).forEach(g => { let cur = null;
+    [...g.dias].sort().forEach(d => { if (cur && d <= somaDias(cur.dias[cur.dias.length-1], 3)) cur.dias.push(d); else out.push(cur = {nome:g.nome, dias:[d]}); }); });
+  out.forEach(g => g.id = slug(g.nome)+'-'+g.dias[0]);
+  return out.filter(g => g.dias[g.dias.length-1] >= somaDias(hoje(), -45)).sort((a, b) => a.dias[0].localeCompare(b.dias[0]));
+}
+function cardListasPresenca(){
+  if (PR.esc === null) { prCarregarEscalas(); return ''; }
+  const ls = listasPresenca(); if (!ls.length) return '';
+  return '<div class="card pres-card"><h3>📋 Lista de presença</h3><p class="meta" style="margin:4px 0 8px">Marque quem veio em cada dia do evento.</p>'
+    + ls.map(g => '<button class="btn ghost pres-abre" data-pres-abrir="'+esc(g.id)+'">'+esc(g.nome)+' · '+esc(periodoTxt(g.dias))+' ›</button>').join('')+'</div>';
+}
+async function prCarregar(){ const id = PR.lista; const r = await sb.from('presencas').select('*').eq('lista', id); if (id !== PR.lista) return;
+  const m = {}; if (r.error) console.warn(r.error); else (r.data||[]).forEach(p => m[p.id] = p); PR.linhas = m; PR.ok = true; if (S.tab === 'checkin') render(); }
+const prPessoas = () => Object.values(PR.linhas).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+function viewPresenca(){
+  const g = listasPresenca().find(x => x.id === PR.lista), volta = '<button class="btn ghost small" data-pres-voltar>‹ Voltar ao check-in</button>';
+  if (!g) return volta + '<div class="empty">Carregando…</div>';
+  if (!PR.ok) return volta + '<h2 style="font-size:22px;margin-top:12px">'+esc(g.nome)+'</h2><div class="empty">Carregando…</div>';
+  const ps = prPessoas(), tot = d => ps.filter(p => p.dias && p.dias[d]).length, add = '<div class="bar pres-add"><button class="btn" data-pres-add>+ Adicionar pessoa</button></div>';
+  let h = volta + '<div class="bar" style="margin-top:12px"><h2 style="font-size:22px">'+esc(g.nome)+'</h2><span style="flex:1"></span>'
+    + (podeExportar() && ps.length ? '<button class="btn ghost small" data-pres-pdf>PDF</button><button class="btn ghost small" data-pres-xls>Excel</button>' : '') + '</div>'
+    + '<p class="meta" style="margin:0 0 8px">Lista de presença · '+esc(periodoTxt(g.dias))+' · '+ps.length+' pessoa'+(ps.length === 1 ? '' : 's')+'</p>' + add;
+  if (!ps.length) return h + '<div class="empty">Ninguém na lista ainda. Toque em <b>+ Adicionar pessoa</b>.</div>';
+  if (ps.length > 8) h += '<input class="inp" id="prBusca" type="search" placeholder="🔍 Buscar nome…" autocomplete="off" value="'+esc(PR.busca)+'" style="margin:0 0 10px">';
+  h += '<div class="card tbl-wrap pres-wrap"><table class="pres"><thead><tr><th>Nome</th>'+g.dias.map(d => '<th>'+esc(dataBR(d).slice(0,5))+'<small>'+esc(diaSem(d))+'</small><small class="pres-tot">'+tot(d)+'</small></th>').join('')+'</tr></thead><tbody>'
+    + ps.map(p => '<tr data-pres-linha="'+esc(normNome(p.nome))+'"'+(PR.busca && !normNome(p.nome).includes(normNome(PR.busca)) ? ' hidden' : '')+'><th><button type="button" class="pres-nome" data-pres-edit="'+esc(p.id)+'">'+esc(p.nome)+'</button></th>'
+      + g.dias.map(d => '<td><label class="ckbox pres-cx'+(d === hoje() ? ' hoje' : '')+'"><input type="checkbox" data-pres="'+esc(p.id)+'|'+d+'"'+(p.dias && p.dias[d] ? ' checked' : '')+' aria-label="'+esc(p.nome+' · '+dataBR(d).slice(0,5))+'"><span></span></label></td>').join('')+'</tr>').join('')
+    + '</tbody></table></div>' + add;
+  return h;
+}
+async function prGravar(p){
+  PR.linhas = {...PR.linhas, [p.id]: p};
+  try { const r = await sb.from('presencas').upsert({lista:PR.lista, id:p.id, nome:p.nome, dias:p.dias||{}}, {onConflict:'lista,id'}); if (r.error) throw r.error; return true; }
+  catch(e){ falhaEscrita(e); await prCarregar(); return false; }
+}
+function prFormAdd(){
+  const g = listasPresenca().find(x => x.id === PR.lista); if (!g) return; const hojeNo = g.dias.includes(hoje());
+  abrir('<form><h2>Adicionar pessoa</h2><p class="meta" style="margin:0">'+esc(g.nome)+' · '+esc(periodoTxt(g.dias))+'</p>' + listaPessoasEscala()
+    + '<label class="f" for="prN">Nome</label><input class="inp" id="prN" name="nome" list="dlPessoas" autocomplete="off" maxlength="120" required placeholder="Nome e sobrenome">'
+    + (hojeNo ? '<label class="chip" style="margin-top:12px"><input type="checkbox" name="hoje" checked> Já marcar presença hoje ('+esc(dataBR(hoje()).slice(0,5))+')</label>' : '')
+    + '<p class="hint">Depois de adicionar, a janela continua aberta para o próximo nome.</p>'
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Fechar</button><button type="submit" class="btn">Adicionar</button></div></form>',
+  async fd => {
+    const nome = String(fd.get('nome')||'').trim().replace(/\s+/g, ' '); if (!nome) return false;
+    if (Object.values(PR.linhas).some(p => normNome(p.nome) === normNome(nome))) { toast(nome+' já está na lista.'); return false; }
+    const p = {id:'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, dias: hojeNo && fd.get('hoje') ? {[hoje()]: true} : {}};
+    if (await prGravar(p)) { toast(nome+' adicionado(a).'); const i = $('#prN'); if (i) { i.value = ''; i.focus(); } }
+    return false;
+  }, body => body.querySelector('#prN').focus());
+}
+function prFormEdit(id){
+  const p = PR.linhas[id]; if (!p) return;
+  abrir('<form><h2>Editar nome</h2><label class="f" for="prE">Nome</label><input class="inp" id="prE" name="nome" maxlength="120" required value="'+esc(p.nome)+'">'
+    + '<div class="end"><button type="button" class="btn danger" data-pres-rm="'+esc(id)+'" style="margin-right:auto">Remover da lista</button><button type="button" class="btn ghost" data-cancel>Cancelar</button><button type="submit" class="btn">Salvar</button></div></form>',
+  async fd => { const nome = String(fd.get('nome')||'').trim().replace(/\s+/g, ' '); if (!nome) return false; return prGravar({...p, nome}); });
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-pres-abrir],[data-pres-voltar],[data-pres-add],[data-pres-edit],[data-pres-rm],[data-pres-pdf],[data-pres-xls]'); if (!b) return;
+  if (b.dataset.presAbrir) { PR.lista = b.dataset.presAbrir; PR.ok = false; PR.linhas = {}; PR.busca = ''; prCarregar(); render(); window.scrollTo(0,0); }
+  else if ('presVoltar' in b.dataset) { PR.lista = null; render(); window.scrollTo(0,0); }
+  else if ('presAdd' in b.dataset) prFormAdd();
+  else if (b.dataset.presEdit) prFormEdit(b.dataset.presEdit);
+  else if (b.dataset.presRm) { const id = b.dataset.presRm, p = PR.linhas[id]; $('#dlg').close();
+    if (!p || !await confirmar('Remover '+p.nome+' da lista de presença?')) return;
+    try { const r = await sb.from('presencas').delete().eq('lista', PR.lista).eq('id', id); if (r.error) throw r.error; const m = {...PR.linhas}; delete m[id]; PR.linhas = m; toast(p.nome+' removido(a).'); render(); }
+    catch(err){ falhaEscrita(err); } }
+  else prExportar('presPdf' in b.dataset ? 'pdf' : 'xlsx', b);
+});
+document.addEventListener('change', e => { const t = e.target; if (!t.dataset || !t.dataset.pres) return;
+  const [id, d] = t.dataset.pres.split('|'), p = PR.linhas[id]; if (!p) return;
+  const dias = {...(p.dias||{})}; if (t.checked) dias[d] = true; else delete dias[d];
+  prGravar({...p, dias}).then(ok => { if (ok) { const th = document.querySelectorAll('table.pres thead th')[[...t.closest('tr').children].indexOf(t.closest('td'))]; if (th) { const s = th.querySelector('.pres-tot'); if (s) s.textContent = prPessoas().filter(x => x.dias && x.dias[d]).length; } } });
+});
+document.addEventListener('input', e => { if (e.target.id !== 'prBusca') return; PR.busca = e.target.value; const q = normNome(PR.busca);
+  document.querySelectorAll('[data-pres-linha]').forEach(tr => tr.hidden = !!q && !tr.dataset.presLinha.includes(q)); });
+async function prExportar(tipo, btn){
+  const g = listasPresenca().find(x => x.id === PR.lista); if (!g || !podeExportar()) return; const ps = prPessoas();
+  const HEAD = ['Nome', ...g.dias.map(d => dataBR(d).slice(0,5)+' ('+diaSem(d)+')'), 'Total'];
+  const rows = ps.map(p => [p.nome, ...g.dias.map(d => p.dias && p.dias[d] ? 'X' : ''), String(g.dias.filter(d => p.dias && p.dias[d]).length)]);
+  const tots = ['Total ('+ps.length+' pessoas)', ...g.dias.map(d => String(ps.filter(p => p.dias && p.dias[d]).length)), ''];
+  const titulo = ((S.cfg&&S.cfg.igreja)||'Família Alcançar')+' · Lista de presença · '+g.nome+' · '+periodoTxt(g.dias), arq = 'presenca-'+g.id, txt = btn.textContent; btn.textContent = '…'; btn.disabled = true;
+  try {
+    if (tipo === 'pdf') { await carregar(JSPDF); await carregar(AUTOTABLE);
+      const doc = new window.jspdf.jsPDF({orientation:'portrait', unit:'mm', format:'a4'}); doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text(titulo, 12, 14);
+      doc.autoTable({ startY:20, theme:'grid', head:[HEAD], body:rows, foot:[tots], showHead:'everyPage', showFoot:'lastPage', styles:{fontSize:10, cellPadding:2, halign:'center'}, columnStyles:{0:{halign:'left', fontStyle:'bold'}},
+        headStyles:{fillColor:[25,25,25]}, footStyles:{fillColor:[235,235,235], textColor:20} });
+      const n = doc.getNumberOfPages(); for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.text('Página '+i+' de '+n, 198, 290, {align:'right'}); }
+      await baixar(arq+'.pdf', doc.output('arraybuffer'));
+    } else { await carregar(EXCELJS); const wb = new window.ExcelJS.Workbook(), ws = wb.addWorksheet('Presença', {views:[{state:'frozen', ySplit:3}], pageSetup:{orientation:'portrait', fitToPage:true, fitToWidth:1, fitToHeight:0}});
+      ws.columns = [{width:36}, ...g.dias.map(() => ({width:12})), {width:8}]; ws.addRow([titulo]).font = {bold:true, size:13}; ws.addRow([]);
+      const h = ws.addRow(HEAD); h.font = {bold:true, color:{argb:'FFFFFFFF'}}; h.eachCell(c => { c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF191919'}}; c.alignment = {horizontal:'center'}; });
+      rows.forEach(r => { const l = ws.addRow(r); l.eachCell((c, i) => { c.border = {top:{style:'thin'}, bottom:{style:'thin'}, left:{style:'thin'}, right:{style:'thin'}}; if (i > 1) c.alignment = {horizontal:'center'}; }); });
+      const f = ws.addRow(tots); f.font = {bold:true};
+      await baixar(arq+'.xlsx', await wb.xlsx.writeBuffer()); }
+  } catch(e){ console.warn(e); toast('Não foi possível gerar o arquivo agora.'); } finally { btn.textContent = txt; btn.disabled = false; }
+}
 function viewCheckin(){
   if (!veCheckin()) return '<div class="empty">Só administradores, a Gestão, a Organização e quem está escalado no Check-in ou na Gestão de culto acessam esta aba.</div>';
+  if (PR.lista) return viewPresenca();
   ckAbrir(); const fixo = ckEscalado();
   let h = '<div class="bar"><h2 style="font-size:22px">Check-in</h2></div>'
     + '<div class="card">'+(fixo ? '<div class="meta" style="margin:0">Você está escalado no check-in de</div><b class="ck-dia">'+esc(fmtDia(S.ckD))+'</b>'
       : '<label class="f" for="ckD" style="margin-top:0">Data do culto</label><input class="inp" type="date" id="ckD" value="'+esc(S.ckD)+'">')
     + '<div class="chips" style="margin-top:10px">'+cultos().map(c => cultoInfo(c.id, S.ckD)).map(c => '<button class="chip" aria-pressed="'+(c.id===S.ckC)+'" data-ck-culto="'+esc(c.id)+'">'+esc(c.nome)+(c.hora?' · '+esc(c.hora):'')+'</button>').join('')+'</div></div>';
+  h += cardListasPresenca();
   if (!S.ckOk) return h + '<div class="empty">Carregando…</div>';
   const b = blocosCheckin(S.ckD, S.ckC), M = S.ckMarks || {}, avs = ckAvulsos();
   if (!b.temDados && !avs.length) return h + '<div class="empty">Não há escala preenchida para este culto.</div>' + '<div class="bar"><button class="btn ghost" data-ck-pessoa>+ pessoa</button></div>';

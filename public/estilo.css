@@ -456,3 +456,16 @@ table.lead .status-pessoa + small{display:block;margin-top:5px}
 .ck-quem{display:block;color:var(--muted);font-size:12px;font-weight:400;margin-top:2px}
 .ckn .ck-quem{color:var(--green)}
 .mk-conf{margin:-4px 0 10px 44px}
+/* Lista de presença (evento de vários dias) */
+.pres-card .pres-abre{display:block;width:100%;text-align:left;margin-top:8px}
+.pres-add{margin:8px 0}
+.pres-wrap{padding:0;overflow-x:auto}
+table.pres{border-collapse:separate;border-spacing:0;width:100%;font-size:15px}
+table.pres th,table.pres td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
+table.pres thead th{font-size:13px;font-weight:700;white-space:nowrap}
+table.pres thead th small{display:block;font-size:11px;font-weight:400;color:var(--muted)}
+table.pres thead th small.pres-tot{color:var(--green);font-weight:700;font-size:12px}
+table.pres th:first-child{text-align:left;position:sticky;left:0;background:var(--surface);z-index:1;min-width:130px;max-width:170px;padding-left:12px}
+table.pres .pres-nome{background:none;border:0;color:var(--ink);font:inherit;font-weight:600;text-align:left;padding:4px 0;cursor:pointer;overflow-wrap:anywhere}
+table.pres .pres-cx{margin:0 auto}
+table.pres .pres-cx.hoje span{box-shadow:0 0 0 2px var(--yellow)}

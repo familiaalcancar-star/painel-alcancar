@@ -663,6 +663,38 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await ctx.close();
   }
 
+  console.log('Lista de presença (evento de vários dias)');
+  {
+    const base = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) + 'T12:00:00Z');
+    const dias = [0,1,2,3].map(n => { const d = new Date(base); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); });
+    const extra = dias.map(d => ({id: d+'_noite_staff', d:{data:d, culto:'noite', area:'staff', cultoNome:'Congresso', hora:'20h', funcoes:[]}}));
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo', acceptDownloads: true }); await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    p = await ctx.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
+    await p.addInitScript(([e]) => { localStorage.setItem('mockPapel', 'gestao'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); }, [extra]);
+    await p.goto('http://localhost:8123/#checkin'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(700);
+    const dd = d => d.slice(8,10)+'/'+d.slice(5,7);
+    conferir((await p.textContent('.pres-card')).includes('Congresso · '+dd(dias[0])+' a '+dd(dias[3])), 'Check-in mostra a lista de presença do Congresso (4 dias)');
+    await p.click('[data-pres-abrir]'); await p.waitForTimeout(400);
+    conferir((await p.$$('[data-pres-add]')).length === 1 && (await p.textContent('#view')).includes('Ninguém na lista'), 'lista vazia com "+ Adicionar pessoa"');
+    await p.click('[data-pres-add]'); await p.waitForSelector('#dlg[open] #prN');
+    await p.fill('#prN', 'João da Silva'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(300);
+    await p.fill('#prN', 'Pedro Santos'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(300);
+    await p.fill('#prN', 'joão da silva'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(300);
+    const pr = await p.evaluate(() => window.__TABELAS.presencas);
+    conferir(pr.length === 2 && pr.every(x => Object.keys(x.dias).length === 1 && x.dias[Object.keys(x.dias)[0]] === true), 'adiciona várias pessoas seguidas (já com presença de hoje); nome repetido é recusado');
+    await p.click('#dlg [data-cancel]'); await p.waitForTimeout(300);
+    conferir((await p.$$('[data-pres-add]')).length === 2 && (await p.$$('table.pres tbody tr')).length === 2 && (await p.$$eval('table.pres thead th', l => l.length)) === 5, '"+ Adicionar pessoa" em cima e embaixo; grade com Nome + 4 dias');
+    await p.click('table.pres tbody tr >> nth=1 >> label:has(input[data-pres$="|'+dias[1]+'"])'); await p.waitForTimeout(400);
+    conferir(await p.evaluate(d => window.__TABELAS.presencas.find(x => x.nome === 'Pedro Santos').dias[d] === true, dias[1]) && (await p.textContent('table.pres thead th >> nth=2')).includes('1'), 'marcar presença em outro dia salva e atualiza o total do dia');
+    await p.screenshot({ path: path.join(SAIDA, '53-lista-presenca.png'), fullPage: true });
+    const dl = p.waitForEvent('download'); await p.click('[data-pres-pdf]'); const arq = await dl;
+    conferir(arq.suggestedFilename().startsWith('presenca-congresso-'), 'lista de presença em PDF');
+    await p.click('[data-pres-edit] >> nth=1'); await p.waitForSelector('#dlg[open] [data-pres-rm]'); await p.click('[data-pres-rm]'); await p.waitForSelector('[data-r="1"]'); await p.click('[data-r="1"]'); await p.waitForTimeout(400);
+    conferir(await p.evaluate(() => window.__TABELAS.presencas.length === 1 && window.__TABELAS.presencas[0].nome === 'João da Silva'), 'remover pessoa da lista (com confirmação)');
+    conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    await ctx.close();
+  }
+
   console.log('Contas duplicadas (outro e-mail / outro jeito de entrar)');
   {
     p = await abrir('novo'); await p.waitForSelector('#cadForm');
