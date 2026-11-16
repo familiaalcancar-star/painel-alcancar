@@ -68,6 +68,10 @@ class Q {
         if (i >= 0 && this.op === 'insert') return {data:null, error:{code:'23505', message:'duplicate key'}};
         if (this.t === 'historico') { const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}; Object.assign(n, {id:tab.length+1, por:sessao && sessao.user.id, em:agora, por_nome: eu.apelido || String(eu.nome||'').split(' ')[0]}); }
         if (['avisos','eventos','escalas'].includes(this.t) && i < 0) { n.autor = sessao && sessao.user.id; n.criado_em = agora; }
+        if (this.t === 'presencas') { // igual ao gatilho presencas_guarda: carimba hora e quem marcou; só admin desmarca
+          const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}, quem = eu.apelido || String(eu.nome||'').split(' ')[0], old = i >= 0 ? tab[i] : null, velhos = (old && old.dias) || {};
+          if (eu.papel !== 'admin' && Object.keys(velhos).some(k => !(n.dias||{})[k])) return {data:null, error:{message:'Presença já marcada não pode ser desmarcada (só um administrador).'}};
+          const nd = {}; Object.keys(n.dias||{}).forEach(k => nd[k] = velhos[k] || {em:agora, por:quem}); n.dias = nd; n.por_nome = quem; }
         if (this.t === 'checkin_marcas') { n.por = sessao && sessao.user.id; n.em = agora;
           // Igual ao gatilho checkin_guarda: carimba quem marcou o check-in, o "Entregue" e o "Devolvido".
           const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}, quem = eu.apelido || String(eu.nome||'').split(' ')[0], old = i >= 0 ? tab[i] : null;

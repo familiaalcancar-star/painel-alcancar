@@ -469,3 +469,5 @@ table.pres th:first-child{text-align:left;position:sticky;left:0;background:var(
 table.pres .pres-nome{background:none;border:0;color:var(--ink);font:inherit;font-weight:600;text-align:left;padding:4px 0;cursor:pointer;overflow-wrap:anywhere}
 table.pres .pres-cx{margin:0 auto}
 table.pres .pres-cx.hoje span{box-shadow:0 0 0 2px var(--yellow)}
+.pres-h{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+.pres-cx.trava{cursor:default}

@@ -6,5 +6,5 @@ select t('Visitante NÃO lê','anon','select * from presencas','bloq');
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000c0',false);
 insert into presencas(lista,id,nome,dias) values ('congresso-2099','p9','Maria','{"2099-11-18":true}');
 select set_config('request.jwt.claim.sub','',false);
-select ok('Grava quem marcou', (select por_nome = 'Gestor' and dias->>'2099-11-18' = 'true' from presencas where id='p9'));
+select ok('Grava quem marcou', (select por_nome = 'Gestor' and dias->'2099-11-18'->>'por' = 'Gestor' from presencas where id='p9'));
 select t('Ministro NÃO lê a lista','e0','select * from presencas','bloq');
