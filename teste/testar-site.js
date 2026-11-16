@@ -860,6 +860,45 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.context().close();
   }
 
+  console.log('Auto check-in por QR Code (página pública)');
+  {
+    const EVQ = {id:'ev-teste-desperta', d:{...EV.d, autoCheckin:true}};
+    const partsQ = [{id:'q1', evento:EVQ.id, nome:'João da Silva'}, {id:'q2', evento:EVQ.id, nome:'João Pedro Silva'}, {id:'q3', evento:EVQ.id, nome:'Maria Souza'}];
+    const ctxQ = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo', deviceScaleFactor: 2 }); await ctxQ.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    const q = await ctxQ.newPage(); q.erros = []; q.on('pageerror', e => q.erros.push(e.message));
+    await q.addInitScript(([ev, a]) => { localStorage.setItem('mockEventosExtra', JSON.stringify([ev])); localStorage.setItem('mockEvParticipantes', JSON.stringify(a)); }, [EVQ, partsQ]);
+    await q.goto('http://localhost:8123/checkin/?e=ev-teste-desperta'); await q.waitForSelector('#nome');
+    conferir(!(await q.$('#tabs')) && (await q.textContent('#app')).includes('Digite seu nome e sobrenome'), 'página pública abre sem login e sem menu do app');
+    await q.screenshot({ path: path.join(SAIDA, '63-autocheckin-busca.png') });
+    await q.fill('#nome', 'João'); await q.click('#fBusca .btn'); await q.waitForTimeout(200);
+    conferir((await q.textContent('#app')).includes('pelo menos 2 palavras'), 'exige nome e sobrenome');
+    await q.fill('#nome', 'Carlos Inexistente'); await q.click('#fBusca .btn'); await q.waitForSelector('#bDeNovo');
+    conferir((await q.textContent('#app')).includes('Não encontramos seu nome na lista de inscritos'), 'nome não encontrado: orienta procurar a equipe');
+    await q.click('#bDeNovo'); await q.fill('#nome', 'João Silva'); await q.click('#fBusca .btn'); await q.waitForSelector('[data-sou]');
+    const cartoes = await q.$$eval('.cartao .grande', l => l.map(e => e.textContent));
+    conferir(cartoes.length === 2 && cartoes.every(n => n.includes('João')) && !(await q.textContent('#app')).includes('Maria'), 'mostra só os nomes que batem (sem a lista de participantes)');
+    await q.screenshot({ path: path.join(SAIDA, '64-autocheckin-nomes.png') });
+    await q.click('[data-sou="q1"]'); await q.waitForSelector('.ok');
+    conferir((await q.textContent('.ok')).includes('Check-in confirmado!') && (await q.textContent('.ok .nome')).includes('João da Silva') && await q.evaluate(() => { const r = window.__TABELAS.evento_presencas.find(x => x.participante === 'q1'); return r && r.por_nome === 'QR Code (auto check-in)' && (localStorage.getItem('aparelho_checkin') || '').length >= 16; }), 'confirma: presença "QR Code (auto check-in)" e ID do celular guardado');
+    await q.screenshot({ path: path.join(SAIDA, '65-autocheckin-ok.png') });
+    await q.evaluate(() => localStorage.setItem('mockAutocheckin', JSON.stringify(window.__TABELAS.evento_autocheckin)));
+    await q.reload(); await q.waitForSelector('#nome'); await q.fill('#nome', 'Maria Souza'); await q.click('#fBusca .btn'); await q.waitForSelector('[data-sou]');
+    await q.click('[data-sou="q3"]'); await q.waitForTimeout(400);
+    conferir((await q.textContent('#app')).includes('Este celular já fez o check-in de outra pessoa hoje'), 'mesmo celular, outra pessoa: mostra a mensagem do banco');
+    conferir(!q.erros.length, 'sem erros' + (q.erros.length ? ': ' + q.erros.join(' | ') : ''));
+    await ctxQ.close();
+    const ctxF = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctxF.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    const f = await ctxF.newPage(); await f.addInitScript(ev => localStorage.setItem('mockEventosExtra', JSON.stringify([ev])), {id:'ev-teste-desperta', d:{...EV.d, autoCheckin:true, dias:['2030-01-01']}});
+    await f.goto('http://localhost:8123/checkin/?e=ev-teste-desperta'); await f.waitForTimeout(800);
+    conferir((await f.textContent('#app')).includes('O check-in pelo QR Code abre nos dias do Congresso (18 a 21/11)'), 'fora dos dias: só o aviso de quando abre');
+    await ctxF.close();
+    // App: selo "QR" na lista de participantes
+    p = await abrirEv('gestao', {mockEvParticipantes: partsQ, mockEvPresencas: [{participante:'q1', dia:hojeEv, em:new Date().toISOString(), por_nome:'QR Code (auto check-in)'}, {participante:'q3', dia:hojeEv, em:new Date().toISOString(), por_nome:'Lima'}]});
+    await p.goto('http://localhost:8123/#checkin'); await p.waitForSelector('[data-pres-abrir]'); await p.click('[data-pres-abrir]'); await p.waitForSelector('table.pres');
+    conferir(await p.$$eval('table.pres tbody tr', l => l.map(r => r.querySelector('th').textContent)).then(l => l.some(t => t.includes('João da Silva') && t.includes('QR')) && l.some(t => t.includes('Maria Souza') && !t.includes('QR'))), 'app: selo "QR" ao lado de quem fez o check-in pelo QR Code');
+    await p.context().close();
+  }
+
   console.log('Contas duplicadas (outro e-mail / outro jeito de entrar)');
   {
     p = await abrir('novo'); await p.waitForSelector('#cadForm');

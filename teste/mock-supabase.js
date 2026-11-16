@@ -39,7 +39,7 @@ const chaves = {checkin_itens:['nome'], checkin_marcas:['data','culto','chave'],
 const mesma = (t, a, b) => (chaves[t]||['id']).every(k => a[k] === b[k]);
 let sessao = null; const ouvintes = [];
 try { JSON.parse(localStorage.getItem('mockPessoasExtra') || '[]').forEach(q => T.pessoas.push(q)); } catch(e){}
-try { [['mockEvParticipantes','evento_participantes'],['mockEvPresencas','evento_presencas'],['mockSorteios','sorteios'],['mockSorteioTelas','sorteio_telas'],['mockSorteioEstado','sorteio_estado']].forEach(([k, t]) => { const v = localStorage.getItem(k); if (v) T[t] = JSON.parse(v); }); } catch(e){}
+try { [['mockEvParticipantes','evento_participantes'],['mockEvPresencas','evento_presencas'],['mockSorteios','sorteios'],['mockSorteioTelas','sorteio_telas'],['mockSorteioEstado','sorteio_estado'],['mockAutocheckin','evento_autocheckin']].forEach(([k, t]) => { const v = localStorage.getItem(k); if (v) T[t] = JSON.parse(v); }); } catch(e){}
 try { JSON.parse(localStorage.getItem('mockEventosExtra') || '[]').forEach(ev => { T.eventos = T.eventos.filter(e => e.id !== ev.id); T.eventos.push({id:ev.id, d:ev.d, autor:null}); }); } catch(e){}
 try { const p = localStorage.getItem('mockPapel'); if (p && U[p]) sessao = {user:{id:U[p], email:p+'@x', app_metadata:{provider: localStorage.getItem('mockProv') || 'email'}}}; } catch(e){}
 const emitir = ev => ouvintes.forEach(cb => setTimeout(() => cb(ev, sessao), 0));
@@ -139,6 +139,19 @@ window.supabase = { createClient: () => ({
           rodada: T.sorteios.filter(s => s.evento === args.p_evento).reduce((m, s) => Math.max(m, s.rodada), 0) + 1, elegiveis:l.length, em:new Date().toISOString(), atualizado_em:new Date().toISOString()};
         T.sorteios.push(r); return {data:r, error:null}; })()
     : n === 'sorteio_marcar' ? (() => { const s = (T.sorteios||[]).find(x => x.id === args.p_id); if (!s) return {data:null, error:{message:'Sorteio não encontrado.'}}; s.status = args.p_status; s.atualizado_em = new Date().toISOString(); return {data:s, error:null}; })()
+    : n === 'autocheckin_info' ? (() => { const ev = T.eventos.find(e => e.id === args.p_evento); if (!ev) return {data:null, error:null}; const h = new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'});
+        const aberto = !!ev.d.autoCheckin && (ev.d.dias || []).includes(h); return {data:{titulo:ev.d.titulo, img:ev.d.img||null, hoje: aberto ? h : null, aberto}, error:null}; })()
+    : n === 'autocheckin_buscar' ? (() => { const h = new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'}), nn = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+        const q = nn(args.p_nome); if (q.length < 2) return {data:[], error:null};
+        return {data:(T.evento_participantes||[]).filter(p => p.evento === args.p_evento && q.every(w => nn(p.nome).includes(w))).sort((a, b) => a.nome.localeCompare(b.nome)).slice(0, 3)
+          .map(p => ({id:p.id, nome:p.nome, ja_presente:(T.evento_presencas||[]).some(r => r.participante === p.id && r.dia === h)})), error:null}; })()
+    : n === 'autocheckin_confirmar' ? (() => { const h = new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'}); T.evento_autocheckin = T.evento_autocheckin || []; T.evento_presencas = T.evento_presencas || [];
+        const p = (T.evento_participantes||[]).find(x => x.id === args.p_participante && x.evento === args.p_evento); if (!p) return {data:null, error:{message:'Participante não encontrado.'}};
+        const u = T.evento_autocheckin.find(x => x.evento === args.p_evento && x.dia === h && x.aparelho === args.p_aparelho);
+        if (u && u.participante !== p.id) return {data:null, error:{message:'Este celular já fez o check-in de outra pessoa hoje. Procure a equipe de Check-in.'}};
+        if (T.evento_presencas.some(r => r.participante === p.id && r.dia === h)) return {data:{ok:true, nome:p.nome, ja:true, dia:h}, error:null};
+        if (!u) T.evento_autocheckin.push({evento:args.p_evento, dia:h, aparelho:args.p_aparelho, participante:p.id});
+        T.evento_presencas.push({participante:p.id, dia:h, por_nome:'QR Code (auto check-in)', em:new Date().toISOString()}); return {data:{ok:true, nome:p.nome, ja:false, dia:h}, error:null}; })()
     : n === 'sorteio_remover' ? (() => { const a = (T.sorteios||[]).length; T.sorteios = (T.sorteios||[]).filter(s => s.id !== args.p_id); return a === T.sorteios.length ? {data:null, error:{message:'Registro não encontrado.'}} : {data:null, error:null}; })()
     : n === 'sorteio_limpar_tudo' ? (() => { const a = (T.sorteios||[]).length; T.sorteios = (T.sorteios||[]).filter(s => s.evento !== args.p_evento); return {data:a - T.sorteios.length, error:null}; })()
     : n === 'sorteio_reincluir_todos' ? (() => { let k = 0; (T.sorteios||[]).forEach(s => { if (s.evento === args.p_evento && s.status !== 'liberado') { s.status = 'liberado'; k++; } }); return {data:k, error:null}; })()

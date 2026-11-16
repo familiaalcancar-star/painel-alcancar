@@ -1531,6 +1531,7 @@ async function prCarregar(){
     if (b.error) console.warn(b.error); else (b.data||[]).forEach(r => { if (m[r.participante]) m[r.participante].dias[r.dia] = {em:r.em, por:r.por_nome}; }); }
   if (id !== PR.lista) return; PR.linhas = m; PR.ok = true; if (S.tab === 'checkin') render();
 }
+const PR_QR = 'QR Code (auto check-in)'; // presença feita pela página pública checkin/?e=…
 const prQuem = m => m && m.em ? 'Marcado às '+horaSP(m.em)+(m.por ? ' por '+m.por : '') : '';
 const prPessoas = () => Object.values(PR.linhas).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
 function viewPresenca(){
@@ -1546,7 +1547,7 @@ function viewPresenca(){
   if (!ps.length) return h + '<div class="empty">Ninguém na lista ainda. Toque em <b>+ Adicionar pessoa</b>.</div>';
   if (ps.length > 8) h += '<input class="inp" id="prBusca" type="search" placeholder="🔍 Buscar nome…" autocomplete="off" value="'+esc(PR.busca)+'" style="margin:0 0 10px">';
   h += '<div class="card tbl-wrap pres-wrap"><table class="pres"><thead><tr><th>Nome</th>'+g.dias.map(d => '<th>'+esc(dataBR(d).slice(0,5))+'<small>'+esc(diaSem(d))+'</small><small class="pres-tot">'+tot(d)+'</small></th>').join('')+'</tr></thead><tbody>'
-    + ps.map(p => '<tr data-pres-linha="'+esc(normNome(p.nome))+'"'+(PR.busca && !normNome(p.nome).includes(normNome(PR.busca)) ? ' hidden' : '')+'><th><button type="button" class="pres-nome" data-pres-edit="'+esc(p.id)+'">'+esc(p.nome)+'</button></th>'
+    + ps.map(p => '<tr data-pres-linha="'+esc(normNome(p.nome))+'"'+(PR.busca && !normNome(p.nome).includes(normNome(PR.busca)) ? ' hidden' : '')+'><th><button type="button" class="pres-nome" data-pres-edit="'+esc(p.id)+'">'+esc(p.nome)+'</button>'+(Object.values(p.dias).some(m => m && m.por === PR_QR) ? ' <span class="tag pres-qr" title="Check-in feito pelo QR Code">QR</span>' : '')+'</th>'
       + g.dias.map(d => { const m = p.dias[d], trava = m ? !isAdm() : (!isAdm() && d !== hoje());
           return '<td><label class="ckbox pres-cx'+(d === hoje() ? ' hoje' : '')+(trava ? ' trava' : '')+'"'+(prQuem(m) ? ' title="'+esc(prQuem(m))+'"' : '')+'><input type="checkbox" data-pres="'+esc(p.id)+'|'+d+'"'+(m ? ' checked' : '')+(trava ? ' disabled' : '')+' aria-label="'+esc(p.nome+' · '+dataBR(d).slice(0,5))+'"><span></span></label>'
             + (m && m.em ? '<small class="pres-h">'+esc(horaSP(m.em))+'</small>' : '') + '</td>'; }).join('')+'</tr>').join('')
