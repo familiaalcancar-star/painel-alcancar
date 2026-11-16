@@ -71,6 +71,11 @@ async function confirmar(btn){
   const info = r.data || null;
   if (r.error || !info) { APP.innerHTML = cab() + '<h1>Check-in</h1><p class="erro">Não foi possível abrir o check-in agora. Verifique a internet e tente de novo.</p>'; return; }
   if (info.titulo) document.title = 'Check-in · ' + info.titulo;
-  if (!info.aberto) { APP.innerHTML = cab() + '<h1>Check-in</h1><p>O check-in pelo QR Code abre nos dias do Congresso (18 a 21/11).</p>'; return; }
+  if (!info.aberto) {
+    const h = t => String(t || '').slice(0, 5).replace(/^(\d{1,2}):(\d{2})$/, (m, a, b) => Number(a) + 'h' + (b === '00' ? '' : b)); // "19:30" → "19h30"
+    APP.innerHTML = cab() + '<h1>Check-in</h1><p>' + (info.abre && info.fecha
+      ? 'O check-in pelo QR Code fica aberto de 18 a 21/11, das ' + esc(h(info.abre)) + ' às ' + esc(h(info.fecha)) + '.'
+      : 'O check-in pelo QR Code abre nos dias do Congresso (18 a 21/11).') + '</p>';
+    return; }
   telaBusca();
 })();
