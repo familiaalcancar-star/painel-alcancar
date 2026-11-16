@@ -10,20 +10,20 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Montserrat:wght@700;800;900&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="preload" as="image" href="../fundo-desperta.webp">
-<link rel="stylesheet" href="../sorteio.css?v=20261117e">
-<link rel="stylesheet" href="tela.css?v=20261117e">
+<link rel="stylesheet" href="../sorteio.css?v=20261117f">
+<link rel="stylesheet" href="tela.css?v=20261117f">
 </head>
 <body class="tela2">
 <div class="quadro" id="quadro" data-estado="espera">
   <div class="moldura" id="moldura"><div class="borda"></div><div class="caixa"><div class="rotulo">SORTEIO</div><div class="nome espera" id="nome">Prepare-se!</div><div class="sub" id="sub"></div></div></div>
   <button type="button" class="faixa" id="faixa" disabled>AGUARDANDO SORTEIO…</button>
   <canvas id="confete" aria-hidden="true"></canvas>
-  <div class="dica" id="dica">Toque duas vezes (ou F) para tela cheia</div>
 </div>
+<button type="button" class="btn-cheia" id="bCheia" title="Tela cheia (ou dois cliques na tela / tecla F)">⛶ Tela cheia</button>
 <div id="app" hidden></div>
 <script src="../../vendor/supabase-2.117.3.js"></script>
 <script src="../../config.js"></script>
-<script src="../comum.js?v=20261117e"></script>
-<script src="tela.js?v=20261117e"></script>
+<script src="../comum.js?v=20261117f"></script>
+<script src="tela.js?v=20261117f"></script>
 </body>
 </html>
