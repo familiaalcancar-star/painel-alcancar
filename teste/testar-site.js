@@ -726,6 +726,23 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.context().close();
   }
 
+  console.log('Checklist no Congresso: libera com a presença da entrada');
+  {
+    const hojeX = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    const extra = [{id: hojeX+'_noite_midia', d:{data:hojeX, culto:'noite', area:'midia', cultoNome:'Congresso', hora:'23h59', funcoes:[{nome:'Projeção', pessoas:['Ana']}]}}];
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    p = await ctx.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
+    await p.addInitScript(([e]) => { localStorage.setItem('mockPapel', 'midia'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); localStorage.removeItem('mockFezCheckin'); }, [extra]);
+    await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(400);
+    await p.click('#tabs [data-tab="midia"]'); await p.waitForTimeout(300); await p.fill('#mkD', hojeX); await p.dispatchEvent('#mkD', 'change'); await p.waitForTimeout(200); await p.click('[data-mk-culto="noite"]'); await p.waitForTimeout(500);
+    conferir((await p.textContent('#view')).includes('faça seu check-in na entrada (lista de presença)') && await p.$$eval('.mk-fn input[data-mk]', l => l.length > 0 && l.every(e => e.disabled)), 'Congresso: checklist travado até a presença da entrada');
+    await p.evaluate(d => { window.__TABELAS.presencas = [{lista:'congresso-'+d, id:'x1', nome:'Ana', dias:{[d]:{em:new Date().toISOString(), por:'Lima'}}}]; }, hojeX);
+    await p.waitForTimeout(11000);
+    conferir(!(await p.textContent('#view')).includes('faça seu check-in') && !(await p.$eval('.mk-fn input[data-mk]', e => e.disabled)), 'Congresso: com a presença da entrada, o checklist libera sozinho');
+    conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    await ctx.close();
+  }
+
   console.log('Contas duplicadas (outro e-mail / outro jeito de entrar)');
   {
     p = await abrir('novo'); await p.waitForSelector('#cadForm');
