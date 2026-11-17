@@ -106,9 +106,13 @@ class Q {
   }
   then(ok, err){ return new Promise(r => setTimeout(r, 15)).then(() => this.exec()).then(ok, err); }
 }
+function sorteioEleg4(ev){ const ss = T.sorteios || [], e = T.eventos.find(x => x.id === ev) || {d:{}}, dias = e.d.dias || [];
+  return (T.evento_participantes||[]).filter(p => p.evento === ev && dias.length && dias.every(d => (T.evento_presencas||[]).some(r => r.participante === p.id && r.dia === d))
+    && !ss.some(s => s.participante === p.id && s.tipo === '4dias' && ['sorteado','ganhador','retirado','ausente'].includes(s.status)))
+    .map(p => ({id:p.id, nome:p.nome})).sort((a, b) => a.nome.localeCompare(b.nome)); }
 function sorteioEleg(ev, dia){ const ss = T.sorteios || [];
   return (T.evento_participantes||[]).filter(p => p.evento === ev && (T.evento_presencas||[]).some(r => r.participante === p.id && r.dia === dia)
-    && !ss.some(s => s.participante === p.id && (['sorteado','ganhador','retirado'].includes(s.status) || (s.status === 'ausente' && s.dia === dia))))
+    && !ss.some(s => s.participante === p.id && (s.tipo || 'dia') === 'dia' && (['sorteado','ganhador','retirado'].includes(s.status) || (s.status === 'ausente' && s.dia === dia))))
     .map(p => ({id:p.id, nome:p.nome})).sort((a, b) => a.nome.localeCompare(b.nome)); }
 window.supabase = { createClient: () => ({
   from: t => new Q(t),
@@ -125,18 +129,21 @@ window.supabase = { createClient: () => ({
     : n === 'pode_sortear' ? (() => { const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}; return {data: eu.papel === 'admin' || !!eu.gestao || !!eu.sorteador, error:null}; })()
     : n === 'sorteio_link_tela' ? (() => { T.sorteio_telas = T.sorteio_telas || []; if (args.p_trocar) T.sorteio_telas = T.sorteio_telas.filter(x => x.evento !== args.p_evento);
         let x = T.sorteio_telas.find(x => x.evento === args.p_evento); if (!x) T.sorteio_telas.push(x = {evento:args.p_evento, token:'tk'+Math.random().toString(36).slice(2,12)}); return {data:x.token, error:null}; })()
-    : n === 'sorteio_definir_premio' ? (() => { T.sorteio_estado = (T.sorteio_estado || []).filter(x => x.evento !== args.p_evento); T.sorteio_estado.push({evento:args.p_evento, premio:args.p_premio||''}); return {data:null, error:null}; })()
+    : n === 'sorteio_definir_premio' ? (() => { const mAnt = ((T.sorteio_estado || []).find(x => x.evento === args.p_evento) || {}).modo; T.sorteio_estado = (T.sorteio_estado || []).filter(x => x.evento !== args.p_evento); T.sorteio_estado.push({evento:args.p_evento, modo:mAnt, premio:args.p_premio||''}); return {data:null, error:null}; })()
     : n === 'sorteio_premio' ? {data: ((T.sorteio_estado || []).find(x => x.evento === args.p_evento) || {}).premio || '', error:null}
     : n === 'sorteio_tela' ? (() => { const x = (T.sorteio_telas||[]).find(x => x.token === args.p_token); if (!x) return {data:{ok:false}, error:null};
-        const ev = T.eventos.find(e => e.id === x.evento) || {d:{}}, dia = new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'}), nomes = sorteioEleg(x.evento, dia).map(e => e.nome);
+        const ev = T.eventos.find(e => e.id === x.evento) || {d:{}}, dia = new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'}), modo = ((T.sorteio_estado || []).find(e => e.evento === x.evento) || {}).modo || 'dia', nomes = (modo === '4dias' ? sorteioEleg4(x.evento) : sorteioEleg(x.evento, dia)).map(e => e.nome);
         const ult = (T.sorteios||[]).filter(s => s.evento === x.evento).sort((a, b) => String(b.em).localeCompare(String(a.em)))[0];
-        return {data:{ok:true, evento:x.evento, titulo:ev.d.titulo||'', dia, concorrendo:nomes.length, nomes, premio: ((T.sorteio_estado || []).find(e => e.evento === x.evento) || {}).premio || '', ultimo: ult ? {id:ult.id, nome:ult.nome, premio:ult.premio, status:ult.status, rodada:ult.rodada, em:ult.em} : null}, error:null}; })()
+        return {data:{ok:true, evento:x.evento, titulo:ev.d.titulo||'', dia, modo, concorrendo:nomes.length, nomes, premio: ((T.sorteio_estado || []).find(e => e.evento === x.evento) || {}).premio || '', ultimo: ult ? {id:ult.id, nome:ult.nome, premio:ult.premio, status:ult.status, rodada:ult.rodada, em:ult.em} : null}, error:null}; })()
+    : n === 'sorteio_elegiveis_4dias' ? {data: sorteioEleg4(args.p_evento), error:null}
+    : n === 'sorteio_modo' ? {data: ((T.sorteio_estado || []).find(x => x.evento === args.p_evento) || {}).modo || 'dia', error:null}
+    : n === 'sorteio_definir_modo' ? (() => { T.sorteio_estado = T.sorteio_estado || []; let x = T.sorteio_estado.find(e => e.evento === args.p_evento); if (!x) T.sorteio_estado.push(x = {evento:args.p_evento, premio:''}); x.modo = args.p_modo; return {data:null, error:null}; })()
     : n === 'sorteio_elegiveis' ? {data: sorteioEleg(args.p_evento, args.p_dia), error:null}
     : n === 'sortear' ? (() => { T.sorteios = T.sorteios || [];
         if (T.sorteios.some(s => s.evento === args.p_evento && s.status === 'sorteado')) return {data:null, error:{message:'Confirme (ganhador / retirou / ausente) o sorteado atual antes de sortear de novo.'}};
-        const l = sorteioEleg(args.p_evento, args.p_dia); if (!l.length) return {data:null, error:{message:'Ninguém disponível para sortear neste dia.'}};
+        const tipo = args.p_tipo === '4dias' ? '4dias' : 'dia', l = tipo === '4dias' ? sorteioEleg4(args.p_evento) : sorteioEleg(args.p_evento, args.p_dia); if (!l.length) return {data:null, error:{message:'Ninguém disponível para sortear neste dia.'}};
         const e = l[Math.floor(Math.random() * l.length)], r = {id:'s-'+Math.random().toString(36).slice(2,10), evento:args.p_evento, dia:args.p_dia, participante:e.id, nome:e.nome, premio:args.p_premio||'', status:'sorteado',
-          rodada: T.sorteios.filter(s => s.evento === args.p_evento).reduce((m, s) => Math.max(m, s.rodada), 0) + 1, elegiveis:l.length, em:new Date().toISOString(), atualizado_em:new Date().toISOString()};
+          rodada: T.sorteios.filter(s => s.evento === args.p_evento).reduce((m, s) => Math.max(m, s.rodada), 0) + 1, elegiveis:l.length, tipo, em:new Date().toISOString(), atualizado_em:new Date().toISOString()};
         T.sorteios.push(r); return {data:r, error:null}; })()
     : n === 'sorteio_marcar' ? (() => { const s = (T.sorteios||[]).find(x => x.id === args.p_id); if (!s) return {data:null, error:{message:'Sorteio não encontrado.'}}; s.status = args.p_status; s.atualizado_em = new Date().toISOString(); return {data:s, error:null}; })()
     : n === 'autocheckin_info' ? (() => { const ev = T.eventos.find(e => e.id === args.p_evento); if (!ev) return {data:null, error:null}; const h = new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'});

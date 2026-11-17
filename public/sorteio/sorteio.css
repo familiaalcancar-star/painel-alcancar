@@ -86,3 +86,7 @@ canvas#confete{position:fixed;inset:0;pointer-events:none;width:100vw;height:100
 .limpar-card{border-color:rgba(255,90,74,.45)}
 .inp-erro{border-color:var(--vermelho)}
 .rm-conf td{border-bottom:1px solid var(--linha)}
+.modos{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 14px}
+.modos .btn{padding:12px 8px;font-size:15px}
+.modos .btn[aria-pressed="true"]{box-shadow:0 0 0 2px var(--ouro2)}
+.st-4dias{background:rgba(255,122,26,.22);color:#ffc28a;margin-left:4px}

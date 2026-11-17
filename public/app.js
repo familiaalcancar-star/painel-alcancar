@@ -1561,6 +1561,17 @@ async function prCarregar(){
   if (id !== PR.lista) return; PR.linhas = m; PR.ok = true; if (S.tab === 'checkin') render();
 }
 const PR_QR = 'QR Code (auto check-in)'; // presença feita pela página pública checkin/?e=…
+// Contador do topo: Inscritos / Check-in no dia / Faltam. Dia = hoje (se for dia do evento) ou o dia escolhido
+// tocando na data da tabela. Atualiza em tempo real (evento_presencas), inclusive com o check-in pelo QR Code.
+const prDia = g => PR.dia && g.dias.includes(PR.dia) ? PR.dia : (g.dias.includes(hoje()) ? hoje() : (g.dias.find(d => d >= hoje()) || g.dias[g.dias.length - 1]));
+function prContador(g, ps){
+  const d = prDia(g), ci = ps.filter(p => p.dias[d]).length, eHoje = d === hoje();
+  return '<div class="pres-nums"><div><b>'+ps.length+'</b><span>Inscritos</span></div><div class="ci"><b>'+ci+'</b><span>Check-in '+(eHoje ? 'hoje' : esc(dataBR(d).slice(0,5)))+'</span></div>'
+    + '<div class="falta"><b>'+(ps.length - ci)+'</b><span>Faltam '+(eHoje ? 'hoje' : esc(dataBR(d).slice(0,5)))+'</span></div></div>';
+}
+document.addEventListener('click', e => { const th = e.target.closest('[data-pres-dia]'); if (!th) return; PR.dia = th.dataset.presDia; render(); });
+// Reserva do tempo real: confere a lista a cada 30 s enquanto ela está aberta na tela.
+setInterval(() => { if (PR.lista && S.tab === 'checkin' && document.visibilityState === 'visible' && !($('#dlg') && $('#dlg').open)) prCarregar(); }, 30000);
 const prQuem = m => m && m.em ? 'Marcado às '+horaSP(m.em)+(m.por ? ' por '+m.por : '') : '';
 const prPessoas = () => Object.values(PR.linhas).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
 function viewPresenca(){
@@ -1572,10 +1583,10 @@ function viewPresenca(){
     + (podeSortear() ? '<a class="btn small" href="sorteio/controle/?evento='+encodeURIComponent(g.id)+'">🎲 Sorteio</a>' : '')
     + (podeExportar() && ps.length ? '<button class="btn ghost small" data-pres-pdf>PDF</button><button class="btn ghost small" data-pres-xls>Excel</button>' : '') + '</div>'
     + '<p class="meta" style="margin:0 0 8px">Participantes · '+esc(periodoTxt(g.dias))+' · '+ps.length+' pessoa'+(ps.length === 1 ? '' : 's')
-    + (isAdm() ? '' : '<br><small>A presença é marcada no dia. Depois de marcada, só um administrador desmarca.</small>')+'</p>' + add;
+    + (isAdm() ? '' : '<br><small>A presença é marcada no dia. Depois de marcada, só um administrador desmarca.</small>')+'</p>' + prContador(g, ps) + add;
   if (!ps.length) return h + '<div class="empty">Ninguém na lista ainda. Toque em <b>+ Adicionar pessoa</b>.</div>';
   if (ps.length > 8) h += '<input class="inp" id="prBusca" type="search" placeholder="🔍 Buscar nome…" autocomplete="off" value="'+esc(PR.busca)+'" style="margin:0 0 10px">';
-  h += '<div class="card tbl-wrap pres-wrap"><table class="pres"><thead><tr><th>Nome</th>'+g.dias.map(d => '<th>'+esc(dataBR(d).slice(0,5))+'<small>'+esc(diaSem(d))+'</small><small class="pres-tot">'+tot(d)+'</small></th>').join('')+'</tr></thead><tbody>'
+  h += '<div class="card tbl-wrap pres-wrap"><table class="pres"><thead><tr><th>Nome</th>'+g.dias.map(d => '<th data-pres-dia="'+d+'" class="'+(d === prDia(g) ? 'pres-sel' : '')+'" title="Ver os números deste dia">'+esc(dataBR(d).slice(0,5))+'<small>'+esc(diaSem(d))+'</small><small class="pres-tot">'+tot(d)+'</small></th>').join('')+'</tr></thead><tbody>'
     + ps.map(p => '<tr data-pres-linha="'+esc(normNome(p.nome))+'"'+(PR.busca && !normNome(p.nome).includes(normNome(PR.busca)) ? ' hidden' : '')+'><th><button type="button" class="pres-nome" data-pres-edit="'+esc(p.id)+'">'+esc(p.nome)+'</button>'+(Object.values(p.dias).some(m => m && m.por === PR_QR) ? ' <span class="tag pres-qr" title="Check-in feito pelo QR Code">QR</span>' : '')+'</th>'
       + g.dias.map(d => { const m = p.dias[d], trava = m ? !isAdm() : (!isAdm() && d !== hoje());
           return '<td><label class="ckbox pres-cx'+(d === hoje() ? ' hoje' : '')+(trava ? ' trava' : '')+'"'+(prQuem(m) ? ' title="'+esc(prQuem(m))+'"' : '')+'><input type="checkbox" data-pres="'+esc(p.id)+'|'+d+'"'+(m ? ' checked' : '')+(trava ? ' disabled' : '')+' aria-label="'+esc(p.nome+' · '+dataBR(d).slice(0,5))+'"><span></span></label>'
@@ -1618,7 +1629,7 @@ function prFormEdit(id){
 }
 document.addEventListener('click', async e => {
   const b = e.target.closest('[data-pres-abrir],[data-pres-voltar],[data-pres-add],[data-pres-edit],[data-pres-rm],[data-pres-pdf],[data-pres-xls]'); if (!b) return;
-  if (b.dataset.presAbrir) { PR.lista = b.dataset.presAbrir; PR.ok = false; PR.linhas = {}; PR.busca = ''; prCarregar(); render(); window.scrollTo(0,0); }
+  if (b.dataset.presAbrir) { PR.lista = b.dataset.presAbrir; PR.ok = false; PR.linhas = {}; PR.busca = ''; PR.dia = null; prCarregar(); render(); window.scrollTo(0,0); }
   else if ('presVoltar' in b.dataset) { PR.lista = null; render(); window.scrollTo(0,0); }
   else if ('presAdd' in b.dataset) prFormAdd();
   else if (b.dataset.presEdit) prFormEdit(b.dataset.presEdit);

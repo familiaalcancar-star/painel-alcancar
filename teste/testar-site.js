@@ -860,6 +860,60 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.context().close();
   }
 
+  console.log('Sorteio dos 4 check-ins e contador de participantes');
+  {
+    // Evento de 3 dias (hoje, +1, +2 → para os testes, "todos os dias" = esses 3). Ana e Bruno vieram em todos; Carla só hoje.
+    const d0 = hojeEv, d1 = diasEv[1], d2 = diasEv[2];
+    const EV4 = {id:'ev-teste-desperta', d:{...EV.d, dias:[d0, d1, d2]}};
+    const parts4 = [{id:'a', evento:EV4.id, nome:'Ana Clara'}, {id:'b', evento:EV4.id, nome:'Bruno Lima'}, {id:'c', evento:EV4.id, nome:'Carla Dias'}, {id:'e', evento:EV4.id, nome:'Edu Melo'}];
+    const pres4 = [...['a','b'].flatMap(x => [d0, d1, d2].map(dia => ({participante:x, dia, em:new Date().toISOString(), por_nome:'Lima'}))), {participante:'c', dia:d0, em:new Date().toISOString(), por_nome:'QR Code (auto check-in)'}];
+    const ctx4 = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctx4.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    p = await ctx4.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
+    await p.addInitScript(([ev, a, b]) => { localStorage.setItem('mockPapel', 'admin'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEventosExtra', JSON.stringify([ev])); localStorage.setItem('mockEvParticipantes', JSON.stringify(a)); localStorage.setItem('mockEvPresencas', JSON.stringify(b)); }, [EV4, parts4, pres4]);
+    // B) contador na lista de participantes
+    await p.goto('http://localhost:8123/#checkin'); await p.waitForSelector('[data-pres-abrir]'); await p.click('[data-pres-abrir]'); await p.waitForSelector('.pres-nums');
+    const nums = async () => p.$$eval('.pres-nums > div', l => l.map(x => x.querySelector('b').textContent + ' ' + x.querySelector('span').textContent));
+    let n0 = await nums();
+    conferir(n0[0] === '4 Inscritos' && n0[1] === '3 Check-in hoje' && n0[2] === '1 Faltam hoje', 'contador: Inscritos, Check-in hoje e Faltam hoje (' + JSON.stringify(n0) + ')');
+    await p.click('table.pres thead th[data-pres-dia="' + d1 + '"]'); await p.waitForTimeout(200);
+    n0 = await nums();
+    conferir(n0[1].startsWith('2 Check-in ' + d1.slice(8,10)) && n0[2].startsWith('2 Faltam'), 'tocar na data da tabela: os números acompanham o dia escolhido');
+    await p.evaluate(d => { window.__TABELAS.evento_presencas.push({participante:'e', dia:d, em:new Date().toISOString(), por_nome:'QR Code (auto check-in)'}); }, d0);
+    await p.click('table.pres thead th[data-pres-dia="' + d0 + '"]'); await p.evaluate(() => window.dispatchEvent(new Event('focus'))); await p.waitForTimeout(31500);
+    n0 = await nums();
+    conferir(n0[1] === '4 Check-in hoje' && n0[2] === '0 Faltam hoje', 'check-in novo (ex.: pelo QR) atualiza os números sozinho');
+    await p.screenshot({ path: path.join(SAIDA, '68-participantes-contador.png') });
+    // A) controle: modo 4 check-ins
+    await p.goto('http://localhost:8123/sorteio/controle/?evento=ev-teste-desperta'); await p.waitForSelector('[data-modo="4dias"]');
+    conferir((await p.getAttribute('[data-modo="dia"]', 'aria-pressed')) === 'true' && (await p.textContent('#nConc')) === '3', 'controle: começa no "Sorteio do dia" (3 com check-in hoje)');
+    await p.click('[data-modo="4dias"]'); await p.waitForTimeout(500);
+    conferir((await p.getAttribute('[data-modo="4dias"]', 'aria-pressed')) === 'true' && (await p.textContent('#nConc')) === '2' && (await p.textContent('#app')).includes('Concorrem só os que fizeram check-in nos 3 dias')
+      && await p.evaluate(() => (window.__rpc||[]).some(r => r[0] === 'sorteio_definir_modo' && r[1].p_modo === '4dias')), 'modo "4 check-ins": só quem veio em todos os dias (2) e grava o modo no banco');
+    await p.click('#bSortear'); await p.waitForSelector('[data-marcar="ganhador"]');
+    const s4 = await p.evaluate(() => { const r = (window.__rpc||[]).filter(r => r[0] === 'sortear').pop(); return {tipo: r[1].p_tipo, nome: window.__TABELAS.sorteios[0].nome}; });
+    conferir(s4.tipo === '4dias' && ['Ana Clara', 'Bruno Lima'].includes(s4.nome), 'Sortear no modo "4 check-ins" chama a rpc com p_tipo = 4dias');
+    await p.click('[data-marcar="ganhador"]'); await p.waitForTimeout(500);
+    conferir((await p.textContent('table.hist tbody tr')).includes('3 check-ins') && (await p.textContent('#nConc')) === '1', 'histórico com o selo de check-ins; ganhador sai do sorteio dos 4 dias');
+    await p.screenshot({ path: path.join(SAIDA, '69-sorteio-4checkins.png'), fullPage: true });
+    await p.click('[data-modo="dia"]'); await p.waitForTimeout(500);
+    conferir((await p.textContent('#nConc')) === '3', 'sorteio do dia é independente (o ganhador dos 4 dias continua concorrendo no dia)');
+    await p.click('[data-modo="4dias"]'); await p.waitForTimeout(400);
+    conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    await ctx4.close();
+    // Telão pelo link no modo 4 dias
+    const ctxT4 = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctxT4.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    const t4 = await ctxT4.newPage(); t4.erros = []; t4.on('pageerror', e => t4.erros.push(e.message));
+    await t4.addInitScript(([ev, a, b]) => { localStorage.setItem('mockEventosExtra', JSON.stringify([ev])); localStorage.setItem('mockEvParticipantes', JSON.stringify(a)); localStorage.setItem('mockEvPresencas', JSON.stringify(b));
+      localStorage.setItem('mockSorteioTelas', JSON.stringify([{evento:ev.id, token:'tk4'}])); localStorage.setItem('mockSorteioEstado', JSON.stringify([{evento:ev.id, premio:'', modo:'4dias'}])); }, [EV4, parts4, pres4]);
+    await t4.goto('http://localhost:8123/sorteio/tela/?k=tk4'); await t4.waitForTimeout(2000);
+    conferir((await t4.textContent('.rotulo')) === 'SORTEIO DOS 4 CHECK-INS' && (await t4.textContent('#sub')) === '2 homens com check-in nos 4 dias', 'telão no modo 4 dias: título e contador próprios');
+    await t4.screenshot({ path: path.join(SAIDA, '70-tela-4checkins.png') });
+    await t4.evaluate(() => { window.__TABELAS.sorteio_estado[0].modo = 'dia'; }); await t4.waitForTimeout(2000);
+    conferir((await t4.textContent('.rotulo')) === 'SORTEIO' && (await t4.textContent('#sub')).includes('pessoas concorrendo'), 'telão volta ao "SORTEIO" quando o controle troca para o sorteio do dia');
+    conferir(!t4.erros.length, 'sem erros' + (t4.erros.length ? ': ' + t4.erros.join(' | ') : ''));
+    await ctxT4.close();
+  }
+
   console.log('Auto check-in por QR Code (página pública)');
   {
     const EVQ = {id:'ev-teste-desperta', d:{...EV.d, autoCheckin:true}};
