@@ -60,7 +60,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     const d = document.createElement('div'); d.id = 'selo-falso'; d.style.cssText = 'position:fixed;bottom:0;right:0'; d.textContent = 'Powered by Netlify'; document.body.appendChild(d); });
   await p.waitForTimeout(100);
   conferir(await p.evaluate(() => getComputedStyle(document.querySelector('netlify-drawer')).display === 'none' && getComputedStyle(document.querySelector('#selo-falso')).display === 'none' && getComputedStyle(document.querySelector('#tabs')).display !== 'none'), 'selo "Powered by Netlify" escondido e abas visíveis');
-  conferir(JSON.stringify(await abas(p)) === JSON.stringify(['Início','Escala','Avisos']), 'vê só Início, Escala e Avisos');
+  conferir(JSON.stringify(await abas(p)) === JSON.stringify(['Início','Escala','Agenda','Avisos']), 'vê só Início, Escala, Agenda e Avisos');
   conferir(await p.isVisible('[data-entrar]'), 'botão Entrar no topo');
   conferir((await p.textContent('#subtitle')).includes('Somente visualização'), 'subtítulo "Somente visualização"');
   const txt = await p.textContent('#view');
@@ -990,7 +990,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     if (dia2.slice(0,7) !== new Date().toISOString().slice(0,7) && !(await p.textContent('#view')).includes('Projeção')) { await p.click('[data-minha-mes="1"]'); await p.waitForTimeout(400); }
     conferir((await p.textContent('#view')).includes('Mídia') && (await p.textContent('#view')).includes('Projeção'), 'Minha agenda lista onde a pessoa serve (área e função)');
     await p.screenshot({ path: path.join(SAIDA, '49-minha-agenda.png'), fullPage: true });
-    await p.click('.minha-li'); await p.waitForTimeout(400);
+    await p.click('.minha-li[data-go-escala]'); await p.waitForTimeout(400);
     conferir(!!(await p.$('.det-quando')) && (await p.textContent('h2.section-title')).includes('Mídia'), 'tocar no compromisso abre o detalhe da escala');
     conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
     await ctx.close();
@@ -998,7 +998,43 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     for (let i = 0; i < 3 && !(await p.textContent('#view')).includes('Sua conexão'); i++) { await p.click('[data-minha-mes="1"]'); await p.waitForTimeout(400); }
     conferir((await p.textContent('#view')).includes('Sua conexão (Betel) está escalada'), 'líder vê quando a conexão dele serve');
     await p.context().close();
-    p = await abrir(null); conferir(!JSON.stringify(await abas(p)).includes('Agenda'), 'visitante não tem Minha agenda'); await p.context().close();
+    // Agenda com os eventos da igreja (para todos) + "Você serve" quando o culto é do evento.
+    {
+      const base = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) + 'T12:00:00Z');
+      const dd = n => { const d = new Date(base); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); };
+      // Evento de 3 dias (hoje, +1, +2) e um evento simples (+1, 19h). Ana serve na Mídia do culto "Congresso" de +1.
+      const evs = [{id:'ev-agenda-cong', d:{titulo:'Retiro de Teste da Agenda', data:dd(0), dias:[dd(0), dd(1), dd(2)], hora:'20:00', local:'Família Alcançar'}},
+                   {id:'ev-agenda-ensaio', d:{titulo:'Ensaio da Cantata', data:dd(1), hora:'19:00', local:'Auditório'}}];
+      const esc1 = {id: dd(1)+'_noite_midia', d:{data:dd(1), culto:'noite', area:'midia', cultoNome:'Retiro', hora:'20h', funcoes:[{nome:'Projeção', pessoas:['Ana']}]}};
+      const ctxA = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctxA.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+      p = await ctxA.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
+      await p.addInitScript(([e, s]) => { localStorage.setItem('mockPapel', 'midia'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEventosExtra', JSON.stringify(e)); localStorage.setItem('mockEscalaExtra', JSON.stringify(s)); }, [evs, esc1]);
+      await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.click('#tabs [data-tab="minha"]'); await p.waitForTimeout(600);
+      const irMes = async d => { for (let i = 0; i < 2 && !(await p.$$eval('.minha-dia h3', (l, dia) => l.some(h => h.textContent.includes(dia)), String(Number(d.slice(8,10)))).catch(() => false)); i++) { await p.click('[data-minha-mes="1"]'); await p.waitForTimeout(400); } };
+      conferir((await p.textContent('#view h2')).trim() === 'Agenda', 'título da tela: "Agenda"');
+      const contarEv = async () => p.$$eval('.minha-ev', l => l.filter(e => e.textContent.includes('Retiro de Teste')).length);
+      let nCong = await contarEv(); if (dd(2).slice(0,7) !== dd(0).slice(0,7)) { await p.click('[data-minha-mes="1"]'); await p.waitForTimeout(400); nCong += await contarEv(); await p.click('[data-minha-mes="-1"]'); await p.waitForTimeout(400); }
+      conferir(nCong === 3, 'evento de vários dias (d.dias) aparece em cada dia');
+      await irMes(dd(1));
+      const dia1 = await p.$$eval('.minha-dia', (l, n) => { const s = l.find(x => x.querySelector('h3').textContent.includes(n)); return s ? [...s.querySelectorAll('.li')].filter(b => !b.textContent.includes('Desperta')).map(b => (b.classList.contains('minha-ev') ? 'EV:' : b.classList.contains('minha-serve') ? 'SERVE:' : 'ESC:') + b.textContent.replace(/\s+/g, ' ').trim()) : []; }, String(Number(dd(1).slice(8,10))));
+      conferir(dia1.length === 3 && dia1[0].startsWith('EV:') && dia1[0].includes('Ensaio da Cantata') && dia1[1].startsWith('EV:') && dia1[1].includes('Retiro de Teste') && dia1[2].startsWith('SERVE:') && dia1[2].includes('Mídia') && dia1[2].includes('Projeção'),
+        'no dia: eventos na ordem do horário e "Você serve: Mídia · Projeção" logo abaixo do evento (' + JSON.stringify(dia1) + ')');
+      await p.screenshot({ path: path.join(SAIDA, '67-agenda-eventos.png'), fullPage: true });
+      await p.click('.minha-ev >> nth=0'); await p.waitForTimeout(400);
+      conferir(await p.isVisible('#dlg[open]') && (await p.textContent('#dlg')).length > 10, 'tocar no evento abre o detalhe do evento (o mesmo dos Avisos)');
+      await p.click('#dlg [data-cancel]').catch(() => {}); await p.waitForTimeout(200);
+      conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+      await ctxA.close();
+      const ctxV = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctxV.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+      p = await ctxV.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
+      await p.addInitScript(([e]) => { localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEventosExtra', JSON.stringify(e)); }, [evs]);
+      await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button');
+      conferir(JSON.stringify(await abas(p)).includes('Agenda'), 'visitante (sem login) vê a aba Agenda');
+      await p.click('#tabs [data-tab="minha"]'); await p.waitForTimeout(500);
+      conferir((await p.$$('.minha-ev')).length >= 1 && !(await p.$('.minha-serve')) && (await p.textContent('.minha-entrar')).includes('Entrar'), 'visitante vê só os eventos, com o aviso para entrar no lugar da escala');
+      conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+      await ctxV.close();
+    }
   }
 
   console.log('Notificações');
