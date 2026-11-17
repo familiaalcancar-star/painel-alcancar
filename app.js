@@ -29,7 +29,7 @@ const S = { pronto:false, sessao:undefined, uid:null, email:'', cfg:null, cfgLoa
   prox:[], mesEsc:[], avisos:[], eventos:[], names:{}, tab:'inicio', filtro:'todas',
   mes: new Date().toISOString().slice(0,7) };
 const TABS = [
-  {id:'inicio', label:'Início', ic:'🏠'}, {id:'escala', label:'Escala', ic:'📋'}, {id:'minha', label:'Agenda', ic:'🗓️', eu:true}, {id:'avisos', label:'Avisos', ic:'📣'},
+  {id:'inicio', label:'Início', ic:'🏠'}, {id:'escala', label:'Escala', ic:'📋'}, {id:'minha', label:'Agenda', ic:'🗓️'}, {id:'avisos', label:'Avisos', ic:'📣'},
   {id:'checkin', label:'Check-in', ic:'✅', gestao:true}, {id:'midia', label:'Checklist', ic:'🎬', midia:true}, {id:'historico', label:'Histórico', ic:'🕘', owner:true},
   {id:'ajustes', label:'Ajustes', ic:'⚙️', owner:true}, {id:'ajuda', label:'Ajuda', ic:'❓', hidden:true}];
 const $ = s => document.querySelector(s);
@@ -356,7 +356,7 @@ async function aplicarSessao(session){
     try { await sb.from('acessos').upsert({id:uid, email:S.email, visto:new Date().toISOString()}); } catch(e){}
     try { if (!localStorage.getItem('tutorialVisto')) { S.tab = 'ajuda'; localStorage.setItem('tutorialVisto', '1'); } } catch(e){}
   } else if (!TABS.some(t => t.id===S.tab && !t.owner && !t.gestao)) S.tab = 'inicio';
-  histCache = null; MK.itens = null; MK.chave = null; MK.editar = false;
+  histCache = null; MK.itens = null; MK.chave = null; MK.editar = false; S.minhaOk = null; S.minhaEsc = [];
   if (!uid) { fecharChat(); CHAT.msgs = []; }
   if (S.pronto) await carregarPrivado();
 }
@@ -445,22 +445,51 @@ function cardMeuProximo(){
   if (!veEquipes()) return ''; const c = meusCompromissos(S.prox.filter(x => x.data >= hoje() && x.data <= somaDias(hoje(), 14)))[0]; if (!c) return '';
   return '<button class="card meu-prox" data-go="minha"><span>📅 <b>Você serve '+esc(fmtCurto(c.x.data))+' · '+esc(cultoInfo(c.x.culto, c.x.data).nome)+'</b><br><small>'+esc(c.a.nome)+' · '+esc(c.txt)+'</small></span><span class="meta">Minha agenda ›</span></button>';
 }
-async function minhaCarregar(){ const m = S.minhaMes; const l = linhas(await lerEscalas(m+'-01', m+'-31', 2000)); if (m === S.minhaMes) { S.minhaEsc = l; S.minhaOk = m; } }
+async function minhaCarregar(){ const m = S.minhaMes; const l = veEquipes() ? linhas(await lerEscalas(m+'-01', m+'-31', 2000)) : []; if (m === S.minhaMes) { S.minhaEsc = l; S.minhaOk = m; } }
+// Eventos da igreja no mês: cada evento aparece em todos os dias em que acontece
+// (d.dias, ex.: Congresso 18 a 21/11; senão de data até dataFim; senão só data).
+function diasDoEvento(ev){
+  if (Array.isArray(ev.dias) && ev.dias.length) return ev.dias.filter(Boolean);
+  if (!ev.data) return [];
+  const out = [ev.data]; if (ev.dataFim && ev.dataFim > ev.data) { let d = ev.data; for (let i = 0; i < 62 && d < ev.dataFim; i++) { d = somaDias(d, 1); out.push(d); } }
+  return out;
+}
+const eventosDoMes = m => (S.eventos || []).flatMap(ev => diasDoEvento(ev).filter(d => d.slice(0,7) === m).map(d => ({data:d, ev})));
+// Minutos do dia para ordenar ("20:00", "9h30", "18h30"); sem horário = começo do dia.
+const minutosDe = h => { const r = String(h || '').match(/(\d{1,2})\s*(?:[:h]\s*(\d{2}))?/); return r ? Number(r[1]) * 60 + Number(r[2] || 0) : -1; };
+// O culto da escala é desse evento? (culto com nome próprio, ex.: "Congresso", e o título do evento contém esse nome)
+const cultoDoEvento = (c, ev) => { const ci = cultoInfo(c.x.culto, c.x.data); return ci.especial && normNome(ev.titulo || '').includes(normNome(ci.nome)); };
+function linhaMinhaEvento(e, serve){
+  const ev = e.ev, img = imgTag(ev.img, 'minha-ev-img');
+  return '<button class="li minha-li minha-ev" data-abrir="ev|'+esc(ev.id)+'"><span class="minha-c ev">'+(img || '<span class="minha-pin" aria-hidden="true">📌</span>')+(ev.hora ? '<small>'+esc(ev.hora)+'</small>' : '')+'</span>'
+    + '<span class="lt"><b>'+esc(ev.titulo)+'</b>'+([ev.hora, ev.local].filter(Boolean).length ? '<br><small>'+esc([ev.hora, ev.local].filter(Boolean).join(' · '))+'</small>' : '')+'</span><span class="la" aria-hidden="true">›</span></button>'
+    + serve.map(c => '<button class="li minha-serve" data-det="'+esc(c.x.data)+'|'+esc(c.x.culto)+'|'+esc(c.a.id)+'" data-go-escala><span>🙋 Você serve: <b>'+esc(c.a.nome)+'</b> · '+esc(c.txt)+'</span><span class="la" aria-hidden="true">›</span></button>').join('');
+}
+function linhaMinhaEscala(c){
+  const ci = cultoInfo(c.x.culto, c.x.data);
+  return '<button class="li minha-li" data-det="'+esc(c.x.data)+'|'+esc(c.x.culto)+'|'+esc(c.a.id)+'" data-go-escala><span class="minha-c'+(ci.noite ? ' noite' : '')+'">'+(ci.noite ? '🌙' : '☀️')+' '+esc(ci.nome)+(ci.hora ? '<br><small>'+esc(ci.hora)+'</small>' : '')+'</span>'
+    + '<span class="lt"><b>'+esc(c.a.nome)+'</b><br><small>'+esc(c.txt)+'</small></span><span class="la" aria-hidden="true">›</span></button>';
+}
 function viewMinha(){
-  if (!veEquipes()) return '<div class="empty">Entre com a sua conta aprovada para ver a sua agenda.</div>';
   if (!S.minhaMes) S.minhaMes = hoje().slice(0,7);
   if (S.minhaOk !== S.minhaMes) { minhaCarregar().then(() => { if (S.tab === 'minha') render(); }); }
   const rot = new Date(S.minhaMes+'-15T12:00:00').toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
-  let h = '<div class="bar"><h2 style="font-size:22px">Minha agenda</h2></div>'
+  let h = '<div class="bar"><h2 style="font-size:22px">Agenda</h2></div>'
     + '<div class="month"><button class="icon-btn" data-minha-mes="-1" aria-label="Mês anterior">‹</button><strong>'+esc(rot.charAt(0).toUpperCase()+rot.slice(1))+'</strong><button class="icon-btn" data-minha-mes="1" aria-label="Próximo mês">›</button></div>';
+  if (!veEquipes()) h += '<div class="notice minha-entrar">'+(S.uid ? 'Depois que o seu cadastro for aprovado, aqui também aparece onde você serve na escala.' : 'Abaixo estão os eventos da igreja. Para ver também onde você serve na escala, toque em <b>Entrar</b>.')+'</div>';
   if (S.minhaOk !== S.minhaMes) return h + '<div class="empty">Carregando…</div>';
-  const l = meusCompromissos(S.minhaEsc || []);
-  if (!l.length) return h + '<div class="empty">Nenhum compromisso neste mês.<br><small>Aparece aqui quando o seu nome (igual ao cadastro) estiver na escala, ou quando a sua conexão servir.</small></div>';
-  const dias = [...new Set(l.map(c => c.x.data))];
-  return h + dias.map(d => '<section class="card lst minha-dia'+(d < hoje() ? ' passou' : '')+(d === hoje() ? ' hoje' : '')+'"><h3>'+esc(fmtDia(d))+(d === hoje() ? ' <span class="tag">hoje</span>' : '')+'</h3>'
-    + l.filter(c => c.x.data === d).map(c => { const ci = cultoInfo(c.x.culto, c.x.data);
-      return '<button class="li minha-li" data-det="'+esc(c.x.data)+'|'+esc(c.x.culto)+'|'+esc(c.a.id)+'" data-go-escala><span class="minha-c'+(ci.noite ? ' noite' : '')+'">'+(ci.noite ? '🌙' : '☀️')+' '+esc(ci.nome)+(ci.hora ? '<br><small>'+esc(ci.hora)+'</small>' : '')+'</span>'
-        + '<span class="lt"><b>'+esc(c.a.nome)+'</b><br><small>'+esc(c.txt)+'</small></span><span class="la" aria-hidden="true">›</span></button>'; }).join('') + '</section>').join('');
+  const meus = veEquipes() ? meusCompromissos(S.minhaEsc || []) : [], evs = eventosDoMes(S.minhaMes);
+  if (!meus.length && !evs.length) return h + '<div class="empty">Nenhum compromisso neste mês.'+(veEquipes() ? '<br><small>Aparece aqui quando houver evento da igreja, quando o seu nome (igual ao cadastro) estiver na escala ou quando a sua conexão servir.</small>' : '')+'</div>';
+  const dias = [...new Set([...meus.map(c => c.x.data), ...evs.map(e => e.data)])].sort();
+  return h + dias.map(d => {
+    const evDia = evs.filter(e => e.data === d), usados = new Set();
+    // Evento + "Você serve" logo abaixo, quando o culto da escala é do evento.
+    const itens = evDia.map(e => { const serve = meus.filter(c => c.x.data === d && !usados.has(c) && cultoDoEvento(c, e.ev)); serve.forEach(c => usados.add(c));
+        return {min: minutosDe(e.ev.hora), html: linhaMinhaEvento(e, serve)}; })
+      .concat(meus.filter(c => c.x.data === d && !usados.has(c)).map(c => ({min: minutosDe(cultoInfo(c.x.culto, c.x.data).hora), html: linhaMinhaEscala(c)})))
+      .sort((a, b) => a.min - b.min);
+    return '<section class="card lst minha-dia'+(d < hoje() ? ' passou' : '')+(d === hoje() ? ' hoje' : '')+'"><h3>'+esc(fmtDia(d))+(d === hoje() ? ' <span class="tag">hoje</span>' : '')+'</h3>'
+      + itens.map(i => i.html).join('') + '</section>'; }).join('');
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-minha-mes]'); if (!b) return; const d = new Date(S.minhaMes+'-15T12:00:00'); d.setMonth(d.getMonth() + Number(b.dataset.minhaMes)); S.minhaMes = isoLocal(d).slice(0,7); render(); });
 // Tocar num compromisso abre o detalhe daquela escala (na aba Escala).
