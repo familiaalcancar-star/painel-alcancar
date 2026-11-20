@@ -985,6 +985,41 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.context().close();
   }
 
+  console.log('Colar escala do WhatsApp');
+  {
+    p = await abrir('admin', '#escala'); await p.setViewportSize({ width: 1280, height: 900 });
+    await p.click('button.cell[data-det="2026-11-08|manha|direcao"]'); await p.waitForTimeout(150);
+    await p.click('[data-esc]'); await p.waitForSelector('#dlg[open] [data-zap-abrir]');
+    await p.click('[data-zap-abrir]'); await p.waitForSelector('#zapTxt');
+    const msg = ['❤️ ATENÇÃO, VOLUNTÁRIOS!', 'Queridos, pedimos a todos que estarão servindo no culto que cheguem com 45 minutos de antecedência.', '',
+      'DIREÇÃO DO CULTO · 08/11', '', '☀️ CULTO DA MANHÃ (9h30)', 'Estacionamento:', '1. Kennedy', '2 . Pedro', '3.  ⁠David', 'Recepção:', '1. Evelin (confirmará sábado)', '2.', 'Banheiro:', '1. Fulano', 'Observação: Trazer coletes', '',
+      '🌙 CULTO DA NOITE (18h30)', 'Café:', '1. Maria', 'Equipe de limpeza pós-culto:', '1. João', '2. Zé', 'Observação:', '', 'Contamos com a pontualidade e o comprometimento de todos!'].join('\n');
+    await p.fill('#zapTxt', msg); await p.click('[data-zap-previa]'); await p.waitForSelector('.zap-prev');
+    const prev = await p.textContent('.zap-prev');
+    conferir(prev.includes('Kennedy, Pedro, David') && prev.includes('Evelin') && !prev.includes('(confirmará') && prev.includes('Evelin: confirmará sábado') && prev.includes('Trazer coletes')
+      && prev.includes('Maria') && prev.includes('João, Zé'), 'prévia: manhã e noite, função → nomes (sem número, pontos e símbolos invisíveis; parênteses viram observação)');
+    conferir(await p.$$eval('.zap-prev .zap-aviso', l => l.some(e => e.textContent.includes('Banheiro'))) && !prev.includes('Fulano'), 'função desconhecida: aviso amarelo e a linha não entra');
+    await p.screenshot({ path: path.join(SAIDA, '71-colar-whatsapp.png'), fullPage: true });
+    const nHist = await p.evaluate(() => window.__TABELAS.historico.length);
+    await p.click('[data-zap-salvar]'); await p.waitForTimeout(800);
+    const r = await p.evaluate(() => { const m = window.__TABELAS.escalas.find(e => e.id === '2026-11-08_manha_direcao'), n = window.__TABELAS.escalas.find(e => e.id === '2026-11-08_noite_direcao');
+      const pes = (e, f) => ((e.d.funcoes || []).find(g => g.nome === f) || {}).pessoas || []; return {est: pes(m, 'Estacionamento'), rec: pes(m, 'Recepção'), obs: m.d.obs, cafe: pes(n, 'Café + água do ministro da Palavra'), limp: pes(n, 'Equipe de limpeza pós-culto'), conex: m.d.conexoes}; });
+    conferir(JSON.stringify(r.est) === '["Kennedy","Pedro","David"]' && JSON.stringify(r.rec) === '["Evelin"]' && r.obs.includes('Trazer coletes') && r.obs.includes('Evelin: confirmará sábado')
+      && JSON.stringify(r.cafe) === '["Maria"]' && JSON.stringify(r.limp) === '["João","Zé"]' && r.conex.length > 0, 'Salvar grava manhã e noite (cada culto na sua escala), mantendo as conexões');
+    conferir(!(await p.isVisible('#dlg[open]')) && await p.evaluate(n => window.__TABELAS.historico.length >= n + 2 && window.__TABELAS.historico.slice(-2).every(h => /colado do WhatsApp/.test(h.resumo)), nHist), 'registrado no histórico');
+    await p.context().close();
+    // Líder: só salva o que pode (a escala da conexão dele)
+    p = await abrir('betel', '#escala'); await p.setViewportSize({ width: 1280, height: 900 });
+    const cel = await p.$('button.cell[data-det$="|direcao"]:has-text("Betel")');
+    if (cel) { const det = await cel.getAttribute('data-det'); await cel.click(); await p.waitForTimeout(150); await p.click('[data-esc]'); await p.waitForSelector('#dlg[open] [data-zap-abrir]');
+      await p.click('[data-zap-abrir]'); await p.fill('#zapTxt', 'Estacionamento:\n1. Lider Teste'); await p.click('[data-zap-previa]'); await p.waitForSelector('.zap-prev');
+      await p.click('[data-zap-salvar]'); await p.waitForTimeout(600);
+      const [dt, cu] = det.split('|');
+      conferir(await p.evaluate(id => (((window.__TABELAS.escalas.find(e => e.id === id) || {d:{}}).d.funcoes || []).find(g => g.nome === 'Estacionamento') || {}).pessoas.includes('Lider Teste'), dt+'_'+cu+'_direcao'), 'líder cola e salva a escala da conexão dele (sem culto, vale o culto aberto)');
+    } else conferir(true, 'líder: sem escala da Betel no mês (pulado)');
+    await p.context().close();
+  }
+
   console.log('Direção do culto: limpeza só à noite e convocação');
   p = await abrir('admin', '#escala'); await p.setViewportSize({ width: 1280, height: 900 });
   await p.click('button.cell[data-det="2026-11-08|manha|direcao"]'); await p.waitForTimeout(150);

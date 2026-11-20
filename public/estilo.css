@@ -491,3 +491,12 @@ table.pres .pres-cx.hoje span{box-shadow:0 0 0 2px var(--yellow)}
 .pres-nums .ci b{color:var(--green)}.pres-nums .falta b{color:var(--yellow)}
 table.pres thead th[data-pres-dia]{cursor:pointer}
 table.pres thead th.pres-sel{box-shadow:inset 0 -3px 0 var(--yellow)}
+.colar-zap{margin:4px 0 10px}
+.colar-zap>.btn{width:100%}
+.zap-prev{margin-top:10px}
+.zap-culto{border-left:3px solid var(--yellow);padding:4px 0 4px 10px;margin:10px 0}
+.zap-culto.noite{border-left-color:var(--night)}
+.zap-culto h4{margin:0 0 6px}
+.zap-aviso{background:var(--gold-soft);color:var(--yellow);border:1px solid var(--yellow);border-radius:10px;padding:8px 10px;font-size:14px;margin:6px 0}
+.zap-culto .fn{margin:0 0 6px}
+.zap-culto .fn b{display:block;font-size:13px;color:var(--muted)}

@@ -929,7 +929,7 @@ function camposArea(a, x, culto){
   });
   if (h.includes('mid-apoio')) h += '</details>';
   h += '<label class="f" for="fObs">Observação (opcional)</label><input class="inp" id="fObs" name="obs" value="'+esc(x?x.obs||'':'')+'">';
-  return blocoPreencher() + listaPessoasEscala() + '<p class="hint" style="margin:8px 0 0">Toque num campo de nome para escolher entre as pessoas cadastradas (ou digite).</p>' + h;
+  return blocoColarZap() + blocoPreencher() + listaPessoasEscala() + '<p class="hint" style="margin:8px 0 0">Toque num campo de nome para escolher entre as pessoas cadastradas (ou digite).</p>' + h;
 }
 /* ---------- preencher a escala por modelo (texto, Word, Excel ou PDF) ---------- */
 // Modelo: uma função por linha, "Função: nome, nome". A organizadora preenche e devolve; o painel coloca cada nome no campo certo.
@@ -985,6 +985,92 @@ function lerModelo(txt, a){
   });
   return {res, obs, fora};
 }
+/* ---------- colar a escala do WhatsApp (convocação já respondida) ---------- */
+// Seções: linha com "MANHÃ" ou ☀️ (manhã) e "NOITE" ou 🌙 (noite); sem elas, vale o culto aberto.
+// Função: linha que termina com ":"; "Observação:" vira a observação. Pessoas: linhas numeradas abaixo ("1. Kennedy").
+// "(…)" depois do nome vai para a observação. Função que não existe na área: aviso e a linha não é salva.
+const blocoColarZap = () => '<div class="colar-zap"><button type="button" class="btn ghost" data-zap-abrir>📋 Colar escala do WhatsApp</button>'
+  + '<div id="zapBox" hidden><label class="f" for="zapTxt">Cole aqui a mensagem do WhatsApp</label>'
+  + '<textarea class="inp" id="zapTxt" style="min-height:240px" placeholder="☀️ CULTO DA MANHÃ&#10;Estacionamento:&#10;1. Kennedy&#10;2. Pedro&#10;&#10;🌙 CULTO DA NOITE&#10;Recepção:&#10;1. Ana"></textarea>'
+  + '<div class="end" style="margin-top:6px"><button type="button" class="btn ghost small" data-zap-cancelar>Cancelar</button><button type="button" class="btn small" data-zap-previa>Ver prévia</button></div>'
+  + '<div id="zapPrev"></div></div></div>';
+const ZAP = {res:null};
+const limparInvisiveis = s => String(s || '').replace(/[​-‏‪-‮⁠-⁯﻿­]/g, '').replace(/ /g, ' ');
+function lerZap(txt, a, cultoAberto){
+  const idDe = re => (cultos().find(c => re.test(semAcento(c.nome)) || re.test(c.id)) || {}).id;
+  const MAN = idDe(/manha/) || 'manha', NOI = idDe(/noite/) || 'noite';
+  const fns = a.funcoes.map((f, i) => ({i, f, n:normF(f.nome)}));
+  const achar = rot => { const r = normF(rot); if (r.length < 2) return null; return fns.find(f => f.n === r) || fns.find(f => f.n.startsWith(r + ' ') || r.startsWith(f.n + ' ')) || fns.find(f => r.length >= 5 && (f.n.startsWith(r) || r.startsWith(f.n))) || null; };
+  const out = {}, avisos = []; let cu = cultoAberto, atual = null, emObs = false;
+  const sec = id => (out[id] ||= {funcoes:{}, obs:[]});
+  String(txt || '').split(/\r?\n/).forEach(l0 => {
+    const l = limparInvisiveis(l0).replace(/\s+/g, ' ').trim(); if (!l) { emObs = false; return; } // linha em branco encerra a observação
+    const sa = semAcento(l);
+    // Observação (com ou sem texto na mesma linha)
+    if (/^observa[cç][aã]o\b/i.test(sa) && l.includes(':')) { const t = l.slice(l.indexOf(':') + 1).trim(); if (t) sec(cu).obs.push(t); atual = null; emObs = true; return; }
+    // Função: termina com ":"
+    if (/:$/.test(l)) { emObs = false; const rot = l.slice(0, -1).trim(), f = achar(rot);
+      if (!f) { atual = null; avisos.push('Função “'+rot+'” não existe em '+a.nome+(cultoInfo(cu).nome ? ' ('+cultoInfo(cu).nome.toLowerCase()+')' : '')+': não será salva.'); return; }
+      if (!noCulto(f.f, cu)) { atual = null; avisos.push('“'+f.f.nome+'” não existe no culto da '+cultoInfo(cu).nome.toLowerCase()+': não será salva.'); return; }
+      atual = f; sec(cu).funcoes[f.i] = sec(cu).funcoes[f.i] || []; return; }
+    // Pessoa numerada
+    const m = l.match(/^\d{1,2}\s*[.)\-–]?\s*(.*)$/);
+    if (m && atual) { let nome = m[1].replace(/^[.\s]+/, '').trim(), nota = '';
+      const pa = nome.match(/\(([^)]*)\)/); if (pa) { nota = pa[1].trim(); nome = nome.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim(); }
+      nome = nome.replace(/^[^\p{L}]+|[^\p{L}.']+$/gu, '').trim();
+      if (nome) { sec(cu).funcoes[atual.i].push(nome); if (nota) sec(cu).obs.push(nome+': '+nota); }
+      return; }
+    // Seção do culto
+    if (/\bmanha\b/.test(sa) || l.includes('☀')) { cu = MAN; atual = null; emObs = false; return; }
+    if (/\bnoite\b/.test(sa) || l.includes('🌙')) { cu = NOI; atual = null; emObs = false; return; }
+    if (emObs) { sec(cu).obs.push(l); return; }
+    // o resto (título, avisos, "Contamos com a pontualidade…") é ignorado
+  });
+  return {cultos: out, avisos};
+}
+function zapPrevia(){
+  const f = $('#dlgBody form'), a = areaInfo(f.area.value), data = f.data.value, txt = $('#zapTxt').value;
+  if (!txt.trim()) { toast('Cole a mensagem do WhatsApp.'); return; }
+  const r = lerZap(txt, a, f.culto.value), ids = cultos().map(c => c.id).filter(id => r.cultos[id]);
+  // Permissões: cada culto só entra se a pessoa pode editar aquela escala (líder/auxiliar: só a da conexão dele).
+  const bloq = []; ids.forEach(id => { const x = todasEscalas().find(e => e.id === docId(data, id, a.id)); if (!podeArea(a, x, data) || (a.porConexao && !x && !isAdm())) bloq.push(id); });
+  ZAP.res = {area:a.id, data, cultos: Object.fromEntries(ids.filter(id => !bloq.includes(id)).map(id => [id, r.cultos[id]]))};
+  const linhasCulto = id => { const s = r.cultos[id], ci = cultoInfo(id, data);
+    return '<div class="zap-culto'+(ci.noite ? ' noite' : '')+'"><h4>'+(ci.noite ? '🌙' : '☀️')+' '+esc(ci.titulo)+'</h4>'
+      + (bloq.includes(id) ? '<p class="zap-aviso">Você não pode editar esta escala: este culto não será salvo.</p>' : '')
+      + Object.entries(s.funcoes).map(([i, ps]) => '<p class="fn"><b>'+esc(a.funcoes[i].nome)+'</b>'+(ps.length ? ps.map(esc).join(', ') : '<span class="pend">vaga aberta</span>')+'</p>').join('')
+      + (s.obs.length ? '<p class="fn"><b>Observação</b>'+esc(s.obs.join(' · '))+'</p>' : '') + '</div>'; };
+  $('#zapPrev').innerHTML = '<div class="card zap-prev"><h3 style="margin:0 0 6px">Prévia · '+esc(a.nome)+' · '+esc(fmtDia(data))+'</h3>'
+    + (r.avisos.length ? r.avisos.map(t => '<p class="zap-aviso">⚠️ '+esc(t)+'</p>').join('') : '')
+    + (ids.length ? ids.map(linhasCulto).join('') : '<p class="zap-aviso">Não encontrei nenhuma função desta área na mensagem.</p>')
+    + '<div class="end"><button type="button" class="btn ghost small" data-zap-cancelar>Cancelar</button>'+(Object.keys(ZAP.res.cultos).length ? '<button type="button" class="btn small" data-zap-salvar>Salvar</button>' : '')+'</div></div>';
+  $('#zapPrev').scrollIntoView({block:'nearest', behavior:'smooth'});
+}
+async function zapSalvar(b){
+  const z = ZAP.res; if (!z) return; const a = areaInfo(z.area); b.disabled = true; let n = 0;
+  for (const [culto, s] of Object.entries(z.cultos)) {
+    const x = todasEscalas().find(e => e.id === docId(z.data, culto, a.id));
+    if (!podeArea(a, x, z.data)) continue;
+    const base = x ? JSON.parse(JSON.stringify(semId(x))) : {data:z.data, culto, area:a.id, conexoes:[], conexao:null, funcoes:[], obs:'', ...camposCulto(null, z.data, culto)};
+    // Funções que vieram na mensagem são trocadas; as que não vieram continuam como estavam.
+    const ant = base.funcoes || [];
+    base.funcoes = a.funcoes.filter(fn => noCulto(fn, culto)).map(fn => { const i = a.funcoes.indexOf(fn);
+      return s.funcoes[i] ? {nome:fn.nome, pessoas:s.funcoes[i]} : (ant.find(g => g.nome === fn.nome) || {nome:fn.nome, pessoas:[]}); })
+      .concat(ant.filter(g => !a.funcoes.some(fn => fn.nome === g.nome)));
+    if (s.obs.length) base.obs = s.obs.join(' · ');
+    base.atualizadoEm = new Date().toISOString();
+    if (await salvar(ref('escalas', docId(z.data, culto, a.id)), base, {acao:x?'editou':'criou', tipo:'escala', resumo:resumoEscala(base)+' (colado do WhatsApp)', antes:x?semId(x):null})) n++;
+  }
+  ZAP.res = null;
+  if (n) { toast(n > 1 ? 'Escalas da manhã e da noite salvas.' : 'Escala salva.'); $('#dlg').close(); await RECARGA.escalas(); render(); }
+  else { b.disabled = false; toast('Nada foi salvo.'); }
+}
+document.addEventListener('click', e => { const b = e.target.closest('button'); if (!b || !$('#dlg').open) return;
+  if ('zapAbrir' in b.dataset) { const box = $('#zapBox'); box.hidden = !box.hidden; if (!box.hidden) $('#zapTxt').focus(); }
+  if ('zapCancelar' in b.dataset) { ZAP.res = null; $('#zapPrev').innerHTML = ''; $('#zapTxt').value = ''; $('#zapBox').hidden = true; }
+  if ('zapPrevia' in b.dataset) zapPrevia();
+  if ('zapSalvar' in b.dataset) zapSalvar(b);
+});
 const PRE = {outros:[], ctx:null};
 async function preencherEscala(){
   const f = $('#dlgBody form'); const a = areaInfo(f.area.value); let txt = $('#pTxt').value;
