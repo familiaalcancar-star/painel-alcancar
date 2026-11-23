@@ -103,8 +103,11 @@ const temGestao = () => isAdm() || !!(pessoaDe(S.uid)||{}).gestao;
 const temMidia = () => isAdm() || !!(pessoaDe(S.uid)||{}).midia;
 // Checklist: admin, extra Mídia ou quem está escalado(a) na Mídia de hoje até daqui a 7 dias.
 const escaladoMidiaProx = () => { const p = aprovado(S.uid) && S.pessoas[S.uid]; if (!p) return false; const fim = somaDias(hoje(), 7);
-  return (S.prox || []).some(x => x.area === 'midia' && x.data >= hoje() && x.data <= fim && (x.funcoes || []).some(f => (f.pessoas || []).some(n => midiaNomeBate(n, p)))); };
-const veChecklist = () => temMidia() || escaladoMidiaProx();
+  return (S.prox || []).some(x => (x.area === 'midia' || x.area === 'staff') && x.data >= hoje() && x.data <= fim && (x.funcoes || []).some(f => (f.pessoas || []).some(n => midiaNomeBate(n, p)))); };
+// Quem vê a aba Checklist: o banco responde (ve_checklist: admin, Mídia, Gestão ou escalado na Mídia/Staff até 7 dias).
+// Enquanto a resposta não chega, usa a mesma regra aqui na tela.
+const veChecklist = () => isAdm() || S.veCk === true || (S.veCk == null && (temMidia() || escaladoMidiaProx()));
+async function carregarVeCk(){ if (!S.uid) { S.veCk = false; return; } const r = await sb.rpc('ve_checklist'); S.veCk = r.error ? null : r.data === true; }
 // Extra Desperta: só a lista de presença (aba Check-in), sem o check-in dos voluntários.
 const temDesperta = () => isAdm() || !!(pessoaDe(S.uid)||{}).desperta;
 // Extra Sorteador: conduz o sorteio (abre o controle pela aba Check-in).
@@ -210,12 +213,12 @@ async function carregarMes(){ const m = S.mes; const l = linhas(await lerEscalas
 async function carregarAvisos(){ S.avisos = linhas(await sb.from('avisos').select('id,d,autor').order('criado_em', {ascending:false}).limit(60)); }
 async function carregarEventos(){ S.eventos = linhas(await sb.from('eventos').select('id,d,autor').order('data').limit(300)); }
 function assinarMes(){ carregarMes().then(render); }
-async function carregarPrivado(){ await Promise.all([carregarPessoas(), carregarConfig()]); await Promise.all([carregarChat(), carregarProx(), carregarMes()]); await pushEstado(); if (!podeChat()) fecharChat(); renderWho(); renderTabs(); render(); }
+async function carregarPrivado(){ await Promise.all([carregarPessoas(), carregarConfig()]); await Promise.all([carregarChat(), carregarProx(), carregarMes(), carregarVeCk()]); await pushEstado(); if (!podeChat()) fecharChat(); renderWho(); renderTabs(); render(); }
 
 // Tempo real: quando algo muda no banco, recarrega só aquela parte.
 const RECARGA = {
   config: () => carregarConfig(), pessoas: async () => { await carregarPessoas(); fecharChat(); if ($('#dlg').open) $('#dlg').close(); }, cadastros: () => carregarPessoas(),
-  escalas: () => Promise.all([carregarProx(), carregarMes(), S.ckD ? ckCarregarDocs() : null, MK.data ? mkCarregarEscala() : null, MK.data ? mkCarregarStatus() : null]),
+  escalas: () => Promise.all([carregarVeCk(), carregarProx(), carregarMes(), S.ckD ? ckCarregarDocs() : null, MK.data ? mkCarregarEscala() : null, MK.data ? mkCarregarStatus() : null]),
   avisos: () => carregarAvisos(), eventos: () => carregarEventos(), checkin_itens: () => ckCarregarItens(), checkin_marcas: () => Promise.all([S.ckD ? ckCarregarMarcas() : null, MK.data ? mkCarregarStatus() : null]),
   checklist_marcas: () => MK.data ? mkCarregarMarcas() : null, checklist_itens: () => MK.itens ? mkCarregarItens() : null,
   evento_participantes: () => PR.lista ? prCarregar() : null,
@@ -360,7 +363,7 @@ async function aplicarSessao(session){
     try { await sb.from('acessos').upsert({id:uid, email:S.email, visto:new Date().toISOString()}); } catch(e){}
     try { if (!localStorage.getItem('tutorialVisto')) { S.tab = 'ajuda'; localStorage.setItem('tutorialVisto', '1'); } } catch(e){}
   } else if (!TABS.some(t => t.id===S.tab && !t.owner && !t.gestao)) S.tab = 'inicio';
-  histCache = null; MK.itens = null; MK.chave = null; MK.editar = false; S.minhaOk = null; S.minhaEsc = [];
+  histCache = null; MK.itens = null; MK.chave = null; MK.editar = false; S.minhaOk = null; S.minhaEsc = []; S.veCk = null;
   if (!uid) { fecharChat(); CHAT.msgs = []; }
   if (S.pronto) await carregarPrivado();
 }
@@ -374,7 +377,7 @@ async function init(){
   sb.auth.onAuthStateChange((ev, session) => { setTimeout(() => aplicarSessao(session), 0); if (ev === 'PASSWORD_RECOVERY') setTimeout(formNovaSenha, 600); });
   erroNaUrl();
   try { await carregarConfig(); S.mes = proxCulto().slice(0,7);
-    await carregarPessoas(); await Promise.all([carregarProx(), carregarMes(), carregarAvisos(), carregarEventos()]); await carregarChat(); }
+    await carregarPessoas(); await Promise.all([carregarProx(), carregarMes(), carregarAvisos(), carregarEventos(), carregarVeCk()]); await carregarChat(); }
   catch(e){ console.warn(e); }
   await pushEstado();
   S.pronto = true;
@@ -1349,22 +1352,28 @@ const mkFuncoesCfg = () => { const a = (S.cfg && S.cfg.areas || []).find(x => x.
 // Checklists: um por função, mas os Apoios (Apoio 1, Apoio 2…) dividem o mesmo checklist "Apoio" (o que um marca aparece para o outro).
 const mkChecklistNome = fn => /^apoio( \d+)?$/.test(normNome(fn)) ? 'Apoio' : fn;
 // Ordem: a das funções na config; depois, funções que só existem em checklist_itens (itens ativos).
+// Staff: só Gestão de culto e Checagem têm checklist (Check-in não).
+const STAFF_CHECKLIST = ['Gestão de culto', 'Checagem'];
+const mkStaffCfg = () => { const a = (S.cfg && S.cfg.areas || []).find(x => x.id === 'staff'); const l = ((a && a.funcoes) || []).map(f => f.nome).filter(n => STAFF_CHECKLIST.some(s => normNome(s) === normNome(n)));
+  return l.length ? l : STAFF_CHECKLIST; };
+const mkArea = i => i.area === 'staff' ? 'staff' : 'midia';
 function mkChecklists(){ const l = [];
-  mkFuncoesCfg().forEach(f => { const n = mkChecklistNome(f); let c = l.find(x => normNome(x.nome) === normNome(n)); if (!c) l.push(c = {nome:n, de:[]}); c.de.push(f); });
-  (MK.itens || []).forEach(i => { if (i.ativo && i.funcao && !l.some(c => normNome(c.nome) === normNome(i.funcao))) l.push({nome:i.funcao, de:[i.funcao]}); });
+  mkFuncoesCfg().forEach(f => { const n = mkChecklistNome(f); let c = l.find(x => x.area === 'midia' && normNome(x.nome) === normNome(n)); if (!c) l.push(c = {nome:n, de:[], area:'midia'}); c.de.push(f); });
+  mkStaffCfg().forEach(f => l.push({nome:f, de:[f], area:'staff'}));
+  (MK.itens || []).forEach(i => { if (i.ativo && i.funcao && !l.some(c => c.area === mkArea(i) && normNome(c.nome) === normNome(i.funcao))) l.push({nome:i.funcao, de:[i.funcao], area:mkArea(i)}); });
   return l; }
-const mkChecklistDe = fnEscala => (mkChecklists().find(c => c.de.some(d => normNome(d) === normNome(fnEscala))) || {}).nome;
-const MK = { data:null, culto:null, chave:null, ok:false, itens:null, marcas:{}, esc:null, editar:false, fnEd:'Projeção', st:null, manual:false, liberadoAte:0 };
+const mkChecklistDe = (fnEscala, area) => (mkChecklists().find(c => (!area || c.area === area) && c.de.some(d => normNome(d) === normNome(fnEscala))) || {}).nome;
+const MK = { data:null, culto:null, chave:null, ok:false, itens:null, marcas:{}, esc:null, escStaff:null, editar:false, fnEd:'Projeção', areaEd:'midia', st:null, manual:false, liberadoAte:0 };
 const horaSP = iso => new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo'});
 // Mesma regra do banco (midia_nome_bate): apelido igual, nome completo igual, ou nome e sobrenome dentro do nome completo.
 const midiaNomeBate = (n, p) => { const e = normNome(n); if (!e || !p) return false; return (normNome(p.apelido) && e === normNome(p.apelido)) || e === normNome(p.nome) || nomeBate(n, p); };
-const mkFuncoesDe = esc => { const fs = (esc && esc.funcoes) || [], cfgL = mkFuncoesCfg();
+const mkFuncoesDe = (esc, area) => { const fs = (esc && esc.funcoes) || [], cfgL = area === 'staff' ? mkStaffCfg() : mkFuncoesCfg();
   return [...cfgL, ...fs.map(f => f.nome).filter(n => n && !cfgL.some(c => normNome(c) === normNome(n)))].map(nome => ({nome, pessoas: (fs.find(f => normNome(f.nome) === normNome(nome))||{}).pessoas || []})); };
 // Fonte da verdade: checklist_meu_status(data, culto) no banco → {admin, funcoes, hoje, checkin, pode_marcar}.
 const mkMeusChecklists = () => (MK.st && Array.isArray(MK.st.funcoes) ? MK.st.funcoes : []);
 // Funções da escala (ex.: "Apoio 1") só para mostrar; quem decide o que pode marcar é o banco.
 const mkMinhas = () => { const p = S.pessoas[S.uid]; if (!p) return []; const meus = mkMeusChecklists();
-  return mkFuncoesDe(MK.esc).filter(f => f.pessoas.some(n => midiaNomeBate(n, p)) && meus.some(c => normNome(c) === normNome(mkChecklistDe(f.nome) || f.nome))).map(f => f.nome); };
+  return [['midia', MK.esc], ['staff', MK.escStaff]].flatMap(([ar, e]) => mkFuncoesDe(e, ar).filter(f => f.pessoas.some(n => midiaNomeBate(n, p)) && meus.some(c => normNome(c) === normNome(mkChecklistDe(f.nome, ar) || f.nome))).map(f => f.nome)); };
 const mkPodeMarcar = ck => !!MK.st && (MK.st.admin || (MK.st.pode_marcar && mkMeusChecklists().some(c => normNome(c) === normNome(ck))));
 async function mkCarregarStatus(){
   const d = MK.data, c = MK.culto; if (!d || !c || !S.uid) return;
@@ -1382,14 +1391,19 @@ setInterval(async () => { const st = MK.st;
 function mkAuto(){ if (MK.manual || MK.editar) return false; const p = mkPadrao(); if (p.data === MK.data && p.culto === MK.culto) return false; MK.data = p.data; MK.culto = p.culto; return true; }
 setInterval(() => { if (S.tab === 'midia' && document.visibilityState === 'visible' && mkAuto()) render(); }, 60000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.tab === 'midia' && mkAuto()) render(); });
-function mkPadrao(){ return proximoCulto(); }
+function mkPadrao(){
+  const h = hoje(), agora = (() => { const t = new Date().toLocaleTimeString('en-GB', {timeZone:'America/Sao_Paulo', hour:'2-digit', minute:'2-digit'}).split(':'); return Number(t[0]) * 60 + Number(t[1]); })();
+  const deHoje = listaCultos(h, h, S.prox || []).filter(c => cultoInfo(c.culto, c.data).noite || agora < 14 * 60);
+  return deHoje[0] || listaCultos(somaDias(h, 1), somaDias(h, 14), S.prox || [])[0] || proximoCulto();
+}
 async function mkCarregarItens(){ const r = await sb.from('checklist_itens').select('*').order('ordem'); if (r.error) { console.warn(r.error); MK.itens = MK.itens || []; return; } MK.itens = r.data || []; }
 async function mkCarregarMarcas(){ const d = MK.data, c = MK.culto; const r = await sb.from('checklist_marcas').select('*').eq('data', d).eq('culto', c);
   if (r.error) { console.warn(r.error); return; } if (d !== MK.data || c !== MK.culto) return; const m = {}; (r.data||[]).forEach(x => m[x.item] = x); MK.marcas = m; }
-async function mkCarregarEscala(){ const d = MK.data, c = MK.culto; const r = linhas(await sb.from('escalas').select('id,d').eq('data', d).eq('culto', c).eq('area', 'midia')); if (d === MK.data && c === MK.culto) MK.esc = r[0] || null; }
+async function mkCarregarEscala(){ const d = MK.data, c = MK.culto; const r = linhas(await sb.from('escalas').select('id,d').eq('data', d).eq('culto', c).in('area', ['midia', 'staff']));
+  if (d === MK.data && c === MK.culto) { MK.esc = r.find(x => x.area === 'midia') || null; MK.escStaff = r.find(x => x.area === 'staff') || null; } }
 function mkAbrir(){
   if (!MK.data) { const p = mkPadrao(); MK.data = p.data; MK.culto = p.culto; }
-  const chave = MK.data+'_'+MK.culto; if (MK.chave === chave) return; MK.chave = chave; MK.ok = false; MK.marcas = {}; MK.esc = null; MK.st = null;
+  const chave = MK.data+'_'+MK.culto; if (MK.chave === chave) return; MK.chave = chave; MK.ok = false; MK.marcas = {}; MK.esc = null; MK.escStaff = null; MK.st = null;
   Promise.all([MK.itens ? null : mkCarregarItens(), mkCarregarMarcas(), mkCarregarEscala(), mkCarregarStatus()]).catch(e => console.warn(e)).finally(() => { MK.ok = true; if (S.tab === 'midia') render(); });
 }
 // Itens a mostrar num culto: os ativos + os já removidos que tenham marcação nele (histórico).
@@ -1397,13 +1411,13 @@ function mkAbrir(){
 // O bloco "Após a oração final" (ex.: mochila do Apoio) vem depois dela.
 const mkFixa = i => { const t = normNome(i.texto), b = normNome(i.bloco); return t === 'oracao inicial' ? -1 : t === 'oracao final' ? 1 : /^(apos|depois) .*oracao final/.test(b) ? 2 : 0; };
 const mkOrdena = (a, b) => mkFixa(a) - mkFixa(b) || a.ordem - b.ordem;
-const mkItensDe = fn => (MK.itens||[]).filter(i => normNome(i.funcao) === normNome(fn) && (i.ativo || MK.marcas[i.id])).sort(mkOrdena);
+const mkItensDe = (fn, area) => (MK.itens||[]).filter(i => normNome(i.funcao) === normNome(fn) && (!area || mkArea(i) === area) && (i.ativo || MK.marcas[i.id])).sort(mkOrdena);
 const mkBlocos = itens => { const bs = []; itens.forEach(i => { let b = bs.find(x => x.nome === i.bloco); if (!b) bs.push(b = {nome:i.bloco, itens:[]}); b.itens.push(i); }); return bs; };
 function viewMidia(){
-  if (!veChecklist()) return '<div class="empty">Esta aba aparece para quem está escalado(a) na Mídia (e para os administradores).</div>';
+  if (!veChecklist()) return '<div class="empty">Esta aba aparece para quem está escalado(a) na Mídia ou na Staff (Gestão de culto e Checagem) e para os administradores.</div>';
   if (MK.editar && isAdm()) return viewMidiaEditar();
   mkAuto(); mkAbrir();
-  let h = '<div class="bar"><h2 style="font-size:22px">Checklist da Mídia</h2><span style="flex:1"></span>'+(isAdm() ? '<button class="btn ghost small" data-mk-pdf>PDF</button><button class="btn ghost small" data-mk-xls>Excel</button><button class="btn ghost small" data-mk-editar>✏️ Editar itens</button>' : '')+'</div>'
+  let h = '<div class="bar"><h2 style="font-size:22px">Checklist</h2><span style="flex:1"></span>'+(isAdm() ? '<button class="btn ghost small" data-mk-pdf>PDF</button><button class="btn ghost small" data-mk-xls>Excel</button><button class="btn ghost small" data-mk-editar>✏️ Editar itens</button>' : '')+'</div>'
     + '<div class="card"><label class="f" for="mkD" style="margin-top:0">Culto</label><input class="inp" type="date" id="mkD" value="'+esc(MK.data)+'">'
     + '<div class="chips" style="margin-top:10px">'+cultos().map(c => cultoInfo(c.id, MK.data)).map(c => '<button class="chip" aria-pressed="'+(c.id===MK.culto)+'" data-mk-culto="'+esc(c.id)+'">'+esc(c.nome)+(c.hora?' · '+esc(c.hora):'')+'</button>').join('')+'</div>'
     + '<div class="meta" style="margin-top:8px">'+esc(fmtDia(MK.data))+(MK.data === hoje() ? ' · <b>hoje</b>' : '')+'</div></div>';
@@ -1416,13 +1430,17 @@ function viewMidia(){
         ? 'Falta o seu check-in na entrada (lista de presença) do <b>'+esc(cultoInfo(MK.culto, MK.data).nome)+'</b> — libera sozinho assim que marcarem.'
         : 'Falta o seu check-in. Procure a equipe de Check-in — libera sozinho assim que marcarem.')+'</div>';
     else if (!st.admin && MK.liberadoAte > Date.now()) h += '<div class="notice mk-liberado">✅ Checklist liberado</div>';
-    if (!st.admin && !temMidia() && !(MK.itens || []).length) h += '<div class="notice">Seu cadastro ainda não tem o extra <b>Mídia</b>, por isso os itens não aparecem. Peça a um administrador para marcar em Ajustes → Pessoas e permissões.</div>'; }
+  }
   else if (st.admin) h += '<div class="notice">Administrador: você vê todos os checklists e pode marcar ou desmarcar qualquer item.</div>';
   else return h + '<div class="notice">Você não está escalado(a) neste culto.<div class="end" style="margin-top:8px"><button class="btn small" data-mk-hoje>Ir para o culto de hoje</button></div></div>';
   if (!MK.esc && isAdm()) h += '<div class="notice">A escala da Mídia deste culto ainda não foi montada.</div>';
   // Admin vê todas as funções; os demais, só a(s) função(ões) em que estão escalados neste culto. Sempre na ordem fixa.
-  mkChecklists().filter(c => isAdm() || meus.some(m => normNome(m) === normNome(c.nome))).forEach(c => { const fn = c.nome;
-    const itens = mkItensDe(fn), feitos = itens.filter(i => MK.marcas[i.id]).length, quem = mkFuncoesDe(MK.esc).filter(f => c.de.some(d => normNome(d) === normNome(f.nome))).flatMap(f => f.pessoas);
+  // Duas seções: 🎬 Mídia e 🧭 Staff (Gestão de culto e Checagem).
+  const visiveis = mkChecklists().filter(c => st.admin || isAdm() || meus.some(m => normNome(m) === normNome(c.nome)));
+  [['midia', '🎬 Mídia'], ['staff', '🧭 Staff']].forEach(([ar, titulo]) => { const l = visiveis.filter(c => c.area === ar); if (!l.length) return;
+  h += '<h2 class="section-title mk-sec">'+titulo+'</h2>';
+  l.forEach(c => { const fn = c.nome;
+    const itens = mkItensDe(fn, ar), feitos = itens.filter(i => MK.marcas[i.id]).length, quem = mkFuncoesDe(ar === 'staff' ? MK.escStaff : MK.esc, ar).filter(f => c.de.some(d => normNome(d) === normNome(f.nome))).flatMap(f => f.pessoas);
     const pode = mkPodeMarcar(fn), minha = meus.includes(fn);
     h += '<section class="card mk-fn'+(minha ? ' minha' : '')+'"><h3>'+esc(fn)+(minha ? ' <span class="tag">você</span>' : '')+'</h3><div class="meta">'+(quem.length ? esc(quem.join(', ')) : 'Ninguém escalado')+'</div>';
     if (!itens.length) { h += '<p class="empty" style="margin:10px 0 0;padding:12px">Checklist ainda não cadastrado.</p></section>'; return; }
@@ -1435,7 +1453,7 @@ function viewMidia(){
           + '<span class="mk-txt">'+esc(i.texto)+(m ? '<small>'+mkQuem(m)+'</small>' : '')+'</span></label>'+mkBtnConf(i, m); });
     });
     h += '</section>';
-  });
+  }); });
   return h;
 }
 // Item de porcentagem (ex.: bateria): escolhe ou digita 0–100% e salva; depois mostra 🔋 85%, travado (admin desfaz).
@@ -1502,14 +1520,14 @@ document.addEventListener('click', e => { const c = e.target.closest('[data-mk-c
 // Exportar o checklist do culto (admin): função, bloco, item, resultado (✔ ou a porcentagem), quem marcou e a hora.
 function mkLinhasExport(){
   const rows = [];
-  mkChecklists().forEach(c => { const its = mkItensDe(c.nome); its.forEach(i => { const m = MK.marcas[i.id]; let r = m ? (i.tipo === 'percentual' ? m.valor+'%' : 'OK') : '';
+  mkChecklists().forEach(c => { const its = mkItensDe(c.nome, c.area); its.forEach(i => { const m = MK.marcas[i.id]; let r = m ? (i.tipo === 'percentual' ? m.valor+'%' : 'OK') : '';
     if (m && i.tipo === 'percentual' && /devolv/i.test(i.texto)) { const ret = its.find(x => x.tipo === 'percentual' && x.bloco === i.bloco && /retir/i.test(x.texto)), mr = ret && MK.marcas[ret.id]; if (mr && m.valor < mr.valor) r += ' (gastou '+(mr.valor - m.valor)+'%)'; }
-    rows.push([c.nome, i.bloco, i.texto, r, m ? (m.por_nome || '') + (m.confirmado_nome ? ' + '+m.confirmado_nome+' ('+horaSP(m.confirmado_em)+')' : '') : '', m ? horaSP(m.em) : '']); }); });
+    rows.push([(c.area === 'staff' ? 'Staff · ' : 'Mídia · ') + c.nome, i.bloco, i.texto, r, m ? (m.por_nome || '') + (m.confirmado_nome ? ' + '+m.confirmado_nome+' ('+horaSP(m.confirmado_em)+')' : '') : '', m ? horaSP(m.em) : '']); }); });
   return rows;
 }
 window.mkLinhasExport = mkLinhasExport; // usado pelos testes
 async function mkExportar(tipo, btn){
-  if (!isAdm()) return; const rows = mkLinhasExport(), ci = cultoInfo(MK.culto, MK.data), titulo = 'Checklist da Mídia · '+tituloDia(MK.data)+' · '+ci.titulo;
+  if (!isAdm()) return; const rows = mkLinhasExport(), ci = cultoInfo(MK.culto, MK.data), titulo = 'Checklist · '+tituloDia(MK.data)+' · '+ci.titulo;
   const HEAD = ['Função','Bloco','Item','Resultado','Marcado por','Hora'], arq = 'checklist-midia-'+MK.data+'-'+MK.culto, txt = btn.textContent; btn.textContent = '…'; btn.disabled = true;
   try {
     if (tipo === 'pdf') { await carregar(JSPDF); await carregar(AUTOTABLE);
@@ -1526,9 +1544,10 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-mk-p
 // Administrador: adicionar, editar, reordenar e remover itens.
 function viewMidiaEditar(){
   if (!MK.itens) { mkCarregarItens().then(render); return '<div class="empty">Carregando…</div>'; }
-  const fn = MK.fnEd, itens = (MK.itens||[]).filter(i => i.funcao === fn && i.ativo).sort(mkOrdena), blocos = mkBlocos(itens);
+  const fn = MK.fnEd, ar = MK.areaEd || 'midia', itens = (MK.itens||[]).filter(i => i.funcao === fn && mkArea(i) === ar && i.ativo).sort(mkOrdena), blocos = mkBlocos(itens);
   let h = '<button class="btn ghost small" data-mk-voltar>‹ Voltar ao checklist</button><h2 style="font-size:22px;margin-top:12px">Editar itens do checklist</h2>'
-    + '<div class="chips" style="flex-wrap:wrap">'+mkChecklists().map(c => c.nome).map(f => '<button class="chip" aria-pressed="'+(f===fn)+'" data-mk-fn="'+esc(f)+'">'+esc(f)+'</button>').join('')+'</div>';
+    + [['midia', '🎬 Mídia'], ['staff', '🧭 Staff']].map(([a2, t]) => '<div class="meta" style="margin:10px 0 4px">'+t+'</div><div class="chips" style="flex-wrap:wrap">'
+      + mkChecklists().filter(c => c.area === a2).map(c => '<button class="chip" aria-pressed="'+(c.nome === fn && a2 === ar)+'" data-mk-fn="'+esc(a2+'|'+c.nome)+'">'+esc(c.nome)+'</button>').join('')+'</div>').join('');
   if (!itens.length) h += '<div class="empty">'+esc(fn)+': nenhum item ainda.</div>';
   blocos.forEach(b => { h += '<section class="card"><h3>'+esc(b.nome)+'</h3>' + b.itens.map(i => { const k = itens.indexOf(i);
     // Orações inicial/final ficam presas no começo e no fim: não sobem nem descem, e ninguém passa por elas.
@@ -1547,8 +1566,8 @@ async function mkSalvarItem(id, dados, resumo){
   await logar(id ? 'editou' : 'criou', 'checklist', resumo, null, null); await mkCarregarItens(); render(); return true;
 }
 document.addEventListener('click', async e => { if (!isAdm()) return; const b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.mkFn) { MK.fnEd = b.dataset.mkFn; render(); return; }
-  const lista = () => (MK.itens||[]).filter(i => i.funcao === MK.fnEd && i.ativo).sort(mkOrdena);
+  if (b.dataset.mkFn) { const [a2, f2] = b.dataset.mkFn.includes('|') ? b.dataset.mkFn.split('|') : ['midia', b.dataset.mkFn]; MK.fnEd = f2; MK.areaEd = a2; render(); return; }
+  const lista = () => (MK.itens||[]).filter(i => i.funcao === MK.fnEd && mkArea(i) === (MK.areaEd || 'midia') && i.ativo).sort(mkOrdena);
   const mover = async (id, dir) => { const l = lista(), k = l.findIndex(i => i.id === id), o = l[k + dir]; if (!o) return; const a = l[k]; if (mkFixa(a) || mkFixa(o)) return;
     // Troca de lugar com o vizinho; se mudar de bloco, o item passa para o bloco do vizinho.
     const r1 = await sb.from('checklist_itens').update({ordem:o.ordem, bloco:o.bloco}).eq('id', a.id), r2 = await sb.from('checklist_itens').update({ordem:a.ordem}).eq('id', o.id);
@@ -1565,10 +1584,10 @@ document.addEventListener('click', async e => { if (!isAdm()) return; const b = 
 });
 document.addEventListener('submit', async e => { if (e.target.id !== 'mkNovo' || !isAdm()) return; e.preventDefault();
   const fd = new FormData(e.target), bloco = String(fd.get('bloco')).trim(), texto = String(fd.get('texto')).trim(); if (!bloco || !texto) return;
-  const l = (MK.itens||[]).filter(i => i.funcao === MK.fnEd && i.ativo).sort(mkOrdena), doBloco = l.filter(i => i.bloco === bloco);
+  const l = (MK.itens||[]).filter(i => i.funcao === MK.fnEd && mkArea(i) === (MK.areaEd || 'midia') && i.ativo).sort(mkOrdena), doBloco = l.filter(i => i.bloco === bloco);
   let ordem; if (doBloco.length) { const ult = doBloco[doBloco.length-1], prox = l[l.indexOf(ult)+1]; ordem = prox ? (Number(ult.ordem) + Number(prox.ordem)) / 2 : Number(ult.ordem) + 10; }
   else { const fim = l.find(i => mkFixa(i) === 1), meio = l.filter(i => !mkFixa(i)), base = meio.length ? Number(meio[meio.length-1].ordem) : (l.find(i => mkFixa(i) === -1) || {ordem:0}).ordem; ordem = fim && Number(base) + 10 >= Number(fim.ordem) ? (Number(base) + Number(fim.ordem)) / 2 : Number(base) + 10; }
-  if (await mkSalvarItem(null, {funcao:MK.fnEd, bloco, texto, ordem, tipo: fd.get('tipo') === 'percentual' ? 'percentual' : 'check'}, 'Checklist da Mídia · '+MK.fnEd+': adicionou "'+texto+'"')) toast('Item adicionado.');
+  if (await mkSalvarItem(null, {funcao:MK.fnEd, area:MK.areaEd || 'midia', bloco, texto, ordem, tipo: fd.get('tipo') === 'percentual' ? 'percentual' : 'check'}, 'Checklist '+((MK.areaEd || 'midia') === 'staff' ? 'da Staff' : 'da Mídia')+' · '+MK.fnEd+': adicionou "'+texto+'"')) toast('Item adicionado.');
 });
 
 /* Ajustes (admin): itens do check-in, estoque e itens padrão por área/função. */
@@ -1700,9 +1719,9 @@ function viewPresenca(){
     + '<p class="meta" style="margin:0 0 8px">Participantes · '+esc(periodoTxt(g.dias))+' · '+ps.length+' pessoa'+(ps.length === 1 ? '' : 's')
     + (isAdm() ? '' : '<br><small>A presença é marcada no dia. Depois de marcada, só um administrador desmarca.</small>')+'</p>' + prContador(g, ps) + add;
   if (!ps.length) return h + '<div class="empty">Ninguém na lista ainda. Toque em <b>+ Adicionar pessoa</b>.</div>';
-  if (ps.length > 8) h += '<input class="inp" id="prBusca" type="search" placeholder="🔍 Buscar nome…" autocomplete="off" value="'+esc(PR.busca)+'" style="margin:0 0 10px">';
+  h += buscaCampo('prBusca', PR.busca); buscaDepois('prBusca');
   h += '<div class="card tbl-wrap pres-wrap"><table class="pres"><thead><tr><th>Nome</th>'+g.dias.map(d => '<th data-pres-dia="'+d+'" class="'+(d === prDia(g) ? 'pres-sel' : '')+'" title="Ver os números deste dia">'+esc(dataBR(d).slice(0,5))+'<small>'+esc(diaSem(d))+'</small><small class="pres-tot">'+tot(d)+'</small></th>').join('')+'</tr></thead><tbody>'
-    + ps.map(p => '<tr data-pres-linha="'+esc(normNome(p.nome))+'"'+(PR.busca && !normNome(p.nome).includes(normNome(PR.busca)) ? ' hidden' : '')+'><th><button type="button" class="pres-nome" data-pres-edit="'+esc(p.id)+'">'+esc(p.nome)+'</button>'+(Object.values(p.dias).some(m => m && m.por === PR_QR) ? ' <span class="tag pres-qr" title="Check-in feito pelo QR Code">QR</span>' : '')+'</th>'
+    + ps.map(p => '<tr data-busca-de="prBusca" data-busca="'+esc(normNome(p.nome))+'"><th><button type="button" class="pres-nome" data-pres-edit="'+esc(p.id)+'">'+esc(p.nome)+'</button>'+(Object.values(p.dias).some(m => m && m.por === PR_QR) ? ' <span class="tag pres-qr" title="Check-in feito pelo QR Code">QR</span>' : '')+'</th>'
       + g.dias.map(d => { const m = p.dias[d], trava = m ? !isAdm() : (!isAdm() && d !== hoje());
           return '<td><label class="ckbox pres-cx'+(d === hoje() ? ' hoje' : '')+(trava ? ' trava' : '')+'"'+(prQuem(m) ? ' title="'+esc(prQuem(m))+'"' : '')+'><input type="checkbox" data-pres="'+esc(p.id)+'|'+d+'"'+(m ? ' checked' : '')+(trava ? ' disabled' : '')+' aria-label="'+esc(p.nome+' · '+dataBR(d).slice(0,5))+'"><span></span></label>'
             + (m && m.em ? '<small class="pres-h">'+esc(horaSP(m.em))+'</small>' : '') + '</td>'; }).join('')+'</tr>').join('')
@@ -1711,6 +1730,7 @@ function viewPresenca(){
 }
 const prErro = e => /duplicate|23505|unique/i.test((e && (e.code||'')+' '+(e.message||'')) || '') ? 'Esse nome já está na lista.' : null;
 async function prMarcar(id, d, marcar){
+  if (marcar && PR.busca) { PR.busca = ''; buscaFocar = 'prBusca'; } // marcou: limpa a busca e volta ao campo para o próximo
   try { const r = marcar ? await sb.from('evento_presencas').insert({participante:id, dia:d})
       : await sb.from('evento_presencas').delete().eq('participante', id).eq('dia', d).select('participante');
     if (r.error) throw r.error; if (!marcar && !(r.data||[]).length) throw new Error('Só um administrador pode desmarcar.');
@@ -1759,8 +1779,6 @@ document.addEventListener('change', e => { const t = e.target; if (!t.dataset ||
   if (!t.checked && !isAdm()) { t.checked = true; toast('Check-in já feito não pode ser desmarcado. Fale com um administrador.'); return; }
   prMarcar(id, d, t.checked);
 });
-document.addEventListener('input', e => { if (e.target.id !== 'prBusca') return; PR.busca = e.target.value; const q = normNome(PR.busca);
-  document.querySelectorAll('[data-pres-linha]').forEach(tr => tr.hidden = !!q && !tr.dataset.presLinha.includes(q)); });
 async function prExportar(tipo, btn){
   const g = listasPresenca().find(x => x.id === PR.lista); if (!g || !podeExportar()) return; const ps = prPessoas();
   const HEAD = ['Nome', ...g.dias.map(d => dataBR(d).slice(0,5)+' ('+diaSem(d)+')'), 'Total'];
@@ -1782,6 +1800,35 @@ async function prExportar(tipo, btn){
       await baixar(arq+'.xlsx', await wb.xlsx.writeBuffer()); }
   } catch(e){ console.warn(e); toast('Não foi possível gerar o arquivo agora.'); } finally { btn.textContent = txt; btn.disabled = false; }
 }
+/* ---------- BUSCA (Check-in do culto e Participantes) ---------- */
+// Campo fixo no topo: filtra na hora (sem acento, sem diferenciar maiúsculas) por nome escalado, nome do cadastro,
+// apelido e área/função. Sobrou 1: rola até ele e destaca. Ao marcar o check-in, limpa e volta o foco ao campo.
+const buscaCampo = (id, valor) => '<div class="busca-fixa"><input class="inp" id="'+id+'" type="search" placeholder="🔍 Buscar nome…" autocomplete="off" enterkeyhint="search" value="'+esc(valor||'')+'">'
+  + '<button type="button" class="busca-x" data-busca-limpar="'+id+'" aria-label="Limpar busca"'+(valor ? '' : ' hidden')+'>✕</button></div>'
+  + '<p class="empty busca-vazia" data-busca-vazia="'+id+'" hidden>Nenhum nome encontrado</p>';
+function filtrarBusca(id, rolar){
+  const inp = document.getElementById(id); if (!inp) return; const q = normNome(inp.value).split(' ').filter(Boolean), vis = [];
+  document.querySelectorAll('[data-busca-de="'+id+'"]').forEach(el => { const ok = !q.length || q.every(w => (el.dataset.busca || '').includes(w)); el.hidden = !ok; el.classList.remove('busca-achado'); if (ok) vis.push(el); });
+  document.querySelectorAll('[data-busca-grupo="'+id+'"]').forEach(g => { g.hidden = !!q.length && !g.querySelector('[data-busca-de="'+id+'"]:not([hidden])'); });
+  const vz = document.querySelector('[data-busca-vazia="'+id+'"]'); if (vz) vz.hidden = !q.length || vis.length > 0;
+  const bx = document.querySelector('[data-busca-limpar="'+id+'"]'); if (bx) bx.hidden = !inp.value;
+  if (q.length && vis.length === 1) { vis[0].classList.add('busca-achado'); if (rolar) vis[0].scrollIntoView({block:'center', behavior:'smooth'}); }
+}
+const BUSCA = { ckBusca: {get:() => S.ckBusca || '', set:v => { S.ckBusca = v; }}, prBusca: {get:() => PR.busca || '', set:v => { PR.busca = v; }} };
+let buscaFocar = null, buscaFocarAte = 0;
+// Depois de desenhar a tela: aplica o filtro guardado e mantém o foco no campo (se estava nele, ou logo depois de marcar o check-in).
+function buscaDepois(id){
+  const ae = document.activeElement, estava = ae && ae.id === id, pos = estava ? ae.selectionStart : null;
+  if (buscaFocar === id) { buscaFocar = null; buscaFocarAte = Date.now() + 2500; }
+  queueMicrotask(() => { filtrarBusca(id, false); const i = document.getElementById(id); if (!i) return;
+    if (estava || Date.now() < buscaFocarAte) { i.focus(); if (pos != null) try { i.setSelectionRange(pos, pos); } catch(e){} } });
+}
+document.addEventListener('input', e => { const b = BUSCA[e.target.id]; if (!b) return; b.set(e.target.value); filtrarBusca(e.target.id, true); });
+document.addEventListener('click', e => { const x = e.target.closest('[data-busca-limpar]'); if (!x) return; const id = x.dataset.buscaLimpar, i = document.getElementById(id);
+  if (BUSCA[id]) BUSCA[id].set(''); if (i) { i.value = ''; filtrarBusca(id, false); i.focus(); } });
+// Texto de busca de uma linha do check-in: nome escalado + nome e apelido do cadastro + área + função.
+function ckChaveBusca(nome, area, fn){ const p = nome ? Object.values(S.pessoas || {}).find(q => midiaNomeBate(nome, q)) : null;
+  return normNome([nome, p && p.nome, p && p.apelido, area, fn].filter(Boolean).join(' ')); }
 function viewCheckin(){
   if (!veCheckin()) return '<div class="empty">Só administradores, a Gestão, a Organização e quem está escalado no Check-in ou na Gestão de culto acessam esta aba.</div>';
   if (PR.lista) return viewPresenca();
@@ -1800,15 +1847,17 @@ function viewCheckin(){
   b.grupos.forEach(g => g.rows.forEach(r => { const m = M[r.k]||{}; if (r.nome || m.nome) tot++; if (m.ci) ci++; }));
   const pend = [...b.grupos.flatMap(g => g.rows.map(r => ({nome:r.nome || (M[r.k]||{}).nome || r.fn, m:M[r.k]}))), ...avs.map(m => ({nome:m.nome || 'Avulso', m}))]
     .flatMap(x => ckFalta(x.m).map(f => ({...f, quem:x.nome})));
+  h += buscaCampo('ckBusca', S.ckBusca); buscaDepois('ckBusca');
   h += '<div class="ckres"><span><b>'+ci+'</b>/'+tot+' check-in</span><span><b>'+pend.length+'</b> '+(pend.length === 1 ? 'item pendente' : 'itens pendentes')+'</span></div>';
   // Estoque: itens com quantidade total; "em uso" soma o que saiu e ainda não voltou no dia (os dois cultos).
   (S.ckItens||[]).filter(i => i.estoque != null).forEach(i => { const uso = (S.ckDia||[]).reduce((s, m) => s + ((m.itens||[]).filter(x => normNome(x.nome) === normNome(i.nome)).reduce((t, x) => t + Math.max(0, (x.ret||0) - (x.dev||0)), 0)), 0);
     h += '<div class="ck-estoque'+(uso > i.estoque ? ' passou' : '')+'">'+esc(ckPlural(i.nome))+': <b>'+uso+'</b> de '+i.estoque+' em uso'+(uso > i.estoque ? ' · ⚠️ passou do total!' : '')+'</div>'; });
   if (pend.length) h += '<div class="card ck-pendentes"><h3>Ainda não devolvido</h3>'+pend.map(p => '<div>'+esc(p.nome)+' ×'+p.qtd+' — <b>'+esc(p.quem)+'</b></div>').join('')+'</div>';
   b.grupos.forEach(g => {
-    h += '<div class="card ckg"><h3>'+esc(g.area)+(g.conexao?' <small class="meta">· '+esc(g.conexao)+'</small>':'')+'</h3>' + g.rows.map(r => ckLinha(r.k, r.nome, r.fn, M[r.k], g.id)).join('') + '</div>';
+    h += '<div class="card ckg" data-busca-grupo="ckBusca"><h3>'+esc(g.area)+(g.conexao?' <small class="meta">· '+esc(g.conexao)+'</small>':'')+'</h3>'
+      + g.rows.map(r => '<div data-busca-de="ckBusca" data-busca="'+esc(ckChaveBusca(r.nome || (M[r.k]||{}).nome, g.area, r.fn))+'">'+ckLinha(r.k, r.nome, r.fn, M[r.k], g.id)+'</div>').join('') + '</div>';
   });
-  if (avs.length) h += '<div class="card ckg"><h3>Pessoas avulsas</h3>' + avs.map(m => ckLinha(m.chave, m.nome, 'Avulso', m)).join('') + '</div>';
+  if (avs.length) h += '<div class="card ckg" data-busca-grupo="ckBusca"><h3>Pessoas avulsas</h3>' + avs.map(m => '<div data-busca-de="ckBusca" data-busca="'+esc(ckChaveBusca(m.nome, 'avulso', ''))+'">'+ckLinha(m.chave, m.nome, 'Avulso', m)+'</div>').join('') + '</div>';
   h += '<div class="bar" style="margin-top:6px"><button class="btn ghost" data-ck-pessoa>+ pessoa (fora da escala)</button>'
     + (temGestao() ? '<button class="btn ghost small" data-ck-pdf="'+esc(S.ckD)+'|'+esc(S.ckC)+'">Baixar ficha em PDF</button>' : '') + '</div>';
   return h;
@@ -1834,6 +1883,7 @@ document.addEventListener('change', e => {
   if (t.dataset && t.dataset.ckk && t.dataset.campo === 'ci') { const k = t.dataset.ckk, ant = (S.ckMarks||{})[k] || {}, meta = ckMeta(k);
     // Ao fazer o check-in, os itens padrão da função já vêm como retirados (dá para tirar no ✕).
     const itens = t.checked && !(ant.itens||[]).some(i => i.ret > 0) ? ckItensVistos(ant, meta.areaId, meta.funcao).map(({salvo, ...i}) => ({...i, ret:i.ret || i.qtd})) : undefined;
+    if (t.checked && S.ckBusca) { S.ckBusca = ''; buscaFocar = 'ckBusca'; } // marcou: limpa a busca e volta ao campo para o próximo
     ckGravar(k, itens ? {ci:t.checked, itens} : {ci:t.checked}); return; }
   if (t.dataset && (t.dataset.ckEnt || t.dataset.ckDevol)) { const v = t.dataset.ckEnt || t.dataset.ckDevol, p = v.split('|'), k = p[0], nome = p.slice(1).join('|'), meta = ckMeta(k), m = (S.ckMarks||{})[k] || {};
     // Grava a lista vista (padrão + extras); "Entregue" entrega a quantidade toda, "Devolvido" marca tudo de volta.
