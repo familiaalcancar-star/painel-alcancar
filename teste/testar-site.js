@@ -1032,10 +1032,10 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   console.log('Participantes pelo detalhe do evento, sorteio liga/desliga e cadastros em Ajustes');
   {
     // Admin abre a lista de participantes pelo detalhe do evento (Avisos/Agenda), em qualquer data.
-    p = await abrirEv('admin'); await p.goto('http://localhost:8123/#avisos'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(600);
-    await p.evaluate(() => abrirItem('ev', 'ev-teste-desperta')); await p.waitForSelector('#dlg[open] [data-pres-ev]');
+    p = await abrirEv('admin'); await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(600);
+    await p.click('[data-abrir="ev|ev-teste-desperta"] >> nth=0'); await p.waitForSelector('#dlg[open] [data-pres-ev]');
     await p.click('[data-pres-ev]'); await p.waitForTimeout(600);
-    conferir(await p.evaluate(() => S.tab === 'checkin') && (await p.textContent('#view')).includes('Participantes ·') && (await p.textContent('#view')).includes('Desperta'), 'admin abre os Participantes pelo detalhe do evento');
+    conferir(await p.evaluate(() => location.hash === '#checkin') && (await p.textContent('#view')).includes('Participantes ·') && (await p.textContent('#view')).includes('Desperta'), 'admin abre os Participantes pelo detalhe do evento');
     // Sorteio: desligar em Ajustes
     await p.click('[data-pres-voltar]'); await p.waitForTimeout(300); await p.fill('#ckD', diasEv[0]); await p.dispatchEvent('#ckD', 'change'); await p.waitForTimeout(400);
     conferir(!!(await p.$('.pres-card a[href^="sorteio/"]')), 'sorteio ligado: botão 🎲 Sorteio aparece');
