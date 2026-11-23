@@ -101,6 +101,10 @@ const semAcento = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').tri
 const podeLouvor = () => { const p = pessoaDe(S.uid); return ehEquipe(p) && LOUVOR_CON.includes(semAcento(conexaoNome(p.conexao))); };
 const temGestao = () => isAdm() || !!(pessoaDe(S.uid)||{}).gestao;
 const temMidia = () => isAdm() || !!(pessoaDe(S.uid)||{}).midia;
+// Checklist: admin, extra Mídia ou quem está escalado(a) na Mídia de hoje até daqui a 7 dias.
+const escaladoMidiaProx = () => { const p = aprovado(S.uid) && S.pessoas[S.uid]; if (!p) return false; const fim = somaDias(hoje(), 7);
+  return (S.prox || []).some(x => x.area === 'midia' && x.data >= hoje() && x.data <= fim && (x.funcoes || []).some(f => (f.pessoas || []).some(n => midiaNomeBate(n, p)))); };
+const veChecklist = () => temMidia() || escaladoMidiaProx();
 // Extra Desperta: só a lista de presença (aba Check-in), sem o check-in dos voluntários.
 const temDesperta = () => isAdm() || !!(pessoaDe(S.uid)||{}).desperta;
 // Extra Sorteador: conduz o sorteio (abre o controle pela aba Check-in).
@@ -211,11 +215,11 @@ async function carregarPrivado(){ await Promise.all([carregarPessoas(), carregar
 // Tempo real: quando algo muda no banco, recarrega só aquela parte.
 const RECARGA = {
   config: () => carregarConfig(), pessoas: async () => { await carregarPessoas(); fecharChat(); if ($('#dlg').open) $('#dlg').close(); }, cadastros: () => carregarPessoas(),
-  escalas: () => Promise.all([carregarProx(), carregarMes(), S.ckD ? ckCarregarDocs() : null, MK.data ? mkCarregarEscala() : null]),
-  avisos: () => carregarAvisos(), eventos: () => carregarEventos(), checkin_itens: () => ckCarregarItens(), checkin_marcas: () => Promise.all([S.ckD ? ckCarregarMarcas() : null, MK.data && !MK.fezCheckin ? mkCarregarCheckin() : null]),
+  escalas: () => Promise.all([carregarProx(), carregarMes(), S.ckD ? ckCarregarDocs() : null, MK.data ? mkCarregarEscala() : null, MK.data ? mkCarregarStatus() : null]),
+  avisos: () => carregarAvisos(), eventos: () => carregarEventos(), checkin_itens: () => ckCarregarItens(), checkin_marcas: () => Promise.all([S.ckD ? ckCarregarMarcas() : null, MK.data ? mkCarregarStatus() : null]),
   checklist_marcas: () => MK.data ? mkCarregarMarcas() : null, checklist_itens: () => MK.itens ? mkCarregarItens() : null,
   evento_participantes: () => PR.lista ? prCarregar() : null,
-  evento_presencas: () => Promise.all([PR.lista ? prCarregar() : null, MK.data && !MK.fezCheckin ? mkCarregarCheckin() : null]),
+  evento_presencas: () => Promise.all([PR.lista ? prCarregar() : null, MK.data ? mkCarregarStatus() : null]),
   chat: () => carregarChat().then(chatAtualizado) };
 const pendRecarga = {};
 function agendarRecarga(tabela){
@@ -497,7 +501,7 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-go-e
   S.tab = 'escala'; S.det = {data:d, culto:c, area:a}; history.replaceState(null, '', '#escala'); renderTabs(); render(); window.scrollTo(0,0); }, true);
 /* ---------- navegação ---------- */
 function renderTabs(){
-  $('#tabs').innerHTML = TABS.filter(t=>!t.hidden && (!t.owner || isAdm()) && (!t.gestao || veCheckin()) && (!t.midia || temMidia()) && (!t.eu || veEquipes())).map(t =>
+  $('#tabs').innerHTML = TABS.filter(t=>!t.hidden && (!t.owner || isAdm()) && (!t.gestao || veCheckin()) && (!t.midia || veChecklist()) && (!t.eu || veEquipes())).map(t =>
     '<button data-tab="'+t.id+'"'+(S.tab===t.id?' aria-current="page"':'')+'><span class="ic" aria-hidden="true">'+t.ic+'</span>'+t.label+(t.id==='ajustes' && isAdm() && pendentes().length ? '<span class="badge">'+pendentes().length+'</span>' : '')+(t.id==='minha' && minhaSemana() ? '<span class="badge">'+minhaSemana()+'</span>' : '')+'</button>').join('');
 }
 $('#tabs').addEventListener('click', e => { const b=e.target.closest('button[data-tab]'); if(!b) return; S.tab=b.dataset.tab; S.det=null; history.replaceState(null,'','#'+S.tab); renderTabs(); render(); window.scrollTo(0,0); });
@@ -511,7 +515,7 @@ function render(){
   const v = $('#view');
   if (!S.cfgLoaded) { v.innerHTML='<div class="empty">Carregando o painel…</div>'; return; }
   const t = TABS.find(x => x.id === S.tab);
-  if (!t || (t.owner && !isAdm()) || (t.gestao && !veCheckin()) || (t.midia && !temMidia()) || (t.eu && !veEquipes())) S.tab = 'inicio';
+  if (!t || (t.owner && !isAdm()) || (t.gestao && !veCheckin()) || (t.midia && !veChecklist()) || (t.eu && !veEquipes())) S.tab = 'inicio';
   if (!S.cfg && S.tab!=='ajustes') { v.innerHTML = isAdm() ? '<div class="empty">O painel ainda não está configurado.<br><br><button class="btn" data-go="ajustes">Configurar agora</button></div>' : '<div class="empty">Não foi possível carregar o painel agora. Confira a internet e tente de novo.</div>'; return; }
   const fns = {inicio:viewInicio, escala:viewEscala, checkin:viewCheckin, midia:viewMidia, minha:viewMinha, avisos:viewAvisos, historico:viewHistorico, ajustes:viewAjustes, ajuda:viewAjuda};
   v.innerHTML = bannerCadastro() + fns[S.tab]();
@@ -1350,21 +1354,34 @@ function mkChecklists(){ const l = [];
   (MK.itens || []).forEach(i => { if (i.ativo && i.funcao && !l.some(c => normNome(c.nome) === normNome(i.funcao))) l.push({nome:i.funcao, de:[i.funcao]}); });
   return l; }
 const mkChecklistDe = fnEscala => (mkChecklists().find(c => c.de.some(d => normNome(d) === normNome(fnEscala))) || {}).nome;
-const MK = { data:null, culto:null, chave:null, ok:false, itens:null, marcas:{}, esc:null, editar:false, fnEd:'Projeção' };
+const MK = { data:null, culto:null, chave:null, ok:false, itens:null, marcas:{}, esc:null, editar:false, fnEd:'Projeção', st:null, manual:false, liberadoAte:0 };
 const horaSP = iso => new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo'});
 // Mesma regra do banco (midia_nome_bate): apelido igual, nome completo igual, ou nome e sobrenome dentro do nome completo.
 const midiaNomeBate = (n, p) => { const e = normNome(n); if (!e || !p) return false; return (normNome(p.apelido) && e === normNome(p.apelido)) || e === normNome(p.nome) || nomeBate(n, p); };
 const mkFuncoesDe = esc => { const fs = (esc && esc.funcoes) || [], cfgL = mkFuncoesCfg();
   return [...cfgL, ...fs.map(f => f.nome).filter(n => n && !cfgL.some(c => normNome(c) === normNome(n)))].map(nome => ({nome, pessoas: (fs.find(f => normNome(f.nome) === normNome(nome))||{}).pessoas || []})); };
-const mkMinhas = () => { const p = pessoaDe(S.uid); if (!p || !(p.midia || isAdm())) return []; return mkFuncoesDe(MK.esc).filter(f => f.pessoas.some(n => midiaNomeBate(n, p))).map(f => f.nome); };
-const mkMeusChecklists = () => [...new Set(mkMinhas().map(mkChecklistDe).filter(Boolean))];
-// Só marca depois de receber check-in naquele culto (fez_checkin no banco). Admin não precisa.
-const mkPodeMarcar = ck => isAdm() || (temMidia() && MK.data === hoje() && mkMeusChecklists().includes(ck) && MK.fezCheckin);
-async function mkCarregarCheckin(){ const d = MK.data, c = MK.culto; if (isAdm()) { MK.fezCheckin = true; return; }
-  const r = await sb.rpc('fez_checkin', {p_data:d, p_culto:c}); if (d === MK.data && c === MK.culto) MK.fezCheckin = !r.error && r.data === true; }
-// Enquanto falta o check-in, confere a cada 10 s (o check-in é marcado por outra pessoa, em outro celular) e libera sozinho.
-setInterval(async () => { if (S.tab !== 'midia' || isAdm() || MK.fezCheckin || !MK.ok || MK.data !== hoje() || !mkMeusChecklists().length || document.visibilityState !== 'visible') return;
-  await mkCarregarCheckin(); if (MK.fezCheckin) { render(); toast('Check-in confirmado: checklist liberado!'); } }, 10000);
+// Fonte da verdade: checklist_meu_status(data, culto) no banco → {admin, funcoes, hoje, checkin, pode_marcar}.
+const mkMeusChecklists = () => (MK.st && Array.isArray(MK.st.funcoes) ? MK.st.funcoes : []);
+// Funções da escala (ex.: "Apoio 1") só para mostrar; quem decide o que pode marcar é o banco.
+const mkMinhas = () => { const p = S.pessoas[S.uid]; if (!p) return []; const meus = mkMeusChecklists();
+  return mkFuncoesDe(MK.esc).filter(f => f.pessoas.some(n => midiaNomeBate(n, p)) && meus.some(c => normNome(c) === normNome(mkChecklistDe(f.nome) || f.nome))).map(f => f.nome); };
+const mkPodeMarcar = ck => !!MK.st && (MK.st.admin || (MK.st.pode_marcar && mkMeusChecklists().some(c => normNome(c) === normNome(ck))));
+async function mkCarregarStatus(){
+  const d = MK.data, c = MK.culto; if (!d || !c || !S.uid) return;
+  const r = await sb.rpc('checklist_meu_status', {p_data:d, p_culto:c}); if (d !== MK.data || c !== MK.culto) return;
+  if (r.error || !r.data) { console.warn(r.error); return; }
+  const antes = MK.st; MK.st = r.data;
+  // Acabou de liberar (ou abriu já liberado): mostra "✅ Checklist liberado" por 3 s.
+  if (MK.st.pode_marcar && !MK.st.admin && mkMeusChecklists().length && !(antes && antes.pode_marcar)) { MK.liberadoAte = Date.now() + 3000; setTimeout(() => { if (S.tab === 'midia') render(); }, 3100); }
+}
+// Enquanto falta o check-in (e a pessoa tem função hoje), pergunta ao banco a cada 10 s; libera sozinho.
+setInterval(async () => { const st = MK.st;
+  if (S.tab !== 'midia' || !MK.ok || !st || st.admin || st.pode_marcar || !st.hoje || !mkMeusChecklists().length || document.visibilityState !== 'visible') return;
+  await mkCarregarStatus(); if (MK.st && MK.st.pode_marcar) render(); }, 10000);
+// 2) Culto certo: sem escolha manual, o checklist acompanha o próximo culto (manhã → noite depois do horário).
+function mkAuto(){ if (MK.manual || MK.editar) return false; const p = mkPadrao(); if (p.data === MK.data && p.culto === MK.culto) return false; MK.data = p.data; MK.culto = p.culto; return true; }
+setInterval(() => { if (S.tab === 'midia' && document.visibilityState === 'visible' && mkAuto()) render(); }, 60000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.tab === 'midia' && mkAuto()) render(); });
 function mkPadrao(){ return proximoCulto(); }
 async function mkCarregarItens(){ const r = await sb.from('checklist_itens').select('*').order('ordem'); if (r.error) { console.warn(r.error); MK.itens = MK.itens || []; return; } MK.itens = r.data || []; }
 async function mkCarregarMarcas(){ const d = MK.data, c = MK.culto; const r = await sb.from('checklist_marcas').select('*').eq('data', d).eq('culto', c);
@@ -1372,9 +1389,8 @@ async function mkCarregarMarcas(){ const d = MK.data, c = MK.culto; const r = aw
 async function mkCarregarEscala(){ const d = MK.data, c = MK.culto; const r = linhas(await sb.from('escalas').select('id,d').eq('data', d).eq('culto', c).eq('area', 'midia')); if (d === MK.data && c === MK.culto) MK.esc = r[0] || null; }
 function mkAbrir(){
   if (!MK.data) { const p = mkPadrao(); MK.data = p.data; MK.culto = p.culto; }
-  const chave = MK.data+'_'+MK.culto; if (MK.chave === chave) return; MK.chave = chave; MK.ok = false; MK.marcas = {}; MK.esc = null;
-  MK.fezCheckin = false;
-  Promise.all([MK.itens ? null : mkCarregarItens(), mkCarregarMarcas(), mkCarregarEscala(), mkCarregarCheckin()]).catch(e => console.warn(e)).finally(() => { MK.ok = true; if (S.tab === 'midia') render(); });
+  const chave = MK.data+'_'+MK.culto; if (MK.chave === chave) return; MK.chave = chave; MK.ok = false; MK.marcas = {}; MK.esc = null; MK.st = null;
+  Promise.all([MK.itens ? null : mkCarregarItens(), mkCarregarMarcas(), mkCarregarEscala(), mkCarregarStatus()]).catch(e => console.warn(e)).finally(() => { MK.ok = true; if (S.tab === 'midia') render(); });
 }
 // Itens a mostrar num culto: os ativos + os já removidos que tenham marcação nele (histórico).
 // "Oração inicial" sempre primeiro e "Oração final" sempre por último; o resto segue a ordem cadastrada.
@@ -1384,23 +1400,28 @@ const mkOrdena = (a, b) => mkFixa(a) - mkFixa(b) || a.ordem - b.ordem;
 const mkItensDe = fn => (MK.itens||[]).filter(i => normNome(i.funcao) === normNome(fn) && (i.ativo || MK.marcas[i.id])).sort(mkOrdena);
 const mkBlocos = itens => { const bs = []; itens.forEach(i => { let b = bs.find(x => x.nome === i.bloco); if (!b) bs.push(b = {nome:i.bloco, itens:[]}); b.itens.push(i); }); return bs; };
 function viewMidia(){
-  if (!temMidia()) return '<div class="empty">Só quem tem o cargo Mídia (e os administradores) vê esta aba.</div>';
+  if (!veChecklist()) return '<div class="empty">Esta aba aparece para quem está escalado(a) na Mídia (e para os administradores).</div>';
   if (MK.editar && isAdm()) return viewMidiaEditar();
-  mkAbrir();
+  mkAuto(); mkAbrir();
   let h = '<div class="bar"><h2 style="font-size:22px">Checklist da Mídia</h2><span style="flex:1"></span>'+(isAdm() ? '<button class="btn ghost small" data-mk-pdf>PDF</button><button class="btn ghost small" data-mk-xls>Excel</button><button class="btn ghost small" data-mk-editar>✏️ Editar itens</button>' : '')+'</div>'
     + '<div class="card"><label class="f" for="mkD" style="margin-top:0">Culto</label><input class="inp" type="date" id="mkD" value="'+esc(MK.data)+'">'
     + '<div class="chips" style="margin-top:10px">'+cultos().map(c => cultoInfo(c.id, MK.data)).map(c => '<button class="chip" aria-pressed="'+(c.id===MK.culto)+'" data-mk-culto="'+esc(c.id)+'">'+esc(c.nome)+(c.hora?' · '+esc(c.hora):'')+'</button>').join('')+'</div>'
     + '<div class="meta" style="margin-top:8px">'+esc(fmtDia(MK.data))+(MK.data === hoje() ? ' · <b>hoje</b>' : '')+'</div></div>';
   if (!MK.ok) return h + '<div class="empty">Carregando…</div>';
-  const minhas = mkMinhas();
-  if (minhas.length) { h += '<div class="mk-eu">Sua função neste culto: <b>'+minhas.map(esc).join(' e ')+'</b>'+(MK.data !== hoje() ? '<br><small>Você poderá marcar no dia do culto.</small>' : '')+'</div>';
-    if (!isAdm() && MK.data === hoje() && !MK.fezCheckin) h += '<div class="notice mk-sem-checkin">🔒 '+(cultoInfo(MK.culto, MK.data).especial ? 'Hoje é <b>'+esc(cultoInfo(MK.culto, MK.data).nome)+'</b>: faça seu check-in na entrada (lista de presença) para liberar o checklist.' : 'Faça seu check-in com a equipe de Check-in para liberar o checklist.')+'</div>'; }
-  else if (isAdm()) h += '<div class="notice">Administrador: você vê todos os checklists e pode marcar ou desmarcar qualquer item.</div>';
-  else return h + '<div class="notice">Você não está escalado(a) neste culto.</div>';
+  if (!MK.st) return h + '<div class="empty">Carregando…</div>';
+  const minhas = mkMinhas(), meus = mkMeusChecklists(), st = MK.st;
+  if (meus.length) { h += '<div class="mk-eu">Sua função neste culto: <b>'+(minhas.length ? minhas : meus).map(esc).join(' e ')+'</b></div>';
+    if (!st.hoje) h += '<div class="notice mk-aviso">Você poderá marcar no dia do culto.</div>';
+    else if (!st.pode_marcar && !st.admin) h += '<div class="notice mk-sem-checkin">🔒 '+(cultoInfo(MK.culto, MK.data).especial
+        ? 'Falta o seu check-in na entrada (lista de presença) do <b>'+esc(cultoInfo(MK.culto, MK.data).nome)+'</b> — libera sozinho assim que marcarem.'
+        : 'Falta o seu check-in. Procure a equipe de Check-in — libera sozinho assim que marcarem.')+'</div>';
+    else if (!st.admin && MK.liberadoAte > Date.now()) h += '<div class="notice mk-liberado">✅ Checklist liberado</div>';
+    if (!st.admin && !temMidia() && !(MK.itens || []).length) h += '<div class="notice">Seu cadastro ainda não tem o extra <b>Mídia</b>, por isso os itens não aparecem. Peça a um administrador para marcar em Ajustes → Pessoas e permissões.</div>'; }
+  else if (st.admin) h += '<div class="notice">Administrador: você vê todos os checklists e pode marcar ou desmarcar qualquer item.</div>';
+  else return h + '<div class="notice">Você não está escalado(a) neste culto.<div class="end" style="margin-top:8px"><button class="btn small" data-mk-hoje>Ir para o culto de hoje</button></div></div>';
   if (!MK.esc && isAdm()) h += '<div class="notice">A escala da Mídia deste culto ainda não foi montada.</div>';
   // Admin vê todas as funções; os demais, só a(s) função(ões) em que estão escalados neste culto. Sempre na ordem fixa.
-  const meus = mkMeusChecklists();
-  mkChecklists().filter(c => isAdm() || meus.includes(c.nome)).forEach(c => { const fn = c.nome;
+  mkChecklists().filter(c => isAdm() || meus.some(m => normNome(m) === normNome(c.nome))).forEach(c => { const fn = c.nome;
     const itens = mkItensDe(fn), feitos = itens.filter(i => MK.marcas[i.id]).length, quem = mkFuncoesDe(MK.esc).filter(f => c.de.some(d => normNome(d) === normNome(f.nome))).flatMap(f => f.pessoas);
     const pode = mkPodeMarcar(fn), minha = meus.includes(fn);
     h += '<section class="card mk-fn'+(minha ? ' minha' : '')+'"><h3>'+esc(fn)+(minha ? ' <span class="tag">você</span>' : '')+'</h3><div class="meta">'+(quem.length ? esc(quem.join(', ')) : 'Ninguém escalado')+'</div>';
@@ -1441,9 +1462,16 @@ function mkLinhaPct(i, m, pode, itens){
   return top + '<div class="mk-pct-rap">'+[100,80,60,40,20].map(v => '<button type="button" class="chip" data-mk-pct-rap="'+esc(i.id)+'|'+v+'">'+v+'%</button>').join('')+'</div>'
     + '<div class="mk-pct-in"><input class="inp" type="number" min="0" max="100" inputmode="numeric" placeholder="0–100" data-mk-pct="'+esc(i.id)+'"><span>%</span><button type="button" class="btn" data-mk-pct-salvar="'+esc(i.id)+'">Salvar</button></div></div>';
 }
+const mkMotivo = e => { const t = String((e && (e.code || '') + ' ' + (e.message || '')) || '');
+  if (/desmarcar/.test(t)) return e.message;
+  if (/row-level security|42501|permission/i.test(t)) return 'Não foi salvo: o banco só libera para quem está escalado(a) nesta função hoje e já fez o check-in.';
+  if (/duplicate|23505/i.test(t)) return 'Esse item já tinha sido marcado por outra pessoa.';
+  if (/porcentagem|valor/i.test(t)) return 'Informe a porcentagem (0 a 100).';
+  if (/fetch|network|Failed/i.test(t)) return 'Sem internet: o item não foi salvo. Tente de novo.';
+  return 'Não foi salvo: ' + (e && e.message ? e.message : 'tente de novo.'); };
 async function mkMarcar(id, marcar, valor){
   const i = (MK.itens||[]).find(x => x.id === id); if (!i) return;
-  if (!mkPodeMarcar(i.funcao)) { toast(MK.data === hoje() ? 'Você não está escalado(a) nesta função neste culto.' : 'Só dá para marcar no dia do culto.'); render(); return; }
+  if (!mkPodeMarcar(i.funcao)) { const st = MK.st || {}; toast(!st.hoje ? 'Só dá para marcar no dia do culto.' : !mkMeusChecklists().length ? 'Você não está escalado(a) nesta função neste culto.' : 'Falta o seu check-in: procure a equipe de Check-in.'); render(); return; }
   const ant = MK.marcas[id];
   if (!marcar && (!isAdm() || !await confirmar('Desmarcar este item?\n"'+i.texto+'"'))) { if (!isAdm()) toast('Só um administrador pode desmarcar.'); render(); return; }
   if (marcar) MK.marcas = {...MK.marcas, [id]: {item:id, valor:valor ?? null, por:S.uid, por_nome:nome(S.uid), em:new Date().toISOString()}};
@@ -1454,7 +1482,7 @@ async function mkMarcar(id, marcar, valor){
       : await sb.from('checklist_marcas').delete().eq('data', MK.data).eq('culto', MK.culto).eq('item', id).select('item');
     if (r.error) throw r.error;
     if (!marcar && !(r.data||[]).length) throw new Error('Só um administrador pode desmarcar.');
-  } catch(e){ console.warn(e); toast(/desmarcar/.test(e.message||'') ? e.message : 'Não foi possível salvar. Confira se você está escalado(a) neste culto.'); const m = {...MK.marcas}; if (ant) m[id] = ant; else delete m[id]; MK.marcas = m; }
+  } catch(e){ console.warn(e); toast(mkMotivo(e)); const m = {...MK.marcas}; if (ant) m[id] = ant; else delete m[id]; MK.marcas = m; render(); await mkCarregarStatus(); }
   await mkCarregarMarcas(); render();
 }
 document.addEventListener('click', e => { const b = e.target.closest('button'); if (!b || S.tab !== 'midia') return;
@@ -1465,8 +1493,9 @@ document.addEventListener('click', e => { const b = e.target.closest('button'); 
 });
 document.addEventListener('change', e => { const t = e.target;
   if (t.dataset && t.dataset.mk) { mkMarcar(t.dataset.mk, t.checked); return; }
-  if (t.id === 'mkD' && t.value) { MK.data = t.value; render(); } });
-document.addEventListener('click', e => { const c = e.target.closest('[data-mk-culto]'); if (c) { MK.culto = c.dataset.mkCulto; render(); }
+  if (t.id === 'mkD' && t.value) { MK.data = t.value; MK.manual = true; render(); } });
+document.addEventListener('click', e => { const c = e.target.closest('[data-mk-culto]'); if (c) { MK.culto = c.dataset.mkCulto; MK.manual = true; render(); }
+  if (e.target.closest('[data-mk-hoje]')) { MK.manual = false; mkAuto(); render(); window.scrollTo(0,0); }
   if (e.target.closest('[data-mk-editar]')) { MK.editar = true; render(); window.scrollTo(0,0); }
   if (e.target.closest('[data-mk-voltar]')) { MK.editar = false; render(); } });
 
