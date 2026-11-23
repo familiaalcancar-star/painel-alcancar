@@ -1697,14 +1697,16 @@ function ckLinha(k, nomeEsc, fn, m, areaId){
 const PR = { lista:null, linhas:{}, ok:false, busca:'' };
 const diaSem = d => new Date(d+'T12:00:00').toLocaleDateString('pt-BR', {weekday:'short'}).replace('.', '');
 const periodoTxt = ds => ds.length === 1 ? dataBR(ds[0]).slice(0,5) : dataBR(ds[0]).slice(0,5)+' a '+dataBR(ds[ds.length-1]).slice(0,5);
-const podeSortear = () => isAdm() || temGestao() || ehOrganizacao() || temSorteador();
-function listasPresenca(){
-  return (S.eventos || []).filter(e => e && e.checkinParticipantes)
-    .map(e => ({id:e.id, nome:e.titulo || 'Evento', dias:(Array.isArray(e.dias) && e.dias.length ? e.dias : [e.data]).filter(Boolean).slice().sort()}))
-    .filter(g => g.dias.length && g.dias[g.dias.length-1] >= somaDias(hoje(), -45)).sort((a, b) => a.dias[0].localeCompare(b.dias[0]));
-}
-function cardListasPresenca(){
-  const ls = listasPresenca(); if (!ls.length) return '';
+// Sorteio ligado/desligado em Ajustes (config geral: sorteioAtivo; padrão desligado).
+const sorteioAtivo = () => !!(S.cfg && S.cfg.sorteioAtivo === true);
+const podeSortear = () => sorteioAtivo() && (isAdm() || temGestao() || ehOrganizacao() || temSorteador());
+// Todos os eventos com check-in de participantes (dias: d.dias, ou data até dataFim, ou só data).
+const todasListasPresenca = () => (S.eventos || []).filter(e => e && e.checkinParticipantes)
+  .map(e => ({id:e.id, nome:e.titulo || 'Evento', dias:diasDoEvento(e).slice().sort()})).filter(g => g.dias.length).sort((a, b) => a.dias[0].localeCompare(b.dias[0]));
+const listasPresenca = () => todasListasPresenca().filter(g => g.dias[g.dias.length-1] >= somaDias(hoje(), -45));
+// Cartão "👥 Participantes" na aba Check-in: só os eventos que acontecem na data escolhida (fora dos dias, some).
+function cardListasPresenca(data){
+  const ls = todasListasPresenca().filter(g => g.dias.includes(data || hoje())); if (!ls.length) return '';
   return '<div class="card pres-card"><h3>👥 Participantes</h3><p class="meta" style="margin:4px 0 8px">Check-in de quem veio em cada dia do evento.</p>'
     + ls.map(g => (veParticipantes() ? '<button class="btn ghost pres-abre" data-pres-abrir="'+esc(g.id)+'">'+esc(g.nome)+' · '+esc(periodoTxt(g.dias))+' ›</button>' : '<p style="margin:8px 0 0"><b>'+esc(g.nome)+'</b> · '+esc(periodoTxt(g.dias))+'</p>')
       + (podeSortear() ? '<a class="btn pres-sorteio" href="sorteio/controle/?evento='+encodeURIComponent(g.id)+'">🎲 Sorteio</a>' : '')).join('')+'</div>';
@@ -1733,7 +1735,7 @@ setInterval(() => { if (PR.lista && S.tab === 'checkin' && document.visibilitySt
 const prQuem = m => m && m.em ? 'Marcado às '+horaSP(m.em)+(m.por ? ' por '+m.por : '') : '';
 const prPessoas = () => Object.values(PR.linhas).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
 function viewPresenca(){
-  const g = listasPresenca().find(x => x.id === PR.lista), volta = '<button class="btn ghost small" data-pres-voltar>‹ Voltar'+(ckEquipe() ? ' ao check-in' : '')+'</button>';
+  const g = todasListasPresenca().find(x => x.id === PR.lista), volta = '<button class="btn ghost small" data-pres-voltar>‹ Voltar'+(ckEquipe() ? ' ao check-in' : '')+'</button>';
   if (!g) return volta + '<div class="empty">Evento não encontrado.</div>';
   if (!PR.ok) return volta + '<h2 style="font-size:22px;margin-top:12px">'+esc(g.nome)+'</h2><div class="empty">Carregando…</div>';
   const ps = prPessoas(), tot = d => ps.filter(p => p.dias[d]).length, add = '<div class="bar pres-add"><button class="btn" data-pres-add>+ Adicionar pessoa</button></div>';
@@ -1762,7 +1764,7 @@ async function prMarcar(id, d, marcar){
   await prCarregar();
 }
 function prFormAdd(){
-  const g = listasPresenca().find(x => x.id === PR.lista); if (!g) return; const hojeNo = g.dias.includes(hoje());
+  const g = todasListasPresenca().find(x => x.id === PR.lista); if (!g) return; const hojeNo = g.dias.includes(hoje());
   abrir('<form><h2>Adicionar pessoa</h2><p class="meta" style="margin:0">'+esc(g.nome)+' · '+esc(periodoTxt(g.dias))+'</p>' + listaPessoasEscala()
     + '<label class="f" for="prN">Nome</label><input class="inp" id="prN" name="nome" list="dlPessoas" autocomplete="off" maxlength="120" required placeholder="Nome e sobrenome">'
     + (hojeNo ? '<label class="chip" style="margin-top:12px"><input type="checkbox" name="hoje" checked> Já fazer o check-in de hoje ('+esc(dataBR(hoje()).slice(0,5))+')</label>' : '')
@@ -1804,7 +1806,7 @@ document.addEventListener('change', e => { const t = e.target; if (!t.dataset ||
   prMarcar(id, d, t.checked);
 });
 async function prExportar(tipo, btn){
-  const g = listasPresenca().find(x => x.id === PR.lista); if (!g || !podeExportar()) return; const ps = prPessoas();
+  const g = todasListasPresenca().find(x => x.id === PR.lista); if (!g || !podeExportar()) return; const ps = prPessoas();
   const HEAD = ['Nome', ...g.dias.map(d => dataBR(d).slice(0,5)+' ('+diaSem(d)+')'), 'Total'];
   const rows = ps.map(p => [p.nome, ...g.dias.map(d => { const m = p.dias && p.dias[d]; return m ? (m.em ? horaSP(m.em) : 'X') : ''; }), String(g.dias.filter(d => p.dias && p.dias[d]).length)]);
   const tots = ['Total ('+ps.length+' pessoas)', ...g.dias.map(d => String(ps.filter(p => p.dias && p.dias[d]).length)), ''];
@@ -1827,7 +1829,7 @@ async function prExportar(tipo, btn){
 /* ---------- BUSCA (Check-in do culto e Participantes) ---------- */
 // Campo fixo no topo: filtra na hora (sem acento, sem diferenciar maiúsculas) por nome escalado, nome do cadastro,
 // apelido e área/função. Sobrou 1: rola até ele e destaca. Ao marcar o check-in, limpa e volta o foco ao campo.
-const buscaCampo = (id, valor) => '<div class="busca-fixa"><input class="inp" id="'+id+'" type="search" placeholder="🔍 Buscar nome…" autocomplete="off" enterkeyhint="search" value="'+esc(valor||'')+'">'
+const buscaCampo = (id, valor, ph) => '<div class="busca-fixa"><input class="inp" id="'+id+'" type="search" placeholder="'+(ph || '🔍 Buscar nome…')+'" autocomplete="off" enterkeyhint="search" value="'+esc(valor||'')+'">'
   + '<button type="button" class="busca-x" data-busca-limpar="'+id+'" aria-label="Limpar busca"'+(valor ? '' : ' hidden')+'>✕</button></div>'
   + '<p class="empty busca-vazia" data-busca-vazia="'+id+'" hidden>Nenhum nome encontrado</p>';
 function filtrarBusca(id, rolar){
@@ -1838,7 +1840,7 @@ function filtrarBusca(id, rolar){
   const bx = document.querySelector('[data-busca-limpar="'+id+'"]'); if (bx) bx.hidden = !inp.value;
   if (q.length && vis.length === 1) { vis[0].classList.add('busca-achado'); if (rolar) vis[0].scrollIntoView({block:'center', behavior:'smooth'}); }
 }
-const BUSCA = { ckBusca: {get:() => S.ckBusca || '', set:v => { S.ckBusca = v; }}, prBusca: {get:() => PR.busca || '', set:v => { PR.busca = v; }} };
+const BUSCA = { ckBusca: {get:() => S.ckBusca || '', set:v => { S.ckBusca = v; }}, prBusca: {get:() => PR.busca || '', set:v => { PR.busca = v; }}, pBusca: {get:() => S.pBusca || '', set:v => { S.pBusca = v; }} };
 let buscaFocar = null, buscaFocarAte = 0;
 // Depois de desenhar a tela: aplica o filtro guardado e mantém o foco no campo (se estava nele, ou logo depois de marcar o check-in).
 function buscaDepois(id){
@@ -1856,14 +1858,14 @@ function ckChaveBusca(nome, area, fn){ const p = nome ? Object.values(S.pessoas 
 function viewCheckin(){
   if (!veCheckin()) return '<div class="empty">Só administradores, a Gestão, a Organização e quem está escalado no Check-in ou na Gestão de culto acessam esta aba.</div>';
   if (PR.lista) return viewPresenca();
-  if (!ckEquipe()) { const c = cardListasPresenca(); return '<div class="bar"><h2 style="font-size:22px">Participantes</h2></div>'
+  if (!ckEquipe()) { const c = cardListasPresenca(hoje()); return '<div class="bar"><h2 style="font-size:22px">Participantes</h2></div>'
     + (c || '<div class="empty">Nenhum evento com check-in de participantes no momento.</div>'); }
   ckAbrir(); const fixo = ckEscalado();
   let h = '<div class="bar"><h2 style="font-size:22px">Check-in</h2></div>'
     + '<div class="card">'+(fixo ? '<div class="meta" style="margin:0">Você está escalado no check-in de</div><b class="ck-dia">'+esc(fmtDia(S.ckD))+'</b>'
       : '<label class="f" for="ckD" style="margin-top:0">Data do culto</label><input class="inp" type="date" id="ckD" value="'+esc(S.ckD)+'">')
     + '<div class="chips" style="margin-top:10px">'+cultos().map(c => cultoInfo(c.id, S.ckD)).map(c => '<button class="chip" aria-pressed="'+(c.id===S.ckC)+'" data-ck-culto="'+esc(c.id)+'">'+esc(c.nome)+(c.hora?' · '+esc(c.hora):'')+'</button>').join('')+'</div></div>';
-  h += cardListasPresenca();
+  h += cardListasPresenca(S.ckD);
   if (!S.ckOk) return h + '<div class="empty">Carregando…</div>';
   const b = blocosCheckin(S.ckD, S.ckC), M = S.ckMarks || {}, avs = ckAvulsos();
   if (!b.temDados && !avs.length) return h + '<div class="empty">Não há escala preenchida para este culto.</div>' + '<div class="bar"><button class="btn ghost" data-ck-pessoa>+ pessoa</button></div>';
@@ -2278,6 +2280,9 @@ const dLin = d => { const x = new Date(d+'T12:00:00'); return '<span class="ld">
 // Listas compactas (só o título); tocar abre o aviso ou o evento completo, com a imagem.
 const linhaAviso = a => '<button class="li li-aviso" data-abrir="av|'+esc(a.id)+'"><span class="lt">'+esc(a.titulo)+'</span><span class="lh"></span><span class="la" aria-hidden="true">›</span></button>';
 const linhaEvento = ev => '<button class="li" data-abrir="ev|'+esc(ev.id)+'">'+dLin(ev.data)+'<span class="lt">'+esc(ev.titulo)+'</span><span class="lh">'+esc(ev.hora||'')+'</span><span class="la" aria-hidden="true">›</span></button>';
+document.addEventListener('click', e => { const b = e.target.closest('[data-pres-ev]'); if (!b || !isAdm()) return;
+  PR.lista = b.dataset.presEv; PR.ok = false; PR.linhas = {}; PR.busca = ''; PR.dia = null; prCarregar();
+  const d = $('#dlg'); if (d && d.open) d.close(); S.tab = 'checkin'; history.replaceState(null, '', '#checkin'); renderTabs(); render(); window.scrollTo(0,0); });
 function abrirItem(tipo, id){
   let corpo = '';
   if (tipo === 'av') { const a = S.avisos.find(x => x.id === id); if (!a) return; const pode = isAdm() || (temAvisos() && !!S.uid && a.autor===S.uid);
@@ -2289,6 +2294,7 @@ function abrirItem(tipo, id){
     corpo = imgTag(ev.img,'banner')+'<div class="ev"><div class="date"><b>'+d.getDate()+'</b>'+esc(d.toLocaleDateString('pt-BR',{month:'short'}).replace('.',''))+'</div><div>'
       + '<h2>'+esc(ev.titulo)+'</h2><div class="meta">'+esc(d.toLocaleDateString('pt-BR',{weekday:'long'}))+(ev.hora?' · '+esc(ev.hora):'')+(ev.local?' · '+esc(ev.local):'')+'</div>'
       + (ev.descricao?'<p class="txt-full">'+linkify(ev.descricao)+'</p>':'')+btnLink(ev.link)+btnZap(ev.contatos)
+      + (isAdm() && ev.checkinParticipantes ? '<div class="bar" style="margin:10px 0 0"><button type="button" class="btn ghost small" data-pres-ev="'+esc(ev.id)+'">👥 Participantes ›</button></div>' : '')
       + (pode?'<div class="bar" style="margin:8px 0 0"><button type="button" class="link" data-edit-evento="'+esc(ev.id)+'">Editar</button><button type="button" class="link" data-del-evento="'+esc(ev.id)+'">Excluir</button></div>':'')+'</div></div>';
   }
   abrir('<form class="item-aberto">'+corpo+'<div class="end"><button type="button" class="btn ghost" data-cancel>Fechar</button></div></form>', async () => true);
@@ -2486,7 +2492,9 @@ const DIAS = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
 function viewAjustes(){
   if (!isAdm()) return '<div class="empty">Só administradores acessam os ajustes.</div>';
   const c = S.cfg || {};
-  let html = '<h2 class="section-title">Ajustes do painel</h2><div class="card"><form id="cfgForm">'
+  const nPend = [...new Set([...S.membros, ...Object.keys(S.cadastros||{}), ...Object.keys(S.pessoas||{})])].filter(id => id && id !== S.uid && statusDe(id) === 'pendente').length;
+  let html = (nPend ? '<button type="button" class="notice cad-atalho" data-ir="ajustes|cadPendentes">⏳ '+nPend+' cadastro'+(nPend === 1 ? '' : 's')+' aguardando aprovação ›</button>' : '')
+    + '<h2 class="section-title">Ajustes do painel</h2><div class="card"><form id="cfgForm">'
     + '<label class="f" for="cI">Nome da igreja</label><input class="inp" id="cI" name="igreja" value="'+esc(c.igreja||'')+'">'
     + '<label class="f" for="cC">Conexões</label><textarea class="inp" id="cC" name="conexoes">'+esc(conexoes().map(x=>x.nome).join('\n'))+'</textarea><div class="hint">Uma por linha. A ordem alfabética é automática.</div>'
     + '<label class="f" for="cU">Cultos</label><textarea class="inp" id="cU" name="cultos">'+esc(cultos().map(x=>x.nome+(x.hora?' | '+x.hora:'')).join('\n'))+'</textarea><div class="hint">Um por linha, no formato Nome | horário. Ex.: Manhã | 10h</div>'
@@ -2496,6 +2504,8 @@ function viewAjustes(){
     + '<label class="f">Dias de culto</label><div class="chips">'+DIAS.map((d,i)=>'<label class="chip"><input type="checkbox" name="dia" value="'+i+'"'+(diasCulto().includes(i)?' checked':'')+'> '+d+'</label>').join('')+'</div>'
     + '<label class="f" for="cW">WhatsApp do administrador (recebe os avisos de cadastro)</label><input class="inp" id="cW" name="whatsAdm" type="tel" inputmode="tel" value="'+esc(S.whatsAdm||'')+'"><div class="hint">Com DDI e DDD, só números. Ex.: 5511999999999</div>'
     + '<div class="end"><button type="submit" class="btn">Salvar ajustes</button></div></form></div>';
+  html += '<h2 class="section-title">🎲 Sorteio</h2><div class="card"><label class="sw"><input type="checkbox" data-sorteio-ativo'+(sorteioAtivo() ? ' checked' : '')+'><span class="sw-b" aria-hidden="true"></span><b>Sorteio ativo</b></label>'
+    + '<p class="hint" style="margin-bottom:0">Desligado: o botão 🎲 Sorteio some do app e as páginas do controle e do telão mostram "Sorteio desativado no momento".</p></div>';
   html += cardCkItens();
   html += '<h2 class="section-title">Áreas da escala</h2><div class="card">' + areas().map(a => '<p class="fn" style="margin:0 0 10px"><strong>'+esc(a.nome)+'</strong>'+(a.porConexao?'<span class="tag">por conexão</span>':'')+'<br><span class="meta">'+a.funcoes.map(f=>esc(f.nome)+(f.vagas?' ('+f.vagas+')':' (livre)')+(Array.isArray(f.cultos)&&f.cultos.length?' · só '+f.cultos.map(c=>cultoInfo(c).nome.toLowerCase()).join(' e '):'')).join(', ')+'</span></p>').join('') + '<p class="hint">Para mudar áreas, funções ou quantidade de vagas, é só pedir ao Claude.</p></div>';
   html += '<h2 class="section-title">Convidar pelo WhatsApp</h2><div class="card"><p class="meta" style="margin:0">Mande para a pessoa o link do painel e o passo a passo para entrar e se cadastrar.</p>'
@@ -2505,20 +2515,33 @@ function viewAjustes(){
   html += viewConvites();
   html += '<h2 class="section-title">Backup do banco de dados</h2><div class="card"><p class="meta" style="margin:0">Baixa tudo o que está no banco (configuração, pessoas, cadastros, escalas, avisos, eventos, check-in, histórico e bate-papo) num arquivo .zip. Contém WhatsApp e e-mails: guarde em lugar seguro e não compartilhe.</p><div class="end"><button class="btn" data-backup>Baixar backup (.zip)</button></div></div>';
   html += '<h2 class="section-title">Pessoas e permissões</h2><p class="hint">O status muda sozinho. Para aprovar alguém: toque em <b>Aprovar</b>, escolha a função, a conexão e os extras e toque em <b>Salvar pessoas</b>. Se você salvar sem tocar em <b>Aprovar</b>, a pessoa continua <b>Pendente</b>. <b>Remover</b> exclui a pessoa da lista e tira o acesso; se ela entrar de novo, faz um cadastro novo. <b>Banco</b> permite apenas visualizar e prevalece sobre a função e todos os extras.</p>';
-  const ids = [...new Set([...S.membros, ...Object.keys(S.cadastros||{}), ...Object.keys(S.pessoas||{})])].filter(id => id && id!==S.uid);
+  const ids = [...new Set([...S.membros, ...Object.keys(S.cadastros||{}), ...Object.keys(S.pessoas||{})])].filter(id => id && id!==S.uid)
+    .sort((a, b) => normNome(nomeComp(a)).localeCompare(normNome(nomeComp(b)), 'pt-BR'));
   const nAdm = Object.values(S.pessoas||{}).filter(p=>p.papel==='admin' && aprovado(p.id) && !p.banco && p.id!==S.uid).length;
   if (!ids.length) html += '<div class="empty">Ninguém além de você entrou no painel ainda. Quando cada pessoa entrar e enviar o cadastro, ela aparece aqui para você aprovar.</div>';
-  else html += '<div class="card tbl-wrap"><table class="lead"><thead><tr><th>Pessoa</th><th>Status</th><th>Pediu</th><th>Função</th><th>Conexão</th><th>Extras</th><th></th></tr></thead><tbody>'
-    + ids.map(id => { const atual = S.pessoas[id]; const ped = (S.cadastros||{})[id]; const base = atual || ped || {papel:'leitura', conexao:''};
+  const linhaPessoa = id => { const atual = S.pessoas[id]; const ped = (S.cadastros||{})[id]; const base = atual || ped || {papel:'leitura', conexao:''};
       const wpp = base.whatsapp || (ped && ped.whatsapp) || '';
       const dupId = statusDe(id) === 'pendente' ? contaDupDe(id, wpp) : null;
       return '<tr><td>'+esc(nomeComp(id))+(atual?'':' <span class="tag">novo</span>')+(dupId ? '<div class="dup">⚠️ Já tem cadastro em outra conta: <b>'+esc(nomeComp(dupId))+'</b>'+(emailDe(dupId) ? ' ('+esc(emailDe(dupId))+')' : '')+' · '+ROT_STATUS[statusDe(dupId)]+'<br><button type="button" class="btn small" data-transferir="'+esc(dupId)+'|'+esc(id)+'">Passar o cadastro para esta conta</button></div>' : '')+(emailDe(id) && nomeComp(id)!==emailDe(id)?'<br><span class="meta">✉️ '+esc(emailDe(id))+'</span>':'')+(wpp?'<br><a class="meta" style="color:var(--green)" href="https://wa.me/'+(String(wpp).replace(/\D/g,'').length<=11?'55':'')+String(wpp).replace(/\D/g,'')+'" target="_blank" rel="noopener">WhatsApp '+esc(wpp)+'</a>':'')+'</td><td>'+celulaStatus(id)+'</td><td class="meta">'+(ped?esc((PAPEIS[ped.papel]||'')+(ped.conexao?' · '+conexaoNome(ped.conexao):'')):'—')+'</td>'
         + '<td><select class="inp" data-p-papel="'+esc(id)+'">'+opts(Object.entries(PAPEIS).map(([k,v])=>({id:k,nome:v})), base.papel)+'</select></td>'
-        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-midia="'+esc(id)+'"'+((atual&&atual.midia) || base.papel==='midia' ?' checked':'')+'> Mídia</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-desp="'+esc(id)+'"'+(atual&&atual.desperta?' checked':'')+'> Desperta</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-sort="'+esc(id)+'"'+(atual&&atual.sorteador?' checked':'')+'> Sorteador</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; }).join('')
-    + '</tbody></table><div class="end"><button class="btn" data-salvar-pessoas>Salvar pessoas</button></div></div>';
+        + '<td><select class="inp" data-p-con="'+esc(id)+'"><option value="">—</option>'+opts(conexoes(), base.conexao||'')+'</select></td><td style="white-space:nowrap"><label class="chip" style="margin:0 0 6px"><input type="checkbox" data-p-gestao="'+esc(id)+'"'+(atual&&atual.gestao?' checked':'')+'> Gestão</label><br><label class="chip" style="margin:0"><input type="checkbox" data-p-min="'+esc(id)+'"'+(atual&&atual.ministro?' checked':'')+'> Ministro</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-av="'+esc(id)+'"'+(atual&&atual.avisos?' checked':'')+'> Avisos/Eventos</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-esc="'+esc(id)+'"'+(atual&&atual.escala?' checked':'')+'> Escala</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-midia="'+esc(id)+'"'+((atual&&atual.midia) || base.papel==='midia' ?' checked':'')+'> Mídia</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-desp="'+esc(id)+'"'+(atual&&atual.desperta?' checked':'')+'> Desperta</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-sort="'+esc(id)+'"'+(atual&&atual.sorteador?' checked':'')+'> Sorteador</label><br><label class="chip" style="margin:6px 0 0"><input type="checkbox" data-p-banco="'+esc(id)+'"'+(atual&&atual.banco?' checked':'')+'> Banco</label></td><td><button class="btn small danger" data-rm-pessoa="'+esc(id)+'"'+(statusDe(id)==='removido'?' disabled':'')+'>Remover</button></td></tr>'; };
+  // Duas seções em ordem alfabética: aprovados e a aprovar (removidos, se houver, por último). Busca por nome, apelido e e-mail.
+  const tabela = l => '<div class="card tbl-wrap"><table class="lead"><thead><tr><th>Pessoa</th><th>Status</th><th>Pediu</th><th>Função</th><th>Conexão</th><th>Extras</th><th></th></tr></thead><tbody>'
+    + l.map(id => linhaPessoa(id).replace('<tr>', '<tr data-busca-de="pBusca" data-busca="'+esc(normNome([nomeComp(id), emailDe(id)].join(' ')))+'">')).join('') + '</tbody></table></div>';
+  const aprov = ids.filter(id => statusDe(id) === 'aprovado'), pend = ids.filter(id => statusDe(id) === 'pendente'), rem = ids.filter(id => !['aprovado','pendente'].includes(statusDe(id)));
+  if (ids.length) { html += buscaCampo('pBusca', S.pBusca, '🔍 Buscar cadastro…'); buscaDepois('pBusca');
+    html += '<div data-busca-grupo="pBusca"><h3 class="cad-sec" id="cadAprovados">✅ Cadastros aprovados ('+aprov.length+')</h3>'+(aprov.length ? tabela(aprov) : '<div class="empty">Ninguém aprovado ainda.</div>')+'</div>';
+    html += '<div data-busca-grupo="pBusca"><h3 class="cad-sec" id="cadPendentes">⏳ Cadastros a aprovar ('+pend.length+')</h3>'+(pend.length ? tabela(pend) : '<div class="empty">Nenhum cadastro aguardando aprovação.</div>')+'</div>';
+    if (rem.length) html += '<div data-busca-grupo="pBusca"><h3 class="cad-sec">🚫 Removidos ('+rem.length+')</h3>'+tabela(rem)+'</div>';
+    html += '<div class="end"><button class="btn" data-salvar-pessoas>Salvar pessoas</button></div>'; }
   html += '<p class="hint">Administradores podem tudo (hoje: '+(nAdm+1)+' contando você; o ideal é até 5). Líder, Auxiliar e Organização preenchem a Direção do culto e o Super Kids nos dias em que a conexão deles está escalada; se a conexão for Flechas, Forasteiros ou Heróis, também o Louvor. <b>Extras:</b> Gestão vê a aba Check-in e imprime o check-in (PDF e Excel); Ministro pode editar a escala de Louvor; Avisos/Eventos pode publicar avisos e eventos (e editar ou excluir os que publicou); Escala pode preencher os nomes da Direção do culto e do Super Kids de qualquer conexão. Banco bloqueia alterações, cadastros, envio de mensagens, importações e exportações, mesmo que outros extras estejam marcados.</p>';
   return html;
 }
+document.addEventListener('change', async e => { const t = e.target; if (!t.matches || !t.matches('[data-sorteio-ativo]') || !isAdm()) return;
+  const v = t.checked; t.disabled = true;
+  const ok = await salvar(ref('config','geral'), {...S.cfg, sorteioAtivo:v}, {acao:'editou', tipo:'config', resumo:(v ? 'Ligou' : 'Desligou')+' o sorteio', antes:S.cfg});
+  if (ok) { await carregarConfig(); toast(v ? 'Sorteio ligado' : 'Sorteio desligado'); } else t.checked = !v;
+  render(); });
 // ---------- Convidar por e-mail ----------
 // O convite deixa a pessoa pré-aprovada: ao fazer o cadastro entrando com ESSE e-mail, ela já fica Aprovada
 // com a função, a conexão e os extras escolhidos (o banco confere o e-mail do login).

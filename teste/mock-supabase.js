@@ -43,6 +43,7 @@ const mesma = (t, a, b) => (chaves[t]||['id']).every(k => a[k] === b[k]);
 let sessao = null; const ouvintes = [];
 try { JSON.parse(localStorage.getItem('mockPessoasExtra') || '[]').forEach(q => T.pessoas.push(q)); } catch(e){}
 try { [['mockEvParticipantes','evento_participantes'],['mockEvPresencas','evento_presencas'],['mockSorteios','sorteios'],['mockSorteioTelas','sorteio_telas'],['mockSorteioEstado','sorteio_estado'],['mockAutocheckin','evento_autocheckin']].forEach(([k, t]) => { const v = localStorage.getItem(k); if (v) T[t] = JSON.parse(v); }); } catch(e){}
+try { const cx = JSON.parse(localStorage.getItem('mockConfigExtra') || 'null'); if (cx) T.config[0].d = {...T.config[0].d, ...cx}; } catch(e){}
 try { JSON.parse(localStorage.getItem('mockEventosExtra') || '[]').forEach(ev => { T.eventos = T.eventos.filter(e => e.id !== ev.id); T.eventos.push({id:ev.id, d:ev.d, autor:null}); }); } catch(e){}
 try { const p = localStorage.getItem('mockPapel'); if (p && U[p]) sessao = {user:{id:U[p], email:p+'@x', app_metadata:{provider: localStorage.getItem('mockProv') || 'email'}}}; } catch(e){}
 const emitir = ev => ouvintes.forEach(cb => setTimeout(() => cb(ev, sessao), 0));

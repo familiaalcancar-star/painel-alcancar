@@ -11,6 +11,7 @@ const DADOS = { config: ler('config.json'), escalas: ler('escalas.json'), avisos
 // Mídia como está no banco desde 08/11: 5 funções e Apoio 1/2 fixos (o banco converte as escalas antigas).
 const FIXOS = {'Apoio 1':'Pedro Morais', 'Apoio 2':'Augusto Cantuaria'};
 DADOS.config.midiaFixos = FIXOS;
+DADOS.config.sorteioAtivo = true; // ligado em Ajustes (o teste do botão desliga e liga de novo)
 DADOS.config.checkinPadrao = [{area:'*', funcao:'*', itens:['Crachá']}, {area:'direcao', funcao:'Estacionamento', itens:['Crachá','Colete','Bastão de luz','Rádio']},
   {area:'midia', funcao:'Apoio 1', itens:['Crachá','Rádio']}, {area:'midia', funcao:'Apoio 2', itens:['Crachá','Rádio']}, {area:'staff', funcao:'Gestão de culto', itens:['Crachá','Rádio']},
   {area:'superkids', funcao:'*', itens:['Crachá','Avental','Pulseiras','Canetas']}, {area:'*', funcao:'Berçário', itens:['Crachá','Fraldas']}, {area:'superkids', funcao:'Recepção', itens:['Crachá','Lista']}];
@@ -686,6 +687,10 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   console.log('Participantes (check-in de evento de vários dias)');
   {
     p = await abrirEv('gestao'); await p.goto('http://localhost:8123/#checkin'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(700);
+    const foraEv = (() => { const d = new Date(diasEv[3]+'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 4); return d.toISOString().slice(0,10); })();
+    await p.fill('#ckD', foraEv); await p.dispatchEvent('#ckD', 'change'); await p.waitForTimeout(400);
+    conferir(!(await p.$('.pres-card')), 'data fora dos dias do evento: o cartão "Participantes" some');
+    await p.fill('#ckD', diasEv[1]); await p.dispatchEvent('#ckD', 'change'); await p.waitForTimeout(400);
     conferir((await p.textContent('.pres-card')).includes('Participantes') && (await p.textContent('.pres-card')).includes(dd(diasEv[0])+' a '+dd(diasEv[3])), 'Check-in mostra "Participantes" do evento (4 dias)');
     conferir(!!(await p.$('.pres-card a[href^="sorteio/controle/"]')), 'Gestão vê o botão "🎲 Sorteio"');
     await p.click('[data-pres-abrir]'); await p.waitForTimeout(400);
@@ -1021,6 +1026,55 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     conferir(await p.evaluate(() => window.__TABELAS.checklist_marcas.some(m => m.item === 'gc-2' && m.por_nome === 'Carla')), 'Checagem marca item (com o nome dela)');
     conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
     await ctxC.close();
+  }
+
+  console.log('Participantes pelo detalhe do evento, sorteio liga/desliga e cadastros em Ajustes');
+  {
+    // Admin abre a lista de participantes pelo detalhe do evento (Avisos/Agenda), em qualquer data.
+    p = await abrirEv('admin'); await p.goto('http://localhost:8123/#avisos'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(600);
+    await p.evaluate(() => abrirItem('ev', 'ev-teste-desperta')); await p.waitForSelector('#dlg[open] [data-pres-ev]');
+    await p.click('[data-pres-ev]'); await p.waitForTimeout(600);
+    conferir(await p.evaluate(() => S.tab === 'checkin') && (await p.textContent('#view')).includes('Participantes ·') && (await p.textContent('#view')).includes('Desperta'), 'admin abre os Participantes pelo detalhe do evento');
+    // Sorteio: desligar em Ajustes
+    await p.click('[data-pres-voltar]'); await p.waitForTimeout(300); await p.fill('#ckD', diasEv[0]); await p.dispatchEvent('#ckD', 'change'); await p.waitForTimeout(400);
+    conferir(!!(await p.$('.pres-card a[href^="sorteio/"]')), 'sorteio ligado: botão 🎲 Sorteio aparece');
+    await p.click('#tabs [data-tab="ajustes"]'); await p.waitForTimeout(500);
+    conferir(await p.isChecked('[data-sorteio-ativo]') && (await p.textContent('#view')).includes('🎲 Sorteio'), 'Ajustes: seção 🎲 Sorteio com "Sorteio ativo" ligado');
+    await p.click('label.sw'); await p.waitForTimeout(700);
+    conferir(await p.evaluate(() => window.__TABELAS.config[0].d.sorteioAtivo === false && window.__TABELAS.historico.some(h => /Desligou o sorteio/.test(h.resumo))) && !(await p.isChecked('[data-sorteio-ativo]')), 'desligar: grava sorteioAtivo = false e registra no histórico');
+    await p.click('#tabs [data-tab="checkin"]'); await p.waitForTimeout(400);
+    conferir(!!(await p.$('.pres-card')) && !(await p.$('a[href*="sorteio/"]')), 'desligado: o botão 🎲 Sorteio some');
+    await p.click('[data-pres-abrir]'); await p.waitForTimeout(400);
+    conferir(!(await p.$('a[href*="sorteio/"]')), 'desligado: sem sorteio na lista de participantes');
+    await p.click('[data-pres-voltar]'); await p.click('#tabs [data-tab="ajustes"]'); await p.waitForTimeout(400); await p.click('label.sw'); await p.waitForTimeout(700);
+    conferir(await p.evaluate(() => window.__TABELAS.config[0].d.sorteioAtivo === true && window.__TABELAS.historico.some(h => /Ligou o sorteio/.test(h.resumo))), 'ligar de novo: grava e registra no histórico');
+    // Cadastros: atalho, duas seções em ordem alfabética, busca
+    const vA = await p.textContent('#view');
+    conferir(vA.includes('⏳ 1 cadastro aguardando aprovação ›') && JSON.stringify(await p.$$eval('.cad-sec', l => l.map(e => e.textContent.replace(/\s*\(\d+\)/, '')))) === JSON.stringify(['✅ Cadastros aprovados', '⏳ Cadastros a aprovar']), 'Ajustes: atalho dos pendentes e seções "aprovados" e "a aprovar" (nessa ordem)');
+    const nomesAp = await p.$$eval('[data-busca-grupo="pBusca"] >> nth=0', g => [...g[0].querySelectorAll('tbody tr td:first-child')].map(td => td.childNodes[0].textContent));
+    const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    conferir(nomesAp.length > 2 && nomesAp.every((n, i) => !i || norm(nomesAp[i-1]).localeCompare(norm(n), 'pt-BR') <= 0), 'aprovados em ordem alfabética ('+nomesAp.length+')');
+    conferir((await p.textContent('#cadPendentes + div')).includes('Maria Pendente'), 'pendente na seção "a aprovar"');
+    await p.click('.cad-atalho'); await p.waitForTimeout(700);
+    conferir(await p.evaluate(() => { const r = document.getElementById('cadPendentes').getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight; }), 'atalho rola até "Cadastros a aprovar"');
+    await p.fill('#pBusca', 'pendente@x'); await p.waitForTimeout(300);
+    conferir(await p.$$eval('[data-busca-de="pBusca"]:not([hidden])', l => l.length) === 1 && await p.isHidden('[data-busca-grupo="pBusca"] >> nth=0'), 'busca pelo e-mail: sobra só a Maria (a seção dos aprovados some)');
+    await p.fill('#pBusca', 'MARI'); await p.waitForTimeout(300);
+    conferir(await p.$$eval('[data-busca-de="pBusca"]:not([hidden])', l => l.some(r => r.textContent.includes('Maria Pendente'))), 'busca pelo apelido (sem maiúsculas)');
+    await p.fill('#pBusca', ''); await p.waitForTimeout(200);
+    await p.screenshot({ path: path.join(SAIDA, '74-ajustes-cadastros.png') });
+    conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    await p.context().close();
+    // Controle e telão com o sorteio desligado
+    p = await abrirEv('admin', {mockConfigExtra:{sorteioAtivo:false}}); await p.goto('http://localhost:8123/sorteio/controle/?evento=ev-teste-desperta'); await p.waitForTimeout(1200);
+    conferir((await p.textContent('#app')).includes('Sorteio desativado no momento') && !!(await p.$('a[href="../../#ajustes"]')) && !(await p.$('#bSortear')), 'controle desligado (admin): aviso + "Ligar em Ajustes"');
+    await p.screenshot({ path: path.join(SAIDA, '75-sorteio-desativado.png') });
+    await p.context().close();
+    p = await abrirEv('gestao', {mockConfigExtra:{sorteioAtivo:false}}); await p.goto('http://localhost:8123/sorteio/controle/?evento=ev-teste-desperta'); await p.waitForTimeout(1200);
+    conferir((await p.textContent('#app')).includes('Sorteio desativado no momento') && !(await p.$('a[href="../../#ajustes"]')), 'controle desligado (não admin): só o aviso');
+    await p.goto('http://localhost:8123/sorteio/tela/?k=qualquer'); await p.waitForTimeout(1200);
+    conferir((await p.textContent('#nome')).includes('Sorteio desativado no momento'), 'telão desligado: "Sorteio desativado no momento"');
+    await p.context().close();
   }
 
   console.log('Auto check-in por QR Code (página pública)');

@@ -41,4 +41,10 @@ async function exigirLogin(alvo, aoEntrar){
     if (r.error) { const p = $('#lErro'); p.hidden = false; p.textContent = /invalid/i.test(r.error.message) ? 'E-mail ou senha incorretos.' : 'Não foi possível entrar agora.'; return; }
     aoEntrar(r.data.session); };
 }
+// Ligado/desligado em Ajustes do painel (config geral: sorteioAtivo). A config é pública (leitura).
+async function sorteioAtivo(){ const r = await SB.from('config').select('d').eq('id', 'geral').maybeSingle(); return !r.error && !!(r.data && r.data.d && r.data.d.sorteioAtivo === true); }
+async function souAdmin(sessao){ if (!sessao) return false; const r = await SB.from('pessoas').select('papel').eq('id', sessao.user.id).maybeSingle(); return !r.error && !!r.data && r.data.papel === 'admin'; }
+// Se alguém ligar/desligar o sorteio com a página aberta, recarrega para mostrar o estado novo.
+function vigiarAtivo(atual){ setInterval(async () => { if (document.visibilityState !== 'visible') return; const r = await SB.from('config').select('d').eq('id', 'geral').maybeSingle();
+  if (!r.error && r.data && !!(r.data.d && r.data.d.sorteioAtivo === true) !== atual) location.reload(); }, 20000); }
 async function podeSortear(){ const r = await SB.rpc('pode_sortear'); return !r.error && r.data === true; }
