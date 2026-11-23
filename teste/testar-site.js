@@ -359,7 +359,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
 
   console.log('Só consulta com extra Gestão');
   p = await abrir('gestao');
-  conferir(JSON.stringify(await abas(p)) === JSON.stringify(['Início','Escala','Agenda','Avisos','Check-in']), 'vê a aba Check-in, sem Histórico e Ajustes');
+  conferir(JSON.stringify(await abas(p)) === JSON.stringify(['Início','Escala','Agenda','Avisos','Check-in','Checklist']), 'vê as abas Check-in e Checklist (Gestão), sem Histórico e Ajustes');
   conferir(await p.isVisible('[data-dia-ficha]'), 'botão Check-in do dia na Início');
   await p.context().close();
 
@@ -566,15 +566,18 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.context().close();
     p = await abrirMid('admin', escHoje); await irHoje(p);
     conferir((await p.textContent('#view')).includes('Administrador: você vê todos'), 'admin vê o aviso de administrador');
-    conferir(JSON.stringify(await p.$$eval('.mk-fn h3', l => l.map(e => e.textContent.split(' ')[0]))) === JSON.stringify(['Projeção','Transmissão','Câmera','Storymaker','Apoio']) && (await p.textContent('#view')).includes('Checklist ainda não cadastrado'), 'admin vê todas as funções, na ordem fixa');
+    conferir(JSON.stringify(await p.$$eval('.mk-fn h3', l => l.map(e => e.textContent.split(' ')[0]))) === JSON.stringify(['Projeção','Transmissão','Câmera','Storymaker','Apoio','Checagem','Gestão']) && (await p.textContent('#view')).includes('Checklist ainda não cadastrado')
+      && JSON.stringify(await p.$$eval('.mk-sec', l => l.map(e => e.textContent))) === JSON.stringify(['🎬 Mídia','🧭 Staff']), 'admin vê todas as funções, na ordem fixa, em duas seções (🎬 Mídia e 🧭 Staff)');
     conferir((await p.textContent('#view')).includes('Câmera 0/2') && (await p.textContent('#view')).includes('Storymaker 0/6'), 'admin: Câmera só com as orações; Storymaker com os 6 itens');
     const exp = await p.evaluate(() => mkLinhasExport().map(r => r[0]+'|'+r[2]));
-    conferir(exp.includes('Storymaker|Bateria ao retirar (%)') && exp.includes('Storymaker|Tela') && !exp.includes('Câmera|Tela'), 'PDF/Excel do checklist incluem o Storymaker (e não os itens desativados da Câmera)');
+    conferir(exp.includes('Mídia · Storymaker|Bateria ao retirar (%)') && exp.includes('Mídia · Storymaker|Tela') && !exp.includes('Mídia · Câmera|Tela') && exp.includes('Staff · Gestão de culto|Alinhar a ordem do culto'), 'PDF/Excel do checklist incluem Mídia (com Storymaker) e Staff');
     await p.click('[data-mk-editar]'); await p.waitForTimeout(300);
-    conferir(JSON.stringify(await p.$$eval('[data-mk-fn]', l => l.map(e => e.textContent))) === JSON.stringify(['Projeção','Transmissão','Câmera','Storymaker','Apoio']), 'Editar itens: abas das funções vêm da config (com Storymaker)');
-    await p.click('[data-mk-fn="Storymaker"]'); await p.waitForTimeout(300);
+    conferir(JSON.stringify(await p.$$eval('[data-mk-fn]', l => l.map(e => e.textContent))) === JSON.stringify(['Projeção','Transmissão','Câmera','Storymaker','Apoio','Checagem','Gestão de culto']), 'Editar itens: chips das duas áreas (Mídia e Staff, sem Check-in)');
+    await p.click('[data-mk-fn="midia|Storymaker"]'); await p.waitForTimeout(300);
     conferir((await p.textContent('#view')).includes('Bateria ao retirar (%)') && (await p.textContent('#view')).includes('Adicionar item em Storymaker'), 'Editar itens do Storymaker');
-    await p.click('[data-mk-fn="Projeção"]'); await p.waitForTimeout(200); await p.click('[data-mk-voltar]'); await p.waitForTimeout(300);
+    await p.click('[data-mk-fn="staff|Checagem"]'); await p.waitForTimeout(200); await p.fill('#mkB', 'Antes do culto'); await p.fill('#mkT', 'Conferir extintores'); await p.click('#mkNovo [type=submit]'); await p.waitForTimeout(400);
+    conferir(await p.evaluate(() => window.__TABELAS.checklist_itens.some(i => i.texto === 'Conferir extintores' && i.funcao === 'Checagem' && i.area === 'staff')), 'item novo da Checagem é gravado com area = staff');
+    await p.click('[data-mk-fn="midia|Projeção"]'); await p.waitForTimeout(200); await p.click('[data-mk-voltar]'); await p.waitForTimeout(300);
     await p.click('.mk-fn .mk-item >> nth=0'); await p.waitForTimeout(400);
     conferir(await p.evaluate(() => window.__TABELAS.checklist_marcas.length === 1), 'admin marca');
     await p.click('.mk-fn .mk-item >> nth=0'); await p.waitForSelector('[data-r="0"]'); await p.click('[data-r="0"]'); await p.waitForTimeout(300);
@@ -955,6 +958,43 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.$eval('.mk-fn input[data-mk]', e => e.click()); await p.waitForTimeout(600);
     conferir((await p.textContent('body')).includes('Esse item já tinha sido marcado por outra pessoa') || (await p.textContent('body')).includes('Não foi salvo'), 'erro ao salvar: motivo em português');
     await ctxE.close();
+  }
+
+  console.log('Busca no Check-in e checklist da Staff');
+  {
+    // Busca no check-in do culto (Gestão)
+    p = await abrir('gestao', '#checkin'); await p.waitForTimeout(300); await p.fill('#ckD', '2026-11-01'); await p.dispatchEvent('#ckD', 'change'); await p.waitForSelector('#ckBusca');
+    const total = await p.$$eval('[data-busca-de="ckBusca"]', l => l.length);
+    const primeiro = await p.$eval('[data-busca-de="ckBusca"] .ckn b', e => e.textContent);
+    await p.fill('#ckBusca', primeiro.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')); await p.waitForTimeout(400);
+    const vis = await p.$$eval('[data-busca-de="ckBusca"]:not([hidden])', l => l.length);
+    conferir(total > 2 && vis >= 1 && vis < total, 'busca filtra na hora (sem acento e sem maiúsculas): ' + vis + ' de ' + total);
+    if (vis === 1) conferir(!!(await p.$('.busca-achado')), 'sobrou 1: o cartão fica destacado');
+    await p.fill('#ckBusca', 'zzznaoexiste'); await p.waitForTimeout(200);
+    conferir(await p.isVisible('.busca-vazia') && (await p.textContent('.busca-vazia')).includes('Nenhum nome encontrado'), '"Nenhum nome encontrado"');
+    await p.fill('#ckBusca', 'checagem'); await p.waitForTimeout(200);
+    conferir(await p.$$eval('[data-busca-de="ckBusca"]:not([hidden])', l => l.length) >= 1, 'busca também pela função (ex.: Checagem)');
+    await p.fill('#ckBusca', primeiro); await p.waitForTimeout(300);
+    await p.click('[data-busca-de="ckBusca"]:not([hidden]) .ckbox >> nth=0'); await p.waitForTimeout(500);
+    conferir((await p.inputValue('#ckBusca')) === '' && await p.evaluate(() => document.activeElement && document.activeElement.id === 'ckBusca'), 'marcou o check-in: busca limpa e o foco volta ao campo');
+    await p.click('[data-busca-limpar="ckBusca"]').catch(() => {}); await p.context().close();
+    // Checklist da Staff para quem está escalado na Gestão de culto (não-admin, sem extra Mídia)
+    const hojeS = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    const px = {id:'00000000-0000-0000-0000-000000000099', email:'novo@x', nome:'Paulo Gestor', apelido:'Paulo', whatsapp:'11912340003', papel:'leitura', status:'aprovado'};
+    const escS = {id: hojeS+'_noite_staff', d:{data:hojeS, culto:'noite', area:'staff', hora:'23h59', funcoes:[{nome:'Gestão de culto', pessoas:['Paulo']}, {nome:'Check-in', pessoas:['Outra Pessoa']}]}};
+    const ctxS = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctxS.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    p = await ctxS.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
+    await p.addInitScript(([a1, e]) => { localStorage.setItem('mockPapel', 'novo'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockPessoasExtra', JSON.stringify([a1])); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); localStorage.setItem('mockFezCheckin', '1'); }, [px, escS]);
+    await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(600);
+    conferir(JSON.stringify(await abas(p)).includes('Checklist') && await p.evaluate(() => (window.__rpc||[]).some(r => r[0] === 've_checklist')), 'escalado na Gestão de culto vê a aba Checklist (ve_checklist)');
+    await p.click('#tabs [data-tab="midia"]'); await p.waitForTimeout(800);
+    conferir((await p.textContent('#view h2')).trim() === 'Checklist' && JSON.stringify(await p.$$eval('.mk-sec', l => l.map(e => e.textContent))) === '["🧭 Staff"]'
+      && JSON.stringify(await p.$$eval('.mk-fn h3', l => l.map(e => e.textContent.split(' ')[0]))) === '["Gestão"]', 'não-admin vê só o checklist da função dele (🧭 Staff · Gestão de culto)');
+    await p.click('label:has(input[data-mk="gc-1"])'); await p.waitForTimeout(500);
+    conferir(await p.evaluate(() => window.__TABELAS.checklist_marcas.some(m => m.item === 'gc-1')), 'marca item da Gestão de culto');
+    await p.screenshot({ path: path.join(SAIDA, '72-checklist-staff.png'), fullPage: true });
+    conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    await ctxS.close();
   }
 
   console.log('Auto check-in por QR Code (página pública)');

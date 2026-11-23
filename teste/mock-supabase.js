@@ -25,6 +25,7 @@ const T = {
   checklist_itens:[['Bloco 1 – Backgrounds','Wallpaper (tela de descanso)'],['Bloco 1 – Backgrounds','Fundo da letra das músicas'],['Bloco 2 – Cronômetro','Conferir se está no horário correto']].map(([bloco, texto], k) => ({id:'it'+k, funcao:'Projeção', bloco, texto, ordem:(k+1)*10, ativo:true})).concat([['Bloco 1 – Luzes da plataforma','Luz amarela direcionada à plataforma'],['Bloco 2 – Luzes da mídia','Teto – esquerda']].map(([bloco, texto], k) => ({id:'ap'+k, funcao:'Apoio', bloco, texto, ordem:(k+1)*10, ativo:true})))
     .concat(['Projeção','Câmera','Storymaker','Apoio'].flatMap(f => [{id:'or-ini-'+f, funcao:f, bloco:'Início', texto:'Oração inicial', ordem:0, ativo:true, destaque:true}, {id:'or-fim-'+f, funcao:f, bloco:'Encerramento', texto:'Oração final', ordem:1000, ativo:true, destaque:true}]))
     .concat([{id:'sm-tela', funcao:'Storymaker', bloco:'Bloco 1 – iPhone', texto:'Tela', ordem:10, ativo:true}, {id:'sm-insta', funcao:'Storymaker', bloco:'Bloco 3 – Apps', texto:'Instagram', ordem:60, ativo:true}, {id:'cam-velho', funcao:'Câmera', bloco:'Bloco 1 – iPhone', texto:'Tela', ordem:10, ativo:false}, {id:'bat-ret', funcao:'Storymaker', bloco:'Bloco 1 – iPhone', texto:'Bateria ao retirar (%)', ordem:20, ativo:true, tipo:'percentual'}, {id:'bat-dev', funcao:'Storymaker', bloco:'Bloco 1 – iPhone', texto:'Bateria ao devolver (%)', ordem:25, ativo:true, tipo:'percentual'}])
+    .concat([{id:'gc-1', funcao:'Gestão de culto', area:'staff', bloco:'Antes do culto', texto:'Conferir som e luz com a Mídia', ordem:10, ativo:true}, {id:'gc-2', funcao:'Gestão de culto', area:'staff', bloco:'Antes do culto', texto:'Alinhar a ordem do culto', ordem:20, ativo:true}])
     .concat([{id:'ap-moch1', funcao:'Apoio', bloco:'Após a oração final', texto:'Conferir mochila: iPhone, carregador, microfones e notebook', ordem:1010, ativo:true}, {id:'ap-moch2', funcao:'Apoio', bloco:'Após a oração final', texto:'Entregar mochila', ordem:1020, ativo:true}]),
   chat:[{id:'m1', texto:'Bom dia, pessoal! Escala de domingo fechada?', por:U.betel, em:'2026-10-25T12:00:00.000Z'},
         {id:'m2', texto:'Falta só a recepção da noite.', por:U.gestao, em:new Date(Date.now()-3600e3).toISOString()},
@@ -164,14 +165,21 @@ window.supabase = { createClient: () => ({
     : n === 'sorteio_reincluir_todos' ? (() => { let k = 0; (T.sorteios||[]).forEach(s => { if (s.evento === args.p_evento && s.status !== 'liberado') { s.status = 'liberado'; k++; } }); return {data:k, error:null}; })()
     : n === 'checklist_confirmar' ? (() => { const m = T.checklist_marcas.find(q => q.data === args.p_data && q.culto === args.p_culto && q.item === args.p_item); if (!m) return {data:null, error:{message:'Item ainda não marcado.'}};
         const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}; if (m.por !== sessao.user.id && !m.confirmado_por) Object.assign(m, {confirmado_por:sessao.user.id, confirmado_nome: eu.apelido || String(eu.nome||'').split(' ')[0], confirmado_em:new Date().toISOString()}); return {data:null, error:null}; })()
+    : n === 've_checklist' ? (() => { const eu = T.pessoas.find(p => sessao && p.id === sessao.user.id && (p.status || 'aprovado') === 'aprovado' && !p.banco); if (!eu) return {data:false, error:null};
+        const nn = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(), h = new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'});
+        const fim = new Date(new Date(h + 'T12:00:00Z').getTime() + 7 * 864e5).toISOString().slice(0,10);
+        const esc = T.escalas.some(e => ['midia','staff'].includes(e.d.area) && e.d.data >= h && e.d.data <= fim && (e.d.funcoes || []).some(f => (f.pessoas || []).some(n => nn(n) && (nn(n) === nn(eu.apelido) || nn(n) === nn(eu.nome)))));
+        return {data: eu.papel === 'admin' || !!eu.midia || !!eu.gestao || esc, error:null}; })()
     : n === 'checklist_meu_status' ? (async () => { const eu = T.pessoas.find(p => sessao && p.id === sessao.user.id && (p.status || 'aprovado') === 'aprovado' && !p.banco);
         const nn = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
         const bate = n => eu && (nn(n) === nn(eu.apelido) && nn(eu.apelido) || nn(n) === nn(eu.nome));
-        const esc = T.escalas.find(e => e.d.area === 'midia' && e.d.data === args.p_data && e.d.culto === args.p_culto);
-        const fns = [...new Set(((esc && esc.d.funcoes) || []).filter(f => (f.pessoas || []).some(bate)).map(f => /^apoio [12]$/.test(nn(f.nome)) ? 'Apoio' : f.nome))];
+        const det = []; T.escalas.filter(e => ['midia','staff'].includes(e.d.area) && e.d.data === args.p_data && e.d.culto === args.p_culto).forEach(esc =>
+          ((esc.d.funcoes) || []).filter(f => (f.pessoas || []).some(bate)).forEach(f => { const fn = /^apoio [12]$/.test(nn(f.nome)) ? 'Apoio' : f.nome;
+            if ((T.checklist_itens || []).some(i => i.ativo && (i.area || 'midia') === esc.d.area && nn(i.funcao) === nn(fn)) && !det.some(x => x.funcao === fn)) det.push({area:esc.d.area, funcao:fn}); }));
+        const fns = det.map(x => x.funcao);
         const admin = !!eu && eu.papel === 'admin', hojeX = new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'}) === args.p_data;
         const ck = (await window.supabase.createClient().rpc('fez_checkin', args)).data === true;
-        return {data:{admin, funcoes:fns, hoje:hojeX, checkin:ck, pode_marcar: admin || (hojeX && fns.length > 0 && ck)}, error:null}; })()
+        return {data:{admin, funcoes:fns, detalhe:det, hoje:hojeX, checkin:ck, pode_marcar: admin || (hojeX && fns.length > 0 && ck)}, error:null}; })()
     : n === 'fez_checkin' && T.escalas.some(e => e.d.data === args.p_data && e.d.culto === args.p_culto && e.d.cultoNome) ? (() => {
         // Culto especial (Congresso): vale a presença da entrada (lista de presença), como no banco.
         const eu = T.pessoas.find(p => sessao && p.id === sessao.user.id) || {}, nn = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
