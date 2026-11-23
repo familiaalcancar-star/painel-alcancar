@@ -147,7 +147,13 @@ document.addEventListener('click', async e => {
     C.erro = r.error ? msgErro(r.error) : ''; await atualizar(); }
 });
 
-exigirLogin($('#app'), async () => {
+exigirLogin($('#app'), async sessao => {
+  const ativo = await sorteioAtivo(); vigiarAtivo(ativo);
+  if (!ativo) { const adm = await souAdmin(sessao);
+    $('#app').innerHTML = cabecalho() + '<div class="card"><h2>Sorteio desativado no momento</h2>'
+      + (adm ? '<p class="meta">Você é administrador: para usar o sorteio, ligue em Ajustes → 🎲 Sorteio.</p><div style="display:grid;gap:10px;margin-top:12px"><a class="btn" href="../../#ajustes">Ligar em Ajustes ›</a><a class="btn ghost" href="../../">‹ Voltar ao painel</a></div>'
+             : '<a class="btn ghost" href="../../">‹ Voltar ao painel</a>') + '</div>';
+    return; }
   if (!await podeSortear()) { $('#app').innerHTML = cabecalho() + '<div class="card"><p>Só administradores, a Gestão e a Organização conduzem o sorteio.</p><a class="btn ghost" href="../../">‹ Voltar ao painel</a></div>'; return; }
   try { C.evs = await eventosSorteio(); } catch(e){ C.evs = []; }
   if (!C.evs.length) { $('#app').innerHTML = cabecalho() + '<div class="card"><p>Nenhum evento com check-in de participantes.</p><a class="btn ghost" href="../../">‹ Voltar ao painel</a></div>'; return; }

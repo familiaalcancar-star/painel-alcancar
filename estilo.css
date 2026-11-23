@@ -518,3 +518,12 @@ tr.busca-achado th,tr.busca-achado td{background:var(--gold-soft)}
 .mk-obs textarea{width:100%;min-height:90px;margin-top:8px;resize:vertical;font-size:16px}
 .mk-obs-pe{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}
 .mk-obs-txt{white-space:pre-wrap;margin:8px 0 4px;padding:10px 12px;border-radius:12px;background:var(--surface);border-left:4px solid var(--green)}
+.cad-sec{margin:18px 0 8px;font-size:18px}
+.cad-atalho{display:block;width:100%;text-align:left;font:inherit;font-weight:700;cursor:pointer;margin-bottom:12px}
+.sw{display:flex;align-items:center;gap:12px;cursor:pointer;min-height:44px}
+.sw input{position:absolute;opacity:0;width:1px;height:1px}
+.sw-b{flex:none;width:52px;height:30px;border-radius:30px;background:var(--line);position:relative;transition:background .2s}
+.sw-b::after{content:'';position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:transform .2s}
+.sw input:checked + .sw-b{background:var(--green)}
+.sw input:checked + .sw-b::after{transform:translateX(22px)}
+.sw input:focus-visible + .sw-b{outline:3px solid var(--yellow);outline-offset:2px}

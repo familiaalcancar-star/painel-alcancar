@@ -191,13 +191,15 @@ addEventListener('resize', () => { ajustarPalco(); caberFaixa(); if (T.atual && 
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { caberFaixa(); if (T.atual && !T.animando && Q.dataset.estado !== 'espera') caber(T.atual.nome); });
 
 // ---------- Início ----------
-async function iniciarLink(){ manterAcesa(); await pollLink(); setInterval(() => { if (document.visibilityState === 'visible') pollLink(); }, 1500); }
+function telaDesativada(){ estado('invalido'); textoCaixa('Sorteio desativado no momento', ''); faixa('SORTEIO', false); }
+async function iniciarLink(){ const ativo = await sorteioAtivo(); vigiarAtivo(ativo); if (!ativo) { telaDesativada(); return; } manterAcesa(); await pollLink(); setInterval(() => { if (document.visibilityState === 'visible') pollLink(); }, 1500); }
 async function iniciarLogado(){
   const app = $('#app');
   const { data } = await SB.auth.getSession();
   if (!(data && data.session)) { Q.hidden = true; app.hidden = false; }
   exigirLogin(app, async () => {
     Q.hidden = false; app.hidden = true;
+    const ativo = await sorteioAtivo(); vigiarAtivo(ativo); if (!ativo) { telaDesativada(); return; }
     let evs = []; try { evs = await eventosSorteio(); } catch(e){}
     T.ev = evs.find(x => x.id === param('evento')) || evs.find(x => x.dias.includes(hojeSP())) || evs.find(x => x.dias[x.dias.length - 1] >= hojeSP()) || evs[evs.length - 1];
     if (!T.ev) { estado('invalido'); textoCaixa('Nenhum evento com sorteio', ''); faixa('SORTEIO', false); return; }
