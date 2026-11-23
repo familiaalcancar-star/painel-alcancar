@@ -237,7 +237,12 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
   await p.click('label:has(input[data-ck-ent="'+k0+'|Bastão de luz"])'); await p.waitForTimeout(250);
   conferir(await p.evaluate(k => window.__TABELAS.checkin_marcas.find(m => m.chave === k).itens.find(i => i.nome === 'Bastão de luz').ret === 0, k0), 'dá para desmarcar um item padrão (não entregue)');
   await p.click('[data-ck-add="'+k0+'"]'); await p.waitForSelector('#dlg[open] #ckIN'); await p.click('[data-ck-escolhe="Rádio"]'); await p.fill('#ckIQ', '7'); await p.click('#dlg [type=submit]'); await p.waitForTimeout(400);
-  conferir((await p.textContent('.ck-estoque')).includes('Rádios: 8 de 6 em uso') && !!(await p.$('.ck-estoque.passou')), 'estoque: "Rádios: 8 de 6 em uso" e aviso de que passou');
+  conferir((await p.textContent('.ck-equip-t')).includes('🎒 Equipamentos · 8 em uso') && !!(await p.$('.ck-equip-ponto')) && !(await p.isVisible('.ck-equip-lista')), 'equipamentos numa linha só, recolhida, com ponto laranja (algum 100% em uso)');
+  await p.click('[data-ck-equip]'); await p.waitForTimeout(150);
+  conferir(await p.isVisible('.ck-estoque') && (await p.textContent('.ck-estoque')).includes('Rádios: 8 de 6 em uso') && !!(await p.$('.ck-estoque.passou')) && await p.evaluate(() => localStorage.getItem('ckEquipAberto') === '1'), 'tocar abre a lista: "Rádios: 8 de 6 em uso" e aviso de que passou (lembra aberto)');
+  await p.screenshot({ path: path.join(SAIDA, '73-equipamentos.png') });
+  await p.click('[data-ck-equip]'); await p.waitForTimeout(150);
+  conferir(!(await p.isVisible('.ck-equip-lista')) && (await p.textContent('.ck-equip-seta')) === '▸' && await p.evaluate(() => localStorage.getItem('ckEquipAberto') === '0'), 'tocar de novo fecha (lembra fechado)');
   for (const nome of ['Crachá','Colete','Rádio']) { await p.click('label:has(input[data-ck-devol="'+k0+'|'+nome+'"])'); await p.waitForTimeout(150); }
   await p.waitForTimeout(250);
   conferir(!!(await p.$('.ck2.ok')) && !(await p.$('.ck-pendentes')) && (await p.textContent('.ck-estoque')).includes('Rádios: 0 de 6'), 'devolveu tudo: linha verde, sem pendências');
@@ -566,17 +571,18 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.context().close();
     p = await abrirMid('admin', escHoje); await irHoje(p);
     conferir((await p.textContent('#view')).includes('Administrador: você vê todos'), 'admin vê o aviso de administrador');
-    conferir(JSON.stringify(await p.$$eval('.mk-fn h3', l => l.map(e => e.textContent.split(' ')[0]))) === JSON.stringify(['Projeção','Transmissão','Câmera','Storymaker','Apoio','Checagem','Gestão']) && (await p.textContent('#view')).includes('Checklist ainda não cadastrado')
-      && JSON.stringify(await p.$$eval('.mk-sec', l => l.map(e => e.textContent))) === JSON.stringify(['🎬 Mídia','🧭 Staff']), 'admin vê todas as funções, na ordem fixa, em duas seções (🎬 Mídia e 🧭 Staff)');
+    conferir(JSON.stringify(await p.$$eval('.mk-fn h3', l => l.map(e => e.textContent.split(' ')[0]))) === JSON.stringify(['Projeção','Transmissão','Câmera','Storymaker','Apoio','Gestão']) && (await p.textContent('#view')).includes('Checklist ainda não cadastrado')
+      && JSON.stringify(await p.$$eval('.mk-sec', l => l.map(e => e.textContent))) === JSON.stringify(['🎬 Mídia','🧭 Gestão de culto']), 'admin vê todas as funções, em duas seções (🎬 Mídia e 🧭 Gestão de culto)');
+    conferir((await p.textContent('#view')).includes('Gestão de culto 0/8') && !!(await p.$('textarea[data-mk-obs="gc-9"]')), 'Gestão de culto: 8 itens contam (a observação é opcional) e admin vê a caixa de texto');
     conferir((await p.textContent('#view')).includes('Câmera 0/2') && (await p.textContent('#view')).includes('Storymaker 0/6'), 'admin: Câmera só com as orações; Storymaker com os 6 itens');
     const exp = await p.evaluate(() => mkLinhasExport().map(r => r[0]+'|'+r[2]));
-    conferir(exp.includes('Mídia · Storymaker|Bateria ao retirar (%)') && exp.includes('Mídia · Storymaker|Tela') && !exp.includes('Mídia · Câmera|Tela') && exp.includes('Staff · Gestão de culto|Alinhar a ordem do culto'), 'PDF/Excel do checklist incluem Mídia (com Storymaker) e Staff');
+    conferir(exp.includes('Mídia · Storymaker|Bateria ao retirar (%)') && exp.includes('Mídia · Storymaker|Tela') && !exp.includes('Mídia · Câmera|Tela') && exp.includes('Staff · Gestão de culto|Conferir slides da ministração') && exp.includes('Staff · Gestão de culto|Observações do culto (se precisar relatar algo)'), 'PDF/Excel do checklist incluem Mídia (com Storymaker) e Staff');
     await p.click('[data-mk-editar]'); await p.waitForTimeout(300);
-    conferir(JSON.stringify(await p.$$eval('[data-mk-fn]', l => l.map(e => e.textContent))) === JSON.stringify(['Projeção','Transmissão','Câmera','Storymaker','Apoio','Checagem','Gestão de culto']), 'Editar itens: chips das duas áreas (Mídia e Staff, sem Check-in)');
+    conferir(JSON.stringify(await p.$$eval('[data-mk-fn]', l => l.map(e => e.textContent))) === JSON.stringify(['Projeção','Transmissão','Câmera','Storymaker','Apoio','Gestão de culto']), 'Editar itens: chips das duas áreas (Mídia e Gestão de culto)');
     await p.click('[data-mk-fn="midia|Storymaker"]'); await p.waitForTimeout(300);
     conferir((await p.textContent('#view')).includes('Bateria ao retirar (%)') && (await p.textContent('#view')).includes('Adicionar item em Storymaker'), 'Editar itens do Storymaker');
-    await p.click('[data-mk-fn="staff|Checagem"]'); await p.waitForTimeout(200); await p.fill('#mkB', 'Antes do culto'); await p.fill('#mkT', 'Conferir extintores'); await p.click('#mkNovo [type=submit]'); await p.waitForTimeout(400);
-    conferir(await p.evaluate(() => window.__TABELAS.checklist_itens.some(i => i.texto === 'Conferir extintores' && i.funcao === 'Checagem' && i.area === 'staff')), 'item novo da Checagem é gravado com area = staff');
+    await p.click('[data-mk-fn="staff|Gestão de culto"]'); await p.waitForTimeout(200); await p.fill('#mkB', 'Observações'); await p.fill('#mkT', 'Algo para melhorar'); await p.selectOption('#mkTp', 'texto'); await p.click('#mkNovo [type=submit]'); await p.waitForTimeout(400);
+    conferir(await p.evaluate(() => window.__TABELAS.checklist_itens.some(i => i.texto === 'Algo para melhorar' && i.funcao === 'Gestão de culto' && i.area === 'staff' && i.tipo === 'texto')) && (await p.textContent('#view')).includes('📝 texto'), 'editor: item novo do tipo "Texto (observação)" na Gestão de culto, gravado com area = staff');
     await p.click('[data-mk-fn="midia|Projeção"]'); await p.waitForTimeout(200); await p.click('[data-mk-voltar]'); await p.waitForTimeout(300);
     await p.click('.mk-fn .mk-item >> nth=0'); await p.waitForTimeout(400);
     conferir(await p.evaluate(() => window.__TABELAS.checklist_marcas.length === 1), 'admin marca');
@@ -591,7 +597,7 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     conferir(bat === 'bat-dev=45,bat-ret=80' && (await p.textContent('#view')).includes('🔋 80%') && (await p.textContent('#view')).includes('gastou 35%'), 'bateria: escolhe/digita %, salva, mostra 🔋 e quanto gastou');
     await p.screenshot({ path: path.join(SAIDA, '47-checklist-bateria.png'), fullPage: true });
     const dlb = p.waitForEvent('download'); await p.click('[data-mk-pdf]'); const ab = await dlb; await ab.saveAs(path.join(SAIDA, 'checklist-midia.pdf'));
-    conferir(ab.suggestedFilename().startsWith('checklist-midia-'), 'checklist em PDF (admin)');
+    conferir(/^checklist-\d{4}-/.test(ab.suggestedFilename()), 'checklist em PDF (admin)');
     await p.click('[data-mk-desfaz="bat-dev"]'); await p.waitForSelector('[data-r="1"]'); await p.click('[data-r="1"]'); await p.waitForTimeout(400);
     conferir(await p.evaluate(() => !window.__TABELAS.checklist_marcas.some(m => m.item === 'bat-dev')), 'admin desfaz a porcentagem');
     await p.click('[data-mk-editar]'); await p.waitForTimeout(200);
@@ -988,13 +994,33 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(600);
     conferir(JSON.stringify(await abas(p)).includes('Checklist') && await p.evaluate(() => (window.__rpc||[]).some(r => r[0] === 've_checklist')), 'escalado na Gestão de culto vê a aba Checklist (ve_checklist)');
     await p.click('#tabs [data-tab="midia"]'); await p.waitForTimeout(800);
-    conferir((await p.textContent('#view h2')).trim() === 'Checklist' && JSON.stringify(await p.$$eval('.mk-sec', l => l.map(e => e.textContent))) === '["🧭 Staff"]'
-      && JSON.stringify(await p.$$eval('.mk-fn h3', l => l.map(e => e.textContent.split(' ')[0]))) === '["Gestão"]', 'não-admin vê só o checklist da função dele (🧭 Staff · Gestão de culto)');
+    conferir((await p.textContent('#view h2')).trim() === 'Checklist' && JSON.stringify(await p.$$eval('.mk-sec', l => l.map(e => e.textContent))) === '["🧭 Gestão de culto"]'
+      && JSON.stringify(await p.$$eval('.mk-fn h3', l => l.map(e => e.textContent.split(' ')[0]))) === '["Gestão"]', 'não-admin vê só a seção 🧭 Gestão de culto (separada da Mídia)');
     await p.click('label:has(input[data-mk="gc-1"])'); await p.waitForTimeout(500);
-    conferir(await p.evaluate(() => window.__TABELAS.checklist_marcas.some(m => m.item === 'gc-1')), 'marca item da Gestão de culto');
+    conferir(await p.evaluate(() => window.__TABELAS.checklist_marcas.some(m => m.item === 'gc-1')) && (await p.textContent('#view')).includes('Gestão de culto 1/8'), 'marca item da Gestão de culto (1/8)');
+    await p.click('[data-mk-obs-salvar="gc-9"]'); await p.waitForTimeout(300);
+    conferir(!(await p.evaluate(() => window.__TABELAS.checklist_marcas.some(m => m.item === 'gc-9'))) && (await p.textContent('body')).includes('Escreva a observação antes de salvar'), 'observação vazia não salva');
+    await p.fill('textarea[data-mk-obs="gc-9"]', 'Som falhou no 2º louvor.\nResolvido.'); await p.click('[data-mk-obs-salvar="gc-9"]'); await p.waitForTimeout(600);
+    conferir(await p.evaluate(() => window.__TABELAS.checklist_marcas.some(m => m.item === 'gc-9' && m.obs === 'Som falhou no 2º louvor.\nResolvido.')) && (await p.textContent('.mk-obs-txt')).includes('Som falhou') && (await p.textContent('.mk-obs')).includes('📝 Paulo')
+      && !(await p.$('.mk-obs [data-mk-desfaz]')) && (await p.textContent('#view')).includes('Gestão de culto 1/8'), 'salva a observação: mostra o texto, quem escreveu e a hora (não conta no progresso; só admin apaga)');
     await p.screenshot({ path: path.join(SAIDA, '72-checklist-staff.png'), fullPage: true });
     conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    const marcasS = await p.evaluate(() => window.__TABELAS.checklist_marcas);
     await ctxS.close();
+    // Checagem usa o mesmo checklist e vê o que a Gestão de culto marcou
+    const pc = {id:'00000000-0000-0000-0000-000000000099', email:'chec@x', nome:'Carla Checagem', apelido:'Carla', whatsapp:'11912340004', papel:'leitura', status:'aprovado'};
+    const escC = {...escS, d:{...escS.d, funcoes:[{nome:'Gestão de culto', pessoas:['Paulo']}, {nome:'Checagem', pessoas:['Carla']}]}};
+    const ctxC = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctxC.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    p = await ctxC.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
+    await p.addInitScript(([a1, a2, e, mm]) => { localStorage.setItem('mockPapel', 'novo'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockPessoasExtra', JSON.stringify([a1, a2])); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); localStorage.setItem('mockFezCheckin', '1'); localStorage.setItem('mockMarcas', JSON.stringify(mm)); }, [pc, {...px, id:'00000000-0000-0000-0000-000000000098'}, escC, marcasS]);
+    await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(600);
+    await p.click('#tabs [data-tab="midia"]'); await p.waitForTimeout(800);
+    const vC = await p.textContent('#view');
+    conferir(vC.includes('Sua função neste culto: Checagem') && vC.includes('Gestão de culto: Paulo') && vC.includes('Checagem: Carla') && vC.includes('Gestão de culto 1/8') && (await p.textContent('.mk-obs')).includes('Som falhou'), 'escalado na Checagem vê o mesmo checklist, com o que a Gestão de culto marcou e a observação');
+    await p.click('label:has(input[data-mk="gc-2"])'); await p.waitForTimeout(500);
+    conferir(await p.evaluate(() => window.__TABELAS.checklist_marcas.some(m => m.item === 'gc-2' && m.por_nome === 'Carla')), 'Checagem marca item (com o nome dela)');
+    conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    await ctxC.close();
   }
 
   console.log('Auto check-in por QR Code (página pública)');

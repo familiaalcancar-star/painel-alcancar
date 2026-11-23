@@ -25,7 +25,9 @@ const T = {
   checklist_itens:[['Bloco 1 – Backgrounds','Wallpaper (tela de descanso)'],['Bloco 1 – Backgrounds','Fundo da letra das músicas'],['Bloco 2 – Cronômetro','Conferir se está no horário correto']].map(([bloco, texto], k) => ({id:'it'+k, funcao:'Projeção', bloco, texto, ordem:(k+1)*10, ativo:true})).concat([['Bloco 1 – Luzes da plataforma','Luz amarela direcionada à plataforma'],['Bloco 2 – Luzes da mídia','Teto – esquerda']].map(([bloco, texto], k) => ({id:'ap'+k, funcao:'Apoio', bloco, texto, ordem:(k+1)*10, ativo:true})))
     .concat(['Projeção','Câmera','Storymaker','Apoio'].flatMap(f => [{id:'or-ini-'+f, funcao:f, bloco:'Início', texto:'Oração inicial', ordem:0, ativo:true, destaque:true}, {id:'or-fim-'+f, funcao:f, bloco:'Encerramento', texto:'Oração final', ordem:1000, ativo:true, destaque:true}]))
     .concat([{id:'sm-tela', funcao:'Storymaker', bloco:'Bloco 1 – iPhone', texto:'Tela', ordem:10, ativo:true}, {id:'sm-insta', funcao:'Storymaker', bloco:'Bloco 3 – Apps', texto:'Instagram', ordem:60, ativo:true}, {id:'cam-velho', funcao:'Câmera', bloco:'Bloco 1 – iPhone', texto:'Tela', ordem:10, ativo:false}, {id:'bat-ret', funcao:'Storymaker', bloco:'Bloco 1 – iPhone', texto:'Bateria ao retirar (%)', ordem:20, ativo:true, tipo:'percentual'}, {id:'bat-dev', funcao:'Storymaker', bloco:'Bloco 1 – iPhone', texto:'Bateria ao devolver (%)', ordem:25, ativo:true, tipo:'percentual'}])
-    .concat([{id:'gc-1', funcao:'Gestão de culto', area:'staff', bloco:'Antes do culto', texto:'Conferir som e luz com a Mídia', ordem:10, ativo:true}, {id:'gc-2', funcao:'Gestão de culto', area:'staff', bloco:'Antes do culto', texto:'Alinhar a ordem do culto', ordem:20, ativo:true}])
+    .concat([['Check-in das equipes','Conferir check-in da Direção do culto'],['Check-in das equipes','Conferir check-in do Super Kids'],['Check-in das equipes','Conferir check-in da Mídia'],['Check-in das equipes','Conferir crachá da Intercessão'],
+      ['Conteúdo do culto','Conferir vídeo Missão de Deus'],['Conteúdo do culto','Conferir vídeo Tempo de Generosidade'],['Conteúdo do culto','Conferir slides da ministração'],['Conteúdo do culto','Conferir avisos do pós-culto'],
+      ['Observações','Observações do culto (se precisar relatar algo)','texto']].map(([bloco, texto, tipo], k) => ({id:'gc-'+(k+1), funcao:'Gestão de culto', area:'staff', bloco, texto, ordem:k+1, tipo:tipo || 'check', ativo:true})))
     .concat([{id:'ap-moch1', funcao:'Apoio', bloco:'Após a oração final', texto:'Conferir mochila: iPhone, carregador, microfones e notebook', ordem:1010, ativo:true}, {id:'ap-moch2', funcao:'Apoio', bloco:'Após a oração final', texto:'Entregar mochila', ordem:1020, ativo:true}]),
   chat:[{id:'m1', texto:'Bom dia, pessoal! Escala de domingo fechada?', por:U.betel, em:'2026-10-25T12:00:00.000Z'},
         {id:'m2', texto:'Falta só a recepção da noite.', por:U.gestao, em:new Date(Date.now()-3600e3).toISOString()},
@@ -88,6 +90,8 @@ class Q {
             if ((r.ret||0) > 0) Object.assign(r, a && (a.ret||0) === r.ret && a.ret_nome ? {ret_nome:a.ret_nome, ret_em:a.ret_em} : {ret_nome:quem, ret_em:agora});
             if ((r.dev||0) > 0) Object.assign(r, a && (a.dev||0) === r.dev && a.dev_nome ? {dev_nome:a.dev_nome, dev_em:a.dev_em} : {dev_nome:quem, dev_em:agora});
             return r; }); }
+        if (this.t === 'checklist_marcas') { const it = (T.checklist_itens || []).find(q => q.id === n.item) || {};
+          if (it.tipo === 'texto') { n.obs = String(n.obs || '').trim().slice(0, 1000) || null; if (!n.obs) return {data:null, error:{message:'Escreva a observação antes de salvar.'}}; } else n.obs = null; }
         if (this.t === 'checklist_marcas') { const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}; Object.assign(n, {por:sessao && sessao.user.id, por_nome: eu.apelido || String(eu.nome||'').split(' ')[0], em:agora}); }
         if (this.t === 'checklist_itens' && !n.id) { n.id = 'i'+Date.now()+Math.random().toString(36).slice(2,6); n.ativo = n.ativo !== false; }
         if (this.t === 'chat') { n.id = 'm'+Date.now(); n.por = sessao && sessao.user.id; n.em = agora; }
@@ -174,7 +178,7 @@ window.supabase = { createClient: () => ({
         const nn = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
         const bate = n => eu && (nn(n) === nn(eu.apelido) && nn(eu.apelido) || nn(n) === nn(eu.nome));
         const det = []; T.escalas.filter(e => ['midia','staff'].includes(e.d.area) && e.d.data === args.p_data && e.d.culto === args.p_culto).forEach(esc =>
-          ((esc.d.funcoes) || []).filter(f => (f.pessoas || []).some(bate)).forEach(f => { const fn = /^apoio [12]$/.test(nn(f.nome)) ? 'Apoio' : f.nome;
+          ((esc.d.funcoes) || []).filter(f => (f.pessoas || []).some(bate)).forEach(f => { const fn = /^apoio [12]$/.test(nn(f.nome)) ? 'Apoio' : nn(f.nome) === 'checagem' ? 'Gestão de culto' : f.nome;
             if ((T.checklist_itens || []).some(i => i.ativo && (i.area || 'midia') === esc.d.area && nn(i.funcao) === nn(fn)) && !det.some(x => x.funcao === fn)) det.push({area:esc.d.area, funcao:fn}); }));
         const fns = det.map(x => x.funcao);
         const admin = !!eu && eu.papel === 'admin', hojeX = new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'}) === args.p_data;
