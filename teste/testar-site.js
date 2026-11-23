@@ -885,7 +885,8 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     p = await ctx4.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
     await p.addInitScript(([ev, a, b]) => { localStorage.setItem('mockPapel', 'admin'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEventosExtra', JSON.stringify([ev])); localStorage.setItem('mockEvParticipantes', JSON.stringify(a)); localStorage.setItem('mockEvPresencas', JSON.stringify(b)); }, [EV4, parts4, pres4]);
     // B) contador na lista de participantes
-    await p.goto('http://localhost:8123/#checkin'); await p.waitForSelector('[data-pres-abrir]'); await p.click('[data-pres-abrir]'); await p.waitForSelector('.pres-nums');
+    await p.goto('http://localhost:8123/#checkin'); await p.waitForSelector('#ckD'); await p.fill('#ckD', d0); await p.dispatchEvent('#ckD', 'change');
+    await p.waitForSelector('[data-pres-abrir]'); await p.click('[data-pres-abrir]'); await p.waitForSelector('.pres-nums');
     const nums = async () => p.$$eval('.pres-nums > div', l => l.map(x => x.querySelector('b').textContent + ' ' + x.querySelector('span').textContent));
     let n0 = await nums();
     conferir(n0[0] === '4 Inscritos' && n0[1] === '3 Check-in hoje' && n0[2] === '1 Faltam hoje', 'contador: Inscritos, Check-in hoje e Faltam hoje (' + JSON.stringify(n0) + ')');
@@ -1111,7 +1112,8 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await ctxF.close();
     // App: selo "QR" na lista de participantes
     p = await abrirEv('gestao', {mockEvParticipantes: partsQ, mockEvPresencas: [{participante:'q1', dia:hojeEv, em:new Date().toISOString(), por_nome:'QR Code (auto check-in)'}, {participante:'q3', dia:hojeEv, em:new Date().toISOString(), por_nome:'Lima'}]});
-    await p.goto('http://localhost:8123/#checkin'); await p.waitForSelector('[data-pres-abrir]'); await p.click('[data-pres-abrir]'); await p.waitForSelector('table.pres');
+    await p.goto('http://localhost:8123/#checkin'); await p.waitForSelector('#ckD'); await p.fill('#ckD', hojeEv); await p.dispatchEvent('#ckD', 'change');
+    await p.waitForSelector('[data-pres-abrir]'); await p.click('[data-pres-abrir]'); await p.waitForSelector('table.pres');
     conferir(await p.$$eval('table.pres tbody tr', l => l.map(r => r.querySelector('th').textContent)).then(l => l.some(t => t.includes('João da Silva') && t.includes('QR')) && l.some(t => t.includes('Maria Souza') && !t.includes('QR'))), 'app: selo "QR" ao lado de quem fez o check-in pelo QR Code');
     await p.context().close();
   }
