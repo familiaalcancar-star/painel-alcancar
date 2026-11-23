@@ -164,6 +164,14 @@ window.supabase = { createClient: () => ({
     : n === 'sorteio_reincluir_todos' ? (() => { let k = 0; (T.sorteios||[]).forEach(s => { if (s.evento === args.p_evento && s.status !== 'liberado') { s.status = 'liberado'; k++; } }); return {data:k, error:null}; })()
     : n === 'checklist_confirmar' ? (() => { const m = T.checklist_marcas.find(q => q.data === args.p_data && q.culto === args.p_culto && q.item === args.p_item); if (!m) return {data:null, error:{message:'Item ainda não marcado.'}};
         const eu = T.pessoas.find(p => sessao && p.id===sessao.user.id) || {}; if (m.por !== sessao.user.id && !m.confirmado_por) Object.assign(m, {confirmado_por:sessao.user.id, confirmado_nome: eu.apelido || String(eu.nome||'').split(' ')[0], confirmado_em:new Date().toISOString()}); return {data:null, error:null}; })()
+    : n === 'checklist_meu_status' ? (async () => { const eu = T.pessoas.find(p => sessao && p.id === sessao.user.id && (p.status || 'aprovado') === 'aprovado' && !p.banco);
+        const nn = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+        const bate = n => eu && (nn(n) === nn(eu.apelido) && nn(eu.apelido) || nn(n) === nn(eu.nome));
+        const esc = T.escalas.find(e => e.d.area === 'midia' && e.d.data === args.p_data && e.d.culto === args.p_culto);
+        const fns = [...new Set(((esc && esc.d.funcoes) || []).filter(f => (f.pessoas || []).some(bate)).map(f => /^apoio [12]$/.test(nn(f.nome)) ? 'Apoio' : f.nome))];
+        const admin = !!eu && eu.papel === 'admin', hojeX = new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'}) === args.p_data;
+        const ck = (await window.supabase.createClient().rpc('fez_checkin', args)).data === true;
+        return {data:{admin, funcoes:fns, hoje:hojeX, checkin:ck, pode_marcar: admin || (hojeX && fns.length > 0 && ck)}, error:null}; })()
     : n === 'fez_checkin' && T.escalas.some(e => e.d.data === args.p_data && e.d.culto === args.p_culto && e.d.cultoNome) ? (() => {
         // Culto especial (Congresso): vale a presença da entrada (lista de presença), como no banco.
         const eu = T.pessoas.find(p => sessao && p.id === sessao.user.id) || {}, nn = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();

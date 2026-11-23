@@ -543,9 +543,9 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     await ctxB.close();
     // Sem check-in: checklist travado com aviso; quando o check-in é marcado, libera sozinho.
     p = await abrirMid('midia', escHoje, true); await irHoje(p);
-    conferir((await p.textContent('#view')).includes('Faça seu check-in com a equipe de Check-in para liberar o checklist') && await p.$$eval('.mk-fn input[data-mk]', l => l.length > 0 && l.every(e => e.disabled)), 'sem check-in: checklist travado com o aviso');
+    conferir((await p.textContent('#view')).includes('Falta o seu check-in. Procure a equipe de Check-in') && await p.$$eval('.mk-fn input[data-mk]', l => l.length > 0 && l.every(e => e.disabled)), 'sem check-in: checklist travado com o aviso');
     await p.evaluate(() => localStorage.setItem('mockFezCheckin', '1')); await p.waitForTimeout(11000);
-    conferir(!(await p.textContent('#view')).includes('Faça seu check-in') && !(await p.$eval('.mk-fn input[data-mk]', e => e.disabled)), 'check-in marcado: checklist libera sozinho, sem recarregar');
+    conferir(!(await p.textContent('#view')).includes('Falta o seu check-in') && (await p.textContent('#view')).includes('✅ Checklist liberado') && !(await p.$eval('.mk-fn input[data-mk]', e => e.disabled)), 'check-in marcado: checklist libera sozinho, sem recarregar');
     await p.context().close();
     // Storymaker: Ana escalada no Storymaker vê e marca só o checklist dele (itens do iPhone, bateria em %).
     const escStory = {id: hojeSP+'_manha_midia', d:{data:hojeSP, culto:'manha', area:'midia', funcoes:[{nome:'Projeção', pessoas:['Carla']},{nome:'Transmissão', pessoas:[]},{nome:'Câmera', pessoas:['Bia']},{nome:'Storymaker', pessoas:['Ana']},{nome:'Apoio 1', pessoas:['Pedro Morais']},{nome:'Apoio 2', pessoas:['Augusto Cantuaria']}]}};
@@ -726,10 +726,10 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     p = await abrirEv('midia', {mockEscalaExtra: esc0}); await p.addInitScript(() => localStorage.removeItem('mockFezCheckin'));
     await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(400);
     await p.click('#tabs [data-tab="midia"]'); await p.waitForTimeout(300); await p.fill('#mkD', hojeEv); await p.dispatchEvent('#mkD', 'change'); await p.waitForTimeout(200); await p.click('[data-mk-culto="noite"]'); await p.waitForTimeout(500);
-    conferir((await p.textContent('#view')).includes('faça seu check-in na entrada') && await p.$$eval('.mk-fn input[data-mk]', l => l.length > 0 && l.every(e => e.disabled)), 'Congresso: checklist travado até o check-in da entrada');
+    conferir((await p.textContent('#view')).includes('Falta o seu check-in na entrada') && await p.$$eval('.mk-fn input[data-mk]', l => l.length > 0 && l.every(e => e.disabled)), 'Congresso: checklist travado até o check-in da entrada');
     await p.evaluate(d => { window.__TABELAS.evento_participantes = [{id:'pp-ana', evento:'ev-teste-desperta', nome:'Ana'}]; window.__TABELAS.evento_presencas = [{participante:'pp-ana', dia:d, em:new Date().toISOString(), por_nome:'Lima'}]; }, hojeEv);
     await p.waitForTimeout(11000);
-    conferir(!(await p.textContent('#view')).includes('faça seu check-in') && !(await p.$eval('.mk-fn input[data-mk]', e => e.disabled)), 'Congresso: com o check-in da entrada, o checklist libera sozinho');
+    conferir(!(await p.textContent('#view')).includes('Falta o seu check-in') && !(await p.$eval('.mk-fn input[data-mk]', e => e.disabled)), 'Congresso: com o check-in da entrada, o checklist libera sozinho');
     conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
     await p.context().close();
   }
@@ -912,6 +912,49 @@ const conferir = (cond, msg) => { if (cond) { ok++; console.log('  ok  ' + msg);
     conferir((await t4.textContent('.rotulo')) === 'SORTEIO' && (await t4.textContent('#sub')).includes('pessoas concorrendo'), 'telão volta ao "SORTEIO" quando o controle troca para o sorteio do dia');
     conferir(!t4.erros.length, 'sem erros' + (t4.erros.length ? ': ' + t4.erros.join(' | ') : ''));
     await ctxT4.close();
+  }
+
+  console.log('Checklist da Mídia "liso" (permissão pelo banco)');
+  {
+    const hojeC = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    // Pessoa aprovada SEM o extra Mídia, escalada na Projeção de hoje à noite (culto às 23h59 para não "passar").
+    const pessoaX = {id:'00000000-0000-0000-0000-000000000099', email:'novo@x', nome:'Rafael Teixeira', apelido:'Rafa', whatsapp:'11912340002', papel:'leitura', status:'aprovado', midia:false};
+    const escR = {id: hojeC+'_noite_midia', d:{data:hojeC, culto:'noite', area:'midia', hora:'23h59', funcoes:[{nome:'Projeção', pessoas:['Rafa']}]}};
+    const ctxR = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctxR.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    p = await ctxR.newPage(); p.erros = []; p.on('pageerror', e => p.erros.push(e.message));
+    await p.addInitScript(([px, e]) => { localStorage.setItem('mockPapel', 'novo'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockPessoasExtra', JSON.stringify([px])); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); localStorage.removeItem('mockFezCheckin'); }, [pessoaX, escR]);
+    await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.waitForTimeout(500);
+    conferir(JSON.stringify(await abas(p)).includes('Checklist'), 'escalado(a) na Mídia (sem o extra Mídia) vê a aba Checklist');
+    await p.click('#tabs [data-tab="midia"]'); await p.waitForTimeout(800);
+    conferir(await p.inputValue('#mkD') === hojeC && (await p.getAttribute('[data-mk-culto="noite"]', 'aria-pressed')) === 'true', 'abre sozinho no culto certo (hoje, noite)');
+    conferir((await p.textContent('#view')).includes('Falta o seu check-in. Procure a equipe de Check-in') && await p.evaluate(() => (window.__rpc||[]).some(r => r[0] === 'checklist_meu_status')), 'sem check-in: mensagem clara (o banco decide pelo checklist_meu_status)');
+    await p.evaluate(() => localStorage.setItem('mockFezCheckin', '1')); await p.waitForTimeout(11000);
+    conferir((await p.textContent('#view')).includes('✅ Checklist liberado'), 'check-in marcado: "✅ Checklist liberado" sozinho');
+    await p.waitForTimeout(3500);
+    conferir(!(await p.textContent('#view')).includes('✅ Checklist liberado'), 'a mensagem "liberado" some depois de 3 s');
+    // Trocar a data manualmente: fica no dia escolhido; "Ir para o culto de hoje" volta.
+    await p.fill('#mkD', '2030-01-06'); await p.dispatchEvent('#mkD', 'change'); await p.waitForTimeout(700);
+    conferir((await p.textContent('#view')).includes('Você não está escalado(a) neste culto') && !!(await p.$('[data-mk-hoje]')), 'outro culto: "Você não está escalado(a)" + botão "Ir para o culto de hoje"');
+    await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); await p.waitForTimeout(300);
+    conferir(await p.inputValue('#mkD') === '2030-01-06', 'escolha manual da data é respeitada');
+    await p.click('[data-mk-hoje]'); await p.waitForTimeout(700);
+    conferir(await p.inputValue('#mkD') === hojeC, '"Ir para o culto de hoje" volta para o culto atual');
+    conferir(!p.erros.length, 'sem erros' + (p.erros.length ? ': ' + p.erros.join(' | ') : ''));
+    await ctxR.close();
+    // Erro ao salvar: motivo em português e a caixa não fica marcada.
+    const escA = {id: hojeC+'_noite_midia', d:{data:hojeC, culto:'noite', area:'midia', hora:'23h59', funcoes:[{nome:'Projeção', pessoas:['Ana']}]}};
+    const ctxE = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' }); await ctxE.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    p = await ctxE.newPage(); p.erros = [];
+    await p.addInitScript(([e]) => { localStorage.setItem('mockPapel', 'midia'); localStorage.setItem('tutorialVisto', '1'); localStorage.setItem('mockEscalaExtra', JSON.stringify(e)); localStorage.setItem('mockFezCheckin', '1'); }, [escA]);
+    await p.goto('http://localhost:8123/'); await p.waitForSelector('#tabs button'); await p.click('#tabs [data-tab="midia"]'); await p.waitForSelector('.mk-fn input[data-mk]');
+    await p.evaluate(() => { const orig = window.supabase.createClient; }); // (o simulador não recusa; forçamos a recusa abaixo)
+    await p.route('**/*', r => r.continue());
+    await p.evaluate(() => { window.__TABELAS.checklist_marcas = [{item: document.querySelector('.mk-fn input[data-mk]').dataset.mk, data:'x', culto:'y'}]; });
+    const id0 = await p.$eval('.mk-fn input[data-mk]', e => e.dataset.mk);
+    await p.evaluate(id => { window.__TABELAS.checklist_marcas = [{data: document.querySelector('#mkD').value, culto:'noite', item:id, por:'outro', por_nome:'Outro', em:new Date().toISOString()}]; }, id0);
+    await p.$eval('.mk-fn input[data-mk]', e => e.click()); await p.waitForTimeout(600);
+    conferir((await p.textContent('body')).includes('Esse item já tinha sido marcado por outra pessoa') || (await p.textContent('body')).includes('Não foi salvo'), 'erro ao salvar: motivo em português');
+    await ctxE.close();
   }
 
   console.log('Auto check-in por QR Code (página pública)');
