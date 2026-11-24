@@ -483,6 +483,7 @@ function viewMinha(){
   const rot = new Date(S.minhaMes+'-15T12:00:00').toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
   let h = '<div class="bar"><h2 style="font-size:22px">Agenda</h2></div>'
     + '<div class="month"><button class="icon-btn" data-minha-mes="-1" aria-label="Mês anterior">‹</button><strong>'+esc(rot.charAt(0).toUpperCase()+rot.slice(1))+'</strong><button class="icon-btn" data-minha-mes="1" aria-label="Próximo mês">›</button></div>';
+  h += cardBuscaEscala();
   if (!veEquipes()) h += '<div class="notice minha-entrar">'+(S.uid ? 'Depois que o seu cadastro for aprovado, aqui também aparece onde você serve na escala.' : 'Abaixo estão os eventos da igreja. Para ver também onde você serve na escala, toque em <b>Entrar</b>.')+'</div>';
   if (S.minhaOk !== S.minhaMes) return h + '<div class="empty">Carregando…</div>';
   const meus = veEquipes() ? meusCompromissos(S.minhaEsc || []) : [], evs = eventosDoMes(S.minhaMes);
@@ -498,6 +499,68 @@ function viewMinha(){
     return '<section class="card lst minha-dia'+(d < hoje() ? ' passou' : '')+(d === hoje() ? ' hoje' : '')+'"><h3>'+esc(fmtDia(d))+(d === hoje() ? ' <span class="tag">hoje</span>' : '')+'</h3>'
       + itens.map(i => i.html).join('') + '</section>'; }).join('');
 }
+/* ---------- BUSCA NA ESCALA (aba Agenda): por pessoa ou por conexão, até 4 meses ---------- */
+const BUSCA_MAX_DIAS = 122;
+const BE = {aberto:false, tipo:'pessoa', q:'', con:'', de:'', ate:'', res:null, carregando:false, erro:''};
+const palavras = t => normNome(t).split(' ').filter(Boolean);
+function bePessoa(q){ const wq = palavras(q); if (!wq.length) return null;
+  const c = Object.values(S.names||{}).find(n => normNome(n.nome) === normNome(q) || (n.apelido && normNome(n.apelido) === normNome(q)))
+    || Object.values(S.names||{}).find(n => wq.length >= 2 && wq.every(w => palavras(n.nome).includes(w)));
+  return c ? {nome:c.nome||'', apelido:c.apelido||''} : null; }
+function cardBuscaEscala(){
+  if (!BE.de) { BE.de = hoje(); BE.ate = somaDias(hoje(), 90); }
+  const pessoaOk = veEquipes(); if (!pessoaOk) BE.tipo = 'conexao';
+  let h = '<details class="card busca-esc"'+(BE.aberto ? ' open' : '')+' data-be-det><summary><b>🔍 Buscar na escala</b> <span class="meta">por '+(pessoaOk ? 'pessoa ou ' : '')+'conexão</span></summary>'
+    + '<form data-be-form style="margin-top:10px">'
+    + (pessoaOk ? '<div class="chips" role="radiogroup"><label class="chip"><input type="radio" name="tipo" value="pessoa"'+(BE.tipo==='pessoa'?' checked':'')+'> 👤 Pessoa</label><label class="chip"><input type="radio" name="tipo" value="conexao"'+(BE.tipo==='conexao'?' checked':'')+'> 🏠 Conexão</label></div>' : '')
+    + (BE.tipo === 'pessoa'
+      ? '<label class="f" for="beQ">Nome</label><input class="inp" id="beQ" name="q" list="dlPessoas" autocomplete="off" placeholder="Ex.: Dinho Buzzatto" value="'+esc(BE.q)+'">'+listaPessoasEscala()
+      : '<label class="f" for="beC">Conexão</label><select class="inp" id="beC" name="con"><option value="">Escolha…</option>'+opts(conexoes(), BE.con)+'</select>')
+    + '<div class="row"><div><label class="f" for="beDe">De</label><input class="inp" id="beDe" name="de" type="date" value="'+esc(BE.de)+'"></div><div><label class="f" for="beAte">Até</label><input class="inp" id="beAte" name="ate" type="date" value="'+esc(BE.ate)+'"></div></div>'
+    + '<p class="hint">Período de até 4 meses.</p>'
+    + '<div class="end">'+(BE.res ? '<button type="button" class="btn ghost" data-be-limpar>Limpar</button>' : '')+'<button type="submit" class="btn">Buscar</button></div></form>';
+  if (BE.erro) h += '<div class="notice" style="margin-top:10px">'+esc(BE.erro)+'</div>';
+  if (BE.carregando) h += '<div class="empty">Buscando…</div>';
+  else if (BE.res) h += beResultado();
+  return h + '</details>';
+}
+function beResultado(){
+  const r = BE.res, tit = r.tipo === 'pessoa' ? '👤 '+r.rotulo : '🏠 Conexão '+r.rotulo;
+  const per = fmtCurto(r.de)+' a '+fmtCurto(r.ate);
+  if (!r.itens.length) return '<div class="empty">Nenhuma escala encontrada para <b>'+esc(r.rotulo)+'</b> de '+esc(per)+'.</div>';
+  const dias = [...new Set(r.itens.map(c => c.x.data))];
+  return '<p class="be-tit"><b>'+esc(tit)+'</b> · '+esc(per)+' · '+r.itens.length+' escala'+(r.itens.length===1?'':'s')+' em '+dias.length+' dia'+(dias.length===1?'':'s')+'</p>'
+    + dias.map(d => '<section class="lst minha-dia be-dia'+(d < hoje() ? ' passou' : '')+'"><h3>'+esc(fmtDia(d))+'</h3>'+r.itens.filter(c => c.x.data === d).map(linhaMinhaEscala).join('')+'</section>').join('');
+}
+async function beBuscar(fd){
+  BE.tipo = veEquipes() ? (fd.get('tipo') || BE.tipo) : 'conexao'; BE.q = String(fd.get('q') || BE.q || '').trim(); BE.con = String(fd.get('con') || BE.con || '');
+  BE.de = String(fd.get('de') || hoje()); BE.ate = String(fd.get('ate') || somaDias(BE.de, 90)); BE.erro = ''; BE.res = null;
+  if (BE.ate < BE.de) { BE.erro = 'A data "Até" precisa ser depois de "De".'; return render(); }
+  const dias = Math.round((new Date(BE.ate+'T12:00:00') - new Date(BE.de+'T12:00:00')) / 864e5);
+  if (dias > BE_MAX()) { BE.erro = 'Escolha um período de até 4 meses.'; return render(); }
+  if (BE.tipo === 'pessoa' && palavras(BE.q).length === 0) { BE.erro = 'Digite o nome da pessoa.'; return render(); }
+  if (BE.tipo === 'conexao' && !BE.con) { BE.erro = 'Escolha a conexão.'; return render(); }
+  BE.carregando = true; render();
+  const lista = linhas(await lerEscalas(BE.de, BE.ate, 2000)), out = [];
+  const ordC = id => { const i = cultos().findIndex(c => c.id === id); return i < 0 ? 99 : i; }, ordA = id => areas().findIndex(a => a.id === id);
+  if (BE.tipo === 'pessoa') {
+    const wq = palavras(BE.q), pes = bePessoa(BE.q);
+    const bate = n => { const wn = palavras(n); return wn.length && (wq.every(w => wn.includes(w)) || (pes && midiaNomeBate(n, pes))); };
+    lista.forEach(x => { const a = areaInfo(x.area); (x.funcoes||[]).forEach(f => { if ((f.pessoas||[]).some(bate)) out.push({x, a, txt:f.nome}); }); });
+    BE.res = {tipo:'pessoa', rotulo: pes ? (pes.nome || BE.q) : BE.q, de:BE.de, ate:BE.ate, itens:out};
+  } else {
+    lista.forEach(x => { const a = areaInfo(x.area); if (a.porConexao && conexoesDe(x).includes(BE.con)) out.push({x, a, txt: conexoesDe(x).length > 1 ? 'Junto com '+conexoesDe(x).filter(c => c !== BE.con).map(conexaoNome).join(' e ') : 'Conexão '+conexaoNome(BE.con)}); });
+    BE.res = {tipo:'conexao', rotulo: conexaoNome(BE.con), de:BE.de, ate:BE.ate, itens:out};
+  }
+  BE.res.itens.sort((u, v) => u.x.data.localeCompare(v.x.data) || ordC(u.x.culto) - ordC(v.x.culto) || ordA(u.x.area) - ordA(v.x.area));
+  BE.carregando = false; render();
+}
+const BE_MAX = () => BUSCA_MAX_DIAS;
+document.addEventListener('toggle', e => { if (e.target.matches && e.target.matches('[data-be-det]')) BE.aberto = e.target.open; }, true);
+document.addEventListener('submit', e => { const f = e.target.closest('[data-be-form]'); if (!f) return; e.preventDefault(); beBuscar(new FormData(f)); });
+document.addEventListener('change', e => { const r = e.target.closest('[data-be-form] input[name=tipo]'); if (!r) return; BE.tipo = r.value; BE.res = null; BE.erro = ''; render(); });
+document.addEventListener('change', e => { const i = e.target.closest('#beDe'); if (!i || !i.value) return; const a = document.getElementById('beAte'); if (a && (!a.value || a.value < i.value || a.value > somaDias(i.value, BUSCA_MAX_DIAS))) a.value = somaDias(i.value, 90); });
+document.addEventListener('click', e => { if (!e.target.closest('[data-be-limpar]')) return; BE.res = null; BE.erro = ''; BE.q = ''; BE.con = ''; render(); });
 document.addEventListener('click', e => { const b = e.target.closest('[data-minha-mes]'); if (!b) return; const d = new Date(S.minhaMes+'-15T12:00:00'); d.setMonth(d.getMonth() + Number(b.dataset.minhaMes)); S.minhaMes = isoLocal(d).slice(0,7); render(); });
 // Tocar num compromisso abre o detalhe daquela escala (na aba Escala).
 document.addEventListener('click', e => { const b = e.target.closest('[data-go-escala]'); if (!b) return; e.stopPropagation(); const [d, c, a] = b.dataset.det.split('|');

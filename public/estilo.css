@@ -534,3 +534,14 @@ tr.busca-achado th,tr.busca-achado td{background:var(--gold-soft)}
 .perfil-info{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin:16px 0 4px;padding:12px;border:1px solid #2a2a2a;border-radius:12px;font-size:14px;word-break:break-word}
 .perfil-aviso{border-color:#F47216}
 .eu-acoes{flex-wrap:wrap;justify-content:flex-end;row-gap:6px}
+
+/* Busca na escala (Agenda) */
+.busca-esc summary{cursor:pointer;list-style:none;padding:2px 0}
+.busca-esc summary::-webkit-details-marker{display:none}
+.busca-esc summary::after{content:" ▸";color:#888}
+.busca-esc[open] summary::after{content:" ▾"}
+.busca-esc .be-tit{margin:14px 0 6px}
+.busca-esc .be-dia{margin-top:8px}
+.busca-esc .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.busca-esc .row>div{min-width:0}
+.busca-esc .inp{min-width:0;max-width:100%;box-sizing:border-box}
