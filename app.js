@@ -241,7 +241,7 @@ function renderWho(){
   const w = $('#who'); if (!w) return;
   const n = podeChat() ? naoLidas() : 0;
   w.innerHTML = S.uid ? (podeChat() ? '<button class="chat-btn" data-chat>💬 Bate-papo'+(n ? '<span class="badge">'+(n > 99 ? '99+' : n)+'</span>' : '')+'</button>' : '')
-      + '<span class="eu"><span>'+esc(nome(S.uid) === 'Alguém' ? S.email : nome(S.uid))+'</span><span class="eu-acoes">'+(PUSH.estado !== 'fora' ? '<button class="sino'+(PUSH.estado === 'ativo' ? ' on' : '')+'" data-sino aria-label="Notificações">'+(PUSH.estado === 'ativo' ? '🔔' : '🔕')+'</button>' : '')+'<button class="sair" data-sair>Sair</button></span></span>'
+      + '<span class="eu"><span>'+esc(nome(S.uid) === 'Alguém' ? S.email : nome(S.uid))+'</span><span class="eu-acoes">'+(PUSH.estado !== 'fora' ? '<button class="sino'+(PUSH.estado === 'ativo' ? ' on' : '')+'" data-sino aria-label="Notificações">'+(PUSH.estado === 'ativo' ? '🔔' : '🔕')+'</button>' : '')+'<button class="perfil-btn" data-perfil aria-label="Meu perfil">👤 Perfil'+(perfilFaltando().length ? '<span class="dot" aria-hidden="true"></span>' : '')+'</button><button class="sair" data-sair>Sair</button></span></span>'
     : '<button class="entrar" data-entrar>Entrar</button>';
 }
 const urlVolta = () => location.origin + location.pathname;
@@ -521,7 +521,7 @@ function render(){
   if (!t || (t.owner && !isAdm()) || (t.gestao && !veCheckin()) || (t.midia && !veChecklist()) || (t.eu && !veEquipes())) S.tab = 'inicio';
   if (!S.cfg && S.tab!=='ajustes') { v.innerHTML = isAdm() ? '<div class="empty">O painel ainda não está configurado.<br><br><button class="btn" data-go="ajustes">Configurar agora</button></div>' : '<div class="empty">Não foi possível carregar o painel agora. Confira a internet e tente de novo.</div>'; return; }
   const fns = {inicio:viewInicio, escala:viewEscala, checkin:viewCheckin, midia:viewMidia, minha:viewMinha, avisos:viewAvisos, historico:viewHistorico, ajustes:viewAjustes, ajuda:viewAjuda};
-  v.innerHTML = bannerCadastro() + fns[S.tab]();
+  v.innerHTML = bannerPerfil() + bannerCadastro() + fns[S.tab]();
   let k = 0; document.querySelectorAll('details.area').forEach(d => { d.dataset.k = S.tab+(k++); if (abertos.includes(d.dataset.k)) d.open = true; });
   if (S.tab==='historico' && isAdm()) carregarHistorico();
 }
@@ -660,6 +660,43 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-conv
   (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Convocação copiada. Cole no WhatsApp.'), mostrar); });
 const botoesDia = d => podeExportar() ? '<div class="bar" style="margin:6px 0 12px">'+(temGestao()?'<button class="btn ghost small" data-dia-ficha="'+d+'">Check-in do dia</button>':'')+'<button class="btn ghost small" data-dia-csv="'+d+'">Planilha do dia</button></div>' : '';
 const bannerCadastro = () => (!S.uid || S.tab==='inicio' || S.tab==='ajuda' || isAdm() || !S.cfg || S.pessoas[S.uid] || S.meuCad) ? '' : '<div class="notice"><b>É líder, auxiliar ou da organização da conexão?</b> Faça seu cadastro para poder preencher a escala da sua conexão.<div style="margin-top:8px"><button class="btn small" data-go="inicio">Fazer meu cadastro</button></div></div>';
+/* ---------- MEU PERFIL ---------- */
+// O que falta no cadastro de quem já está no painel (pessoa aprovada ou criada pelo convite).
+function perfilFaltando(){
+  const p = S.uid && S.pessoas[S.uid]; if (!p) return [];
+  const f = [], n = String(p.nome||'').trim();
+  if (!n || n.indexOf('@') >= 0) f.push('nome completo'); else if (n.split(/\s+/).length < 2) f.push('sobrenome');
+  if (!String(p.apelido||'').trim()) f.push('apelido');
+  if (String(p.whatsapp||'').replace(/\D/g,'').length < 10) f.push('WhatsApp');
+  return f;
+}
+const listaE = a => a.length <= 1 ? (a[0]||'') : a.slice(0,-1).join(', ')+' e '+a[a.length-1];
+const bannerPerfil = () => { const f = perfilFaltando(); return f.length ? '<div class="notice perfil-aviso"><b>👤 Complete seu cadastro</b><br>Falta preencher: '+esc(listaE(f))+'. Assim a equipe te encontra certinho nas escalas e no check-in.<div style="margin-top:8px"><button class="btn small" data-perfil>Completar agora</button></div></div>' : ''; };
+function abrirPerfil(){
+  const p = S.pessoas[S.uid] || {}, c = S.meuCad || {}, b = Object.keys(p).length ? p : c;
+  const extras = [p.gestao&&'Gestão', p.ministro&&'Ministro', p.avisos&&'Avisos/Eventos', p.escala&&'Escala', p.midia&&'Mídia', p.sorteador&&'Sorteador'].filter(Boolean);
+  const st = p.status === 'aprovado' ? '✅ Aprovado' : (p.status ? p.status : (S.meuCad ? '⏳ Aguardando aprovação' : '—'));
+  const nomeAtual = String(b.nome||'').indexOf('@') >= 0 ? '' : (b.nome||'');
+  const f = perfilFaltando();
+  abrir('<form><h2>👤 Meu perfil</h2>'
+    + (f.length ? '<div class="notice" style="margin:0 0 12px">Falta preencher: <b>'+esc(listaE(f))+'</b>.</div>' : '')
+    + '<label class="f" for="pfN">Nome completo</label><input class="inp" id="pfN" name="nome" required autocomplete="name" placeholder="Nome e sobrenome" value="'+esc(nomeAtual)+'">'
+    + '<label class="f" for="pfA">Como gosta de ser chamado(a) (apelido)</label><input class="inp" id="pfA" name="apelido" autocomplete="nickname" placeholder="Ex.: Gu, Dinho, Madu" value="'+esc(b.apelido||'')+'">'
+    + '<label class="f" for="pfW">WhatsApp com DDD</label><input class="inp" id="pfW" name="whatsapp" type="tel" inputmode="tel" required placeholder="(11) 99999-9999" value="'+esc(b.whatsapp||'')+'">'
+    + '<div class="perfil-info"><div><span class="meta">E-mail de acesso</span><br>'+esc(S.email||p.email||'—')+'</div>'
+    + '<div><span class="meta">Função</span><br>'+esc(PAPEIS[b.papel]||'—')+'</div>'
+    + '<div><span class="meta">Conexão</span><br>'+esc(conexaoNome(b.conexao)||'—')+'</div>'
+    + '<div><span class="meta">Cadastro</span><br>'+esc(st)+'</div>'
+    + (extras.length ? '<div><span class="meta">Acessos extras</span><br>'+esc(extras.join(' · '))+'</div>' : '')+'</div>'
+    + '<p class="hint">Função, conexão e acessos são definidos pelo administrador. Precisa mudar? Fale com ele.</p>'
+    + '<div class="end"><button type="button" class="btn ghost" data-cancel>Fechar</button><button type="submit" class="btn">Salvar</button></div></form>',
+    async fd => {
+      const r = await sb.rpc('meu_perfil_salvar', {p_nome: fd.get('nome'), p_apelido: fd.get('apelido'), p_whatsapp: fd.get('whatsapp')});
+      if (r.error) { toast(String(r.error.message||'Não foi possível salvar.').replace(/^.*?:\s*/, '')); return false; }
+      toast('Perfil salvo. Obrigado!'); await carregarPessoas(); return true;
+    });
+}
+document.addEventListener('click', e => { if (e.target.closest('[data-perfil]') && S.uid) { e.preventDefault(); abrirPerfil(); } });
 const msgAprovacao = () => 'Olá! Acabei de fazer meu cadastro no painel da Família Alcançar: '+((S.meuCad||{}).nome||'')+' · '+(PAPEIS[(S.meuCad||{}).papel]||'')+' da conexão '+conexaoNome((S.meuCad||{}).conexao)+'. Pode aprovar, por favor?';
 // Logo depois do cadastro: janela com o botão verde para avisar o administrador.
 function avisarAdmin(){
