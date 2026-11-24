@@ -527,3 +527,10 @@ tr.busca-achado th,tr.busca-achado td{background:var(--gold-soft)}
 .sw input:checked + .sw-b{background:var(--green)}
 .sw input:checked + .sw-b::after{transform:translateX(22px)}
 .sw input:focus-visible + .sw-b{outline:3px solid var(--yellow);outline-offset:2px}
+
+/* Meu perfil */
+.perfil-btn{position:relative;background:none;border:1px solid #333;color:inherit;border-radius:999px;padding:3px 8px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+.perfil-btn .dot{position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#F47216;box-shadow:0 0 0 2px #000}
+.perfil-info{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin:16px 0 4px;padding:12px;border:1px solid #2a2a2a;border-radius:12px;font-size:14px;word-break:break-word}
+.perfil-aviso{border-color:#F47216}
+.eu-acoes{flex-wrap:wrap;justify-content:flex-end;row-gap:6px}
