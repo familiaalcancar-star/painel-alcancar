@@ -474,8 +474,10 @@ function linhaMinhaEvento(e, serve){
 }
 function linhaMinhaEscala(c){
   const ci = cultoInfo(c.x.culto, c.x.data);
-  return '<button class="li minha-li" data-det="'+esc(c.x.data)+'|'+esc(c.x.culto)+'|'+esc(c.a.id)+'" data-go-escala><span class="minha-c'+(ci.noite ? ' noite' : '')+'">'+(ci.noite ? '🌙' : '☀️')+' '+esc(ci.nome)+(ci.hora ? '<br><small>'+esc(ci.hora)+'</small>' : '')+'</span>'
-    + '<span class="lt"><b>'+esc(c.a.nome)+'</b><br><small>'+esc(c.txt)+'</small></span><span class="la" aria-hidden="true">›</span></button>';
+  // Na Agenda pessoal (c.tipo): destaque forte, com o selo de quem serve.
+  const selo = c.tipo === 'pessoa' ? '🙋 Você serve' : c.tipo === 'conexao' ? '🏠 Sua conexão serve' : c.tipo === 'coro' ? '🎶 Coro' : '';
+  return '<button class="li minha-li'+(selo ? ' minha-servir' : '')+'" data-det="'+esc(c.x.data)+'|'+esc(c.x.culto)+'|'+esc(c.a.id)+'" data-go-escala><span class="minha-c'+(ci.noite ? ' noite' : '')+'">'+(ci.noite ? '🌙' : '☀️')+' '+esc(ci.nome)+(ci.hora ? '<br><small>'+esc(ci.hora)+'</small>' : '')+'</span>'
+    + '<span class="lt">'+(selo ? '<span class="selo-servir">'+selo+'</span>' : '')+'<b>'+esc(c.a.nome)+'</b><br><small>'+esc(c.txt)+'</small></span><span class="la" aria-hidden="true">›</span></button>';
 }
 function viewMinha(){
   if (!S.minhaMes) S.minhaMes = hoje().slice(0,7);
@@ -496,7 +498,8 @@ function viewMinha(){
         return {min: minutosDe(e.ev.hora), html: linhaMinhaEvento(e, serve)}; })
       .concat(meus.filter(c => c.x.data === d && !usados.has(c)).map(c => ({min: minutosDe(cultoInfo(c.x.culto, c.x.data).hora), html: linhaMinhaEscala(c)})))
       .sort((a, b) => a.min - b.min);
-    return '<section class="card lst minha-dia'+(d < hoje() ? ' passou' : '')+(d === hoje() ? ' hoje' : '')+'"><h3>'+esc(fmtDia(d))+(d === hoje() ? ' <span class="tag">hoje</span>' : '')+'</h3>'
+    const sirvo = meus.some(c => c.x.data === d);
+    return '<section class="card lst minha-dia'+(sirvo ? ' com-servir' : ' so-evento')+(d < hoje() ? ' passou' : '')+(d === hoje() ? ' hoje' : '')+'"><h3>'+esc(fmtDia(d))+(d === hoje() ? ' <span class="tag">hoje</span>' : '')+(sirvo ? ' <span class="tag servir">🙋 você serve</span>' : '')+'</h3>'
       + itens.map(i => i.html).join('') + '</section>'; }).join('');
 }
 /* ---------- BUSCA NA ESCALA (aba Agenda): por pessoa ou por conexão, até 4 meses ---------- */
