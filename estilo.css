@@ -545,3 +545,18 @@ tr.busca-achado th,tr.busca-achado td{background:var(--gold-soft)}
 .busca-esc .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .busca-esc .row>div{min-width:0}
 .busca-esc .inp{min-width:0;max-width:100%;box-sizing:border-box}
+
+/* Agenda: destaque para quando a pessoa (ou a conexão dela) serve; eventos mais discretos */
+.minha-dia.com-servir{border-color:var(--green);box-shadow:0 0 0 1px var(--green) inset}
+.tag.servir{background:var(--green);color:#000;border-color:var(--green)}
+.lst .li.minha-servir{background:rgba(61,170,53,.14);border:1.5px solid var(--green) !important;border-radius:12px;padding:12px 10px !important;margin:6px 0}
+.minha-servir .lt b{font-size:17px}
+.minha-servir .lt small{color:var(--ink) !important;opacity:.85}
+.selo-servir{display:table;font-size:11px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;background:var(--green);color:#000;border-radius:999px;padding:2px 8px;margin-bottom:4px}
+.minha-serve{background:rgba(61,170,53,.14);border:1.5px solid var(--green) !important;border-radius:12px;font-weight:600}
+.minha-ev{border-left:2px solid #444 !important;opacity:.85}
+.minha-ev .lt b{font-size:14px;font-weight:600}
+.minha-ev .lt small{font-size:12px}
+.minha-ev .minha-c.ev,.minha-ev .minha-c.ev small{color:var(--muted);font-weight:600}
+.minha-ev .minha-ev-img{width:48px;height:27px}
+.minha-dia.so-evento h3{font-size:15px;color:var(--muted)}
