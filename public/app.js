@@ -416,7 +416,7 @@ function blocoArea(lista, c, a){
     if (!a.porConexao) { const n = x ? (x.qtd || 0) : 0; resumo = n ? 'Equipe escalada' : (x && x.obs ? esc(x.obs) : '<span class="pend">A definir</span>'); }
     return '<div class="area fechada"><span><span class="an">'+esc(a.nome)+'</span><span class="ac">'+resumo+'</span></span></div>';
   }
-  const fx = a.funcoes.filter(f => noCulto(f, c.culto)).map(f => {
+  const fx = fnsArea(a, x, c.culto).map(f => {
     const salvo = x ? ((x.funcoes||[]).find(g=>g.nome===f.nome)||{}).pessoas || [] : [];
     const total = f.vagas ? Math.max(f.vagas, salvo.length) : salvo.length;
     if (!total) return '';
@@ -668,7 +668,7 @@ function viewDetalhe(){
   if (a.porConexao) h += '<p style="margin:10px 0 0"><span class="tag" style="margin:0;font-size:14px;padding:3px 12px">'+esc(conexoesTxt(x) || 'Conexão a definir')+'</span></p>';
   const alt = pode && (x || !a.porConexao);
   const botao = (fn, k) => alt ? ' <button type="button" class="link det-alt" data-det-alt="'+esc(fn)+'|'+k+'">Alterar</button>' : '';
-  h += '<div style="margin-top:14px">' + a.funcoes.filter(f => noCulto(f, culto)).map(f => {
+  h += '<div style="margin-top:14px">' + fnsArea(a, x, culto).map(f => {
     const salvo = x ? ((x.funcoes||[]).find(g => g.nome===f.nome)||{}).pessoas || [] : [];
     const total = Math.max(f.vagas || (alt ? 1 : 0), salvo.length);
     const itens = total ? Array.from({length:total}, (_,i) => '<li>'+(salvo[i] ? esc(salvo[i]) : '<span class="pend">vaga aberta</span>')+botao(f.nome, i)+'</li>').join('') : '<li><span class="pend">ninguém escalado</span></li>';
@@ -711,7 +711,7 @@ document.addEventListener('click', async e => { const b = e.target.closest('butt
 function textoConvocacao(data){
   const a = areaInfo('direcao'), dia = dataBR(data).slice(0,5);
   const blocos = cultos().map(cu => { const x = escalaDe(todasEscalas(), data, cu.id, 'direcao');
-    const tarefas = a.funcoes.filter(f => noCulto(f, cu.id)).map(f => { const ps = ((x && (x.funcoes||[]).find(g => g.nome === f.nome)) || {}).pessoas || [];
+    const tarefas = fnsArea(a, x, cu.id).map(f => { const ps = ((x && (x.funcoes||[]).find(g => g.nome === f.nome)) || {}).pessoas || [];
       const n = Math.max(f.vagas || 1, ps.length); return f.nome+':\n'+Array.from({length:n}, (_, k) => (k+1)+'. '+(ps[k] || '')).join('\n'); });
     const ci = cultoInfo(cu.id, data);
     return (ci.noite ? '🌙' : '☀️')+' '+(ci.especial ? ci.nome.toUpperCase() : 'CULTO DA '+ci.nome.toUpperCase())+(ci.hora ? ' ('+ci.hora+')' : '')+'\n'+tarefas.join('\n\n')+'\nObservação: '+((x && x.obs) || ''); });
@@ -1018,13 +1018,19 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-mais
 // Mídia: Apoio 1 e Apoio 2 têm pessoa fixa (config.midiaFixos); a equipe do culto fica em Projeção, Transmissão, Câmera e Storymaker.
 // Funções que valem num culto: as com "cultos" (ex.: ["noite"]) só aparecem nesses cultos.
 const noCulto = (f, culto) => !Array.isArray(f.cultos) || !f.cultos.length || !culto || f.cultos.includes(culto);
+// Funções que aparecem numa escala: as da configuração da área + as que vieram na própria escala com outro nome
+// (ex.: cronograma novo do Super Kids "História + Ministração Salvação"). Assim nada some da tela nem ao salvar.
+const fnsExtras = (a, x) => ((x && x.funcoes) || []).filter(g => g && g.nome && !a.funcoes.some(f => normNome(f.nome) === normNome(g.nome))).map(g => ({nome:g.nome, vagas:0, extra:true}));
+// Se a escala usa um cronograma próprio (tem funções fora da configuração), mostra as funções dela, na ordem dela.
+const fnsArea = (a, x, culto) => { const ex = fnsExtras(a, x); if (!ex.length) return a.funcoes.filter(f => noCulto(f, culto));
+  return x.funcoes.filter(g => g && g.nome).map(g => { const f = a.funcoes.find(k => normNome(k.nome) === normNome(g.nome)); return f ? {...f, nome:g.nome} : {nome:g.nome, vagas:0, extra:true}; }); };
 const midiaFixos = () => { const f = S.cfg && S.cfg.midiaFixos; return f && !Array.isArray(f) && typeof f === 'object' ? f : {'Apoio 1':'Pedro Moraes', 'Apoio 2':'Augusto Cantuaria'}; };
 function camposArea(a, x, culto){
   const minhasCon = conexoes();
   let h = '';
   if (a.porConexao && !isAdm()) h += '<p class="notice" style="margin-top:12px">Conexão: '+esc(conexoesTxt(x) || '—')+'</p>';
   else if (a.porConexao) h += '<label class="f">Conexões responsáveis</label><div class="chips" style="flex-wrap:wrap">'+minhasCon.map(c => '<label class="chip"><input type="checkbox" name="conexoes" value="'+esc(c.id)+'"'+(conexoesDe(x).includes(c.id)?' checked':'')+'> '+esc(c.nome)+'</label>').join('')+'</div><div class="hint">Marque mais de uma quando servirem juntas.</div>';
-  a.funcoes.forEach((f, i) => {
+  a.funcoes.concat(fnsExtras(a, x)).forEach((f, i) => {
     if (!noCulto(f, culto)) return;
     let salvo = x ? ((x.funcoes||[]).find(g=>g.nome===f.nome)||{}).pessoas || [] : [];
     // Mídia: Apoio 1 e Apoio 2 já vêm com a pessoa fixa (o banco também garante); ficam recolhidos, para trocar só se alguém faltar.
@@ -1243,7 +1249,7 @@ function formEscala(ctx){
     if (sub && 'limpar' in sub.dataset) { if (!x || !await confirmar('Apagar a escala de '+a.nome+' deste culto?')) return false; const ok = await excluir(r, semId(x), 'escala', resumoEscala(x)); if (ok) { toast('Escala apagada'); await RECARGA.escalas(); } return ok; }
     const cs = a.porConexao ? (isAdm() ? fd.getAll('conexoes') : conexoesDe(x)) : [];
     const data = { data:c.data, culto:c.culto, area:c.area, conexoes: cs, conexao: cs[0]||null,
-      funcoes: a.funcoes.map((f,i) => ({f, i})).filter(({f}) => noCulto(f, c.culto)).map(({f, i}) => ({nome:f.nome, pessoas: [...$('#dlgBody form').querySelectorAll('[name^="f'+i+'_"]')].map(el=>el.value.trim()).filter(Boolean)})),
+      funcoes: a.funcoes.concat(fnsExtras(a, x)).map((f,i) => ({f, i})).filter(({f}) => noCulto(f, c.culto)).map(({f, i}) => ({nome:f.nome, pessoas: [...$('#dlgBody form').querySelectorAll('[name^="f'+i+'_"]')].map(el=>el.value.trim()).filter(Boolean)})),
       obs: String(fd.get('obs')||'').trim(), atualizadoEm:new Date().toISOString(), ...camposCulto(x, c.data, c.culto, isAdm() ? fd : null) };
     if (a.porConexao && !cs.length) { toast('Marque pelo menos uma conexão.'); return false; }
     if (!podeArea(a, x, c.data)) { toast('Você só pode preencher a escala dos dias da sua conexão.'); return false; }
